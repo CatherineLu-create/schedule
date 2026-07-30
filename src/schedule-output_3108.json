@@ -1,1651 +1,1041 @@
 {
   "meta": {
-    "source_file": "bu4-template-test.pptx",
-    "project_name": "Project Alpha",
+    "source_file": "ocean-prototype-schedule.pptx",
+    "project_name": "Manta_16 Prototype Schedule",
     "template": "BU4 schedule format 20260604",
     "mode": "strict"
   },
   "records": [
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r1",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r1",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "ID & ME Design",
       "stage": "ID & ME Design",
       "milestone": "Kick-off",
-      "plan_content": "2026/7/1",
-      "actual_content": "2026/7/1",
-      "plan_start_date": "2026-07-01",
-      "plan_end_date": "2026-07-01",
-      "actual_start_date": "2026-07-01",
-      "actual_end_date": "2026-07-01"
+      "plan_content": "2027/01/05",
+      "actual_content": "2027/01/05",
+      "plan_start_date": "2027-01-05",
+      "plan_end_date": "2027-01-05",
+      "actual_start_date": "2027-01-05",
+      "actual_end_date": "2027-01-05"
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r2",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r2",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "ID & ME Design",
       "stage": "ID & ME Design",
       "milestone": "ID Fix",
-      "plan_content": "-",
+      "plan_content": "2027/01/10",
       "actual_content": "-",
-      "plan_start_date": null,
-      "plan_end_date": null,
+      "plan_start_date": "2027-01-10",
+      "plan_end_date": "2027-01-10",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r3",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r3",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "ID & ME Design",
       "stage": "ID & ME Design",
       "milestone": "Placement Fix",
-      "plan_content": "-",
-      "actual_content": "-",
-      "plan_start_date": null,
-      "plan_end_date": null,
+      "plan_content": "2027/01/15",
+      "actual_content": "NA",
+      "plan_start_date": "2027-01-15",
+      "plan_end_date": "2027-01-15",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r4",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r4",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "ID & ME Design",
       "stage": "ID & ME Design",
       "milestone": "ME Drawing",
-      "plan_content": "-",
-      "actual_content": "-",
-      "plan_start_date": null,
-      "plan_end_date": null,
+      "plan_content": "2027/01/20",
+      "actual_content": "N/A",
+      "plan_start_date": "2027-01-20",
+      "plan_end_date": "2027-01-20",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r5",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r5",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "ID & ME Design",
       "stage": "ID & ME Design",
       "milestone": "Mockup/DFM Review",
-      "plan_content": "2026/9/12",
-      "actual_content": "2026/9/12",
-      "plan_start_date": "2026-09-12",
-      "plan_end_date": "2026-09-12",
-      "actual_start_date": "2026-09-12",
-      "actual_end_date": "2026-09-12"
+      "plan_content": "2027/01/25",
+      "actual_content": "2027/01/26",
+      "plan_start_date": "2027-01-25",
+      "plan_end_date": "2027-01-25",
+      "actual_start_date": "2027-01-26",
+      "actual_end_date": "2027-01-26"
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r6",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r6",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "ID & ME Design",
       "stage": "ID & ME Design",
       "milestone": "Tooling Review",
-      "plan_content": "-",
-      "actual_content": "-",
-      "plan_start_date": null,
-      "plan_end_date": null,
+      "plan_content": "2027/02/02",
+      "actual_content": "*",
+      "plan_start_date": "2027-02-02",
+      "plan_end_date": "2027-02-02",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r7",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r7",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "ID & ME Design",
       "stage": "ID & ME Design",
       "milestone": "Thermal module Tooling+Material Preparation",
-      "plan_content": "2026/9/24~2026/11/5",
-      "actual_content": "2026/9/24~2026/11/5",
-      "plan_start_date": "2026-09-24",
-      "plan_end_date": "2026-11-05",
-      "actual_start_date": "2026-09-24",
-      "actual_end_date": "2026-11-05"
+      "plan_content": "2027/02/10",
+      "actual_content": "2027/02/12",
+      "plan_start_date": "2027-02-10",
+      "plan_end_date": "2027-02-10",
+      "actual_start_date": "2027-02-12",
+      "actual_end_date": "2027-02-12"
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r8",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r8",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "ID & ME Design",
       "stage": "ID & ME Design",
       "milestone": "Thermal module Tooling+Material Preparation",
-      "plan_content": "",
+      "plan_content": "2027/02/18",
       "actual_content": "",
-      "plan_start_date": null,
-      "plan_end_date": null,
+      "plan_start_date": "2027-02-18",
+      "plan_end_date": "2027-02-18",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r9",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r9",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "ID & ME Design",
       "stage": "ID & ME Design",
       "milestone": "Tooling Start+T0",
-      "plan_content": "2026/9/12~2026/11/3",
-      "actual_content": "2026/9/12~2026/11/3",
-      "plan_start_date": "2026-09-12",
-      "plan_end_date": "2026-11-03",
-      "actual_start_date": "2026-09-12",
-      "actual_end_date": "2026-11-03"
+      "plan_content": "2027/02/26",
+      "actual_content": "2027/02/25",
+      "plan_start_date": "2027-02-26",
+      "plan_end_date": "2027-02-26",
+      "actual_start_date": "2027-02-25",
+      "actual_end_date": "2027-02-25"
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r10",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r10",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "ID & ME Design",
       "stage": "ID & ME Design",
       "milestone": "Tooling Start+T0",
-      "plan_content": "",
+      "plan_content": "2027/03/06",
       "actual_content": "",
-      "plan_start_date": null,
-      "plan_end_date": null,
+      "plan_start_date": "2027-03-06",
+      "plan_end_date": "2027-03-06",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r11",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r11",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "ID & ME Design",
       "stage": "ID & ME Design",
       "milestone": "Material Preparation with Transition (C1)",
-      "plan_content": "2026/9/12~2026/11/3",
-      "actual_content": "2026/9/12~2026/11/3",
-      "plan_start_date": "2026-09-12",
-      "plan_end_date": "2026-11-03",
-      "actual_start_date": "2026-09-12",
-      "actual_end_date": "2026-11-03"
+      "plan_content": "2027/03/11",
+      "actual_content": "2027/03/14",
+      "plan_start_date": "2027-03-11",
+      "plan_end_date": "2027-03-11",
+      "actual_start_date": "2027-03-14",
+      "actual_end_date": "2027-03-14"
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r12",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r12",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "ID & ME Design",
       "stage": "ID & ME Design",
       "milestone": "Material Preparation with Transition (C2)",
-      "plan_content": "-",
+      "plan_content": "2027/03/16",
       "actual_content": "-",
-      "plan_start_date": null,
-      "plan_end_date": null,
+      "plan_start_date": "2027-03-16",
+      "plan_end_date": "2027-03-16",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r13",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r13",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "A",
       "milestone": "Gerber Out",
-      "plan_content": "2026/8/20",
-      "actual_content": "2026/8/20",
-      "plan_start_date": "2026-08-20",
-      "plan_end_date": "2026-08-20",
-      "actual_start_date": "2026-08-20",
-      "actual_end_date": "2026-08-20"
+      "plan_content": "2027/04/03",
+      "actual_content": "2027/04/07",
+      "plan_start_date": "2027-04-03",
+      "plan_end_date": "2027-04-03",
+      "actual_start_date": "2027-04-07",
+      "actual_end_date": "2027-04-07"
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r14",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r14",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "A",
       "milestone": "BIOS/FW for Input",
-      "plan_content": "2026/8/26",
-      "actual_content": "2026/8/26",
-      "plan_start_date": "2026-08-26",
-      "plan_end_date": "2026-08-26",
-      "actual_start_date": "2026-08-26",
-      "actual_end_date": "2026-08-26"
+      "plan_content": "2027/04/08",
+      "actual_content": "2027/04/13",
+      "plan_start_date": "2027-04-08",
+      "plan_end_date": "2027-04-08",
+      "actual_start_date": "2027-04-13",
+      "actual_end_date": "2027-04-13"
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r15",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r15",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "A",
       "milestone": "Image SCL Release for Build",
-      "plan_content": "-",
-      "actual_content": "-",
-      "plan_start_date": null,
-      "plan_end_date": null,
+      "plan_content": "2027/04/16",
+      "actual_content": "NA",
+      "plan_start_date": "2027-04-16",
+      "plan_end_date": "2027-04-16",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r16",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r16",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "A",
       "milestone": "MIH",
-      "plan_content": "CPU: 2026/8/27GPU: 2026/8/27",
-      "actual_content": "CPU: 2026/8/27GPU: 2026/8/27",
-      "plan_start_date": "2026-08-27",
-      "plan_end_date": "2026-08-27",
-      "actual_start_date": "2026-08-27",
-      "actual_end_date": "2026-08-27"
+      "plan_content": "2027/04/21",
+      "actual_content": "2027/04/19",
+      "plan_start_date": "2027-04-21",
+      "plan_end_date": "2027-04-21",
+      "actual_start_date": "2027-04-19",
+      "actual_end_date": "2027-04-19"
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r17",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r17",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "A",
       "milestone": "SMT",
-      "plan_content": "2026/9/3",
-      "actual_content": "2026/9/3",
-      "plan_start_date": "2026-09-03",
-      "plan_end_date": "2026-09-03",
-      "actual_start_date": "2026-09-03",
-      "actual_end_date": "2026-09-03"
+      "plan_content": "2027/04/26",
+      "actual_content": "2027/05/02",
+      "plan_start_date": "2027-04-26",
+      "plan_end_date": "2027-04-26",
+      "actual_start_date": "2027-05-02",
+      "actual_end_date": "2027-05-02"
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r18",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r18",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "A",
       "milestone": "Pre-Build",
-      "plan_content": "-",
-      "actual_content": "-",
-      "plan_start_date": null,
-      "plan_end_date": null,
+      "plan_content": "2027/05/04",
+      "actual_content": "N/A",
+      "plan_start_date": "2027-05-04",
+      "plan_end_date": "2027-05-04",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r19",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r19",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "A",
       "milestone": "System Build",
-      "plan_content": "-",
-      "actual_content": "-",
-      "plan_start_date": null,
-      "plan_end_date": null,
+      "plan_content": "2027/05/12",
+      "actual_content": "*",
+      "plan_start_date": "2027-05-12",
+      "plan_end_date": "2027-05-12",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r20",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r20",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "A",
       "milestone": "DUTs Distribution",
-      "plan_content": "2026/9/10",
-      "actual_content": "2026/9/11",
-      "plan_start_date": "2026-09-10",
-      "plan_end_date": "2026-09-10",
-      "actual_start_date": "2026-09-11",
-      "actual_end_date": "2026-09-11"
+      "plan_content": "2027/05/17",
+      "actual_content": "2027/05/24",
+      "plan_start_date": "2027-05-17",
+      "plan_end_date": "2027-05-17",
+      "actual_start_date": "2027-05-24",
+      "actual_end_date": "2027-05-24"
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r21",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r21",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "A",
       "milestone": "Validation Test",
-      "plan_content": "2026/9/17~2026/10/17",
-      "actual_content": "2026/9/17~2026/10/17",
-      "plan_start_date": "2026-09-17",
-      "plan_end_date": "2026-10-17",
-      "actual_start_date": "2026-09-17",
-      "actual_end_date": "2026-10-17"
+      "plan_content": "2027/05/25",
+      "actual_content": "2027/06/02",
+      "plan_start_date": "2027-05-25",
+      "plan_end_date": "2027-05-25",
+      "actual_start_date": "2027-06-02",
+      "actual_end_date": "2027-06-02"
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r22",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r22",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "A",
       "milestone": "BIOS/Driver Frozen",
-      "plan_content": "-",
+      "plan_content": "2027/05/30",
       "actual_content": "-",
-      "plan_start_date": null,
-      "plan_end_date": null,
+      "plan_start_date": "2027-05-30",
+      "plan_end_date": "2027-05-30",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r23",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r23",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "A",
       "milestone": "Golden Image Candidate Release (US)",
-      "plan_content": "-",
-      "actual_content": "-",
-      "plan_start_date": null,
-      "plan_end_date": null,
+      "plan_content": "2027/06/07",
+      "actual_content": "NA",
+      "plan_start_date": "2027-06-07",
+      "plan_end_date": "2027-06-07",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r24",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r24",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "A",
       "milestone": "Close Meeting",
-      "plan_content": "2026/10/21",
-      "actual_content": "2026/10/22",
-      "plan_start_date": "2026-10-21",
-      "plan_end_date": "2026-10-21",
-      "actual_start_date": "2026-10-22",
-      "actual_end_date": "2026-10-22"
+      "plan_content": "2027/06/15",
+      "actual_content": "2027/06/24",
+      "plan_start_date": "2027-06-15",
+      "plan_end_date": "2027-06-15",
+      "actual_start_date": "2027-06-24",
+      "actual_end_date": "2027-06-24"
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r25",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r25",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C1",
       "milestone": "Gerber Out",
-      "plan_content": "2026/10/20",
-      "actual_content": "2026/10/20",
-      "plan_start_date": "2026-10-20",
-      "plan_end_date": "2026-10-20",
-      "actual_start_date": "2026-10-20",
-      "actual_end_date": "2026-10-20"
+      "plan_content": "2027/06/27",
+      "actual_content": "2027/07/07",
+      "plan_start_date": "2027-06-27",
+      "plan_end_date": "2027-06-27",
+      "actual_start_date": "2027-07-07",
+      "actual_end_date": "2027-07-07"
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r26",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r26",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C1",
       "milestone": "BIOS/FW for Input",
-      "plan_content": "2026/10/28",
-      "actual_content": "2026/10/28",
-      "plan_start_date": "2026-10-28",
-      "plan_end_date": "2026-10-28",
-      "actual_start_date": "2026-10-28",
-      "actual_end_date": "2026-10-28"
+      "plan_content": "2027/07/02",
+      "actual_content": "2027/07/02",
+      "plan_start_date": "2027-07-02",
+      "plan_end_date": "2027-07-02",
+      "actual_start_date": "2027-07-02",
+      "actual_end_date": "2027-07-02"
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r27",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r27",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C1",
       "milestone": "Image SCL Release for Build",
-      "plan_content": "2026/10/28",
-      "actual_content": "2026/10/28",
-      "plan_start_date": "2026-10-28",
-      "plan_end_date": "2026-10-28",
-      "actual_start_date": "2026-10-28",
-      "actual_end_date": "2026-10-28"
+      "plan_content": "2027/07/10",
+      "actual_content": "2027/07/12",
+      "plan_start_date": "2027-07-10",
+      "plan_end_date": "2027-07-10",
+      "actual_start_date": "2027-07-12",
+      "actual_end_date": "2027-07-12"
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r28",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r28",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C1",
       "milestone": "MIH",
-      "plan_content": "CPU: 2026/10/28GPU: 2026/10/28",
+      "plan_content": "2027/07/15",
       "actual_content": "",
-      "plan_start_date": "2026-10-28",
-      "plan_end_date": "2026-10-28",
+      "plan_start_date": "2027-07-15",
+      "plan_end_date": "2027-07-15",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r29",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r29",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C1",
       "milestone": "SMT",
-      "plan_content": "2026/11/4~2026/11/5",
+      "plan_content": "2027/07/20",
       "actual_content": "",
-      "plan_start_date": "2026-11-04",
-      "plan_end_date": "2026-11-05",
+      "plan_start_date": "2027-07-20",
+      "plan_end_date": "2027-07-20",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r30",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r30",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C1",
       "milestone": "Pre-Build",
-      "plan_content": "2026/11/7",
+      "plan_content": "2027/07/28",
       "actual_content": "",
-      "plan_start_date": "2026-11-07",
-      "plan_end_date": "2026-11-07",
+      "plan_start_date": "2027-07-28",
+      "plan_end_date": "2027-07-28",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r31",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r31",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C1",
       "milestone": "System Build",
-      "plan_content": "2026/11/12  2026/11/13",
+      "plan_content": "2027/08/05",
       "actual_content": "",
-      "plan_start_date": "2026-11-12",
-      "plan_end_date": "2026-11-12",
+      "plan_start_date": "2027-08-05",
+      "plan_end_date": "2027-08-05",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r32",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r32",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C1",
       "milestone": "DUTs Distribution",
-      "plan_content": "QCMC: 2026/11/22QCI:2026/11/22Acer N8:2026/11/22NV: 2026/11/19",
+      "plan_content": "2027/08/10",
       "actual_content": "",
-      "plan_start_date": "2026-11-22",
-      "plan_end_date": "2026-11-22",
+      "plan_start_date": "2027-08-10",
+      "plan_end_date": "2027-08-10",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r33",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r33",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C1",
       "milestone": "Validation Test",
-      "plan_content": "1st Run: 2026/11/24~2026/12/16Golden Run-P1: 2027/1/8~2026/1/21Golden Run-P2: 2027/1/22~2027/1/30",
+      "plan_content": "2027/08/18",
       "actual_content": "",
-      "plan_start_date": "2026-11-24",
-      "plan_end_date": "2026-12-16",
+      "plan_start_date": "2027-08-18",
+      "plan_end_date": "2027-08-18",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r34",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r34",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C1",
       "milestone": "BIOS/Driver Frozen",
-      "plan_content": "NV WHQL: 2027/1/5Intel PV: 2026/12/15BIOS & Driver Frozen: 2026/1/6",
+      "plan_content": "2027/08/23",
       "actual_content": "",
-      "plan_start_date": "2027-01-05",
-      "plan_end_date": "2027-01-05",
+      "plan_start_date": "2027-08-23",
+      "plan_end_date": "2027-08-23",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r35",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r35",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C1",
       "milestone": "Golden Image Candidate Release (US)",
-      "plan_content": "2027/1/7",
+      "plan_content": "2027/08/31",
       "actual_content": "",
-      "plan_start_date": "2027-01-07",
-      "plan_end_date": "2027-01-07",
+      "plan_start_date": "2027-08-31",
+      "plan_end_date": "2027-08-31",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r36",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r36",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C1",
       "milestone": "Close Meeting",
-      "plan_content": "2027/1/22",
+      "plan_content": "2027/09/08",
       "actual_content": "",
-      "plan_start_date": "2027-01-22",
-      "plan_end_date": "2027-01-22",
+      "plan_start_date": "2027-09-08",
+      "plan_end_date": "2027-09-08",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r37",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r37",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C2",
       "milestone": "Gerber Out",
-      "plan_content": "2026/11/17",
+      "plan_content": "2027/09/20",
       "actual_content": "",
-      "plan_start_date": "2026-11-17",
-      "plan_end_date": "2026-11-17",
+      "plan_start_date": "2027-09-20",
+      "plan_end_date": "2027-09-20",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r38",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r38",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C2",
       "milestone": "BIOS/FW for Input",
-      "plan_content": "2026/11/25",
+      "plan_content": "2027/09/25",
       "actual_content": "",
-      "plan_start_date": "2026-11-25",
-      "plan_end_date": "2026-11-25",
+      "plan_start_date": "2027-09-25",
+      "plan_end_date": "2027-09-25",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r39",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r39",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C2",
       "milestone": "Image SCL Release for Build",
-      "plan_content": "2026/11/25",
+      "plan_content": "2027/10/03",
       "actual_content": "",
-      "plan_start_date": "2026-11-25",
-      "plan_end_date": "2026-11-25",
+      "plan_start_date": "2027-10-03",
+      "plan_end_date": "2027-10-03",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r40",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r40",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C2",
       "milestone": "MIH",
-      "plan_content": "CPU: 2026/11/25GPU: 2026/11/25",
+      "plan_content": "2027/10/08",
       "actual_content": "",
-      "plan_start_date": "2026-11-25",
-      "plan_end_date": "2026-11-25",
+      "plan_start_date": "2027-10-08",
+      "plan_end_date": "2027-10-08",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r41",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r41",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C2",
       "milestone": "SMT",
-      "plan_content": "2026/12/2~2026/12/3",
+      "plan_content": "2027/10/13",
       "actual_content": "",
-      "plan_start_date": "2026-12-02",
-      "plan_end_date": "2026-12-03",
+      "plan_start_date": "2027-10-13",
+      "plan_end_date": "2027-10-13",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r42",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r42",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C2",
       "milestone": "Pre-Build",
-      "plan_content": "2026/12/4",
+      "plan_content": "2027/10/21",
       "actual_content": "",
-      "plan_start_date": "2026-12-04",
-      "plan_end_date": "2026-12-04",
+      "plan_start_date": "2027-10-21",
+      "plan_end_date": "2027-10-21",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r43",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r43",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C2",
       "milestone": "System Build",
-      "plan_content": "2026/12/9 => 2026/12/12",
+      "plan_content": "2027/10/29",
       "actual_content": "",
-      "plan_start_date": "2026-12-09",
-      "plan_end_date": "2026-12-09",
+      "plan_start_date": "2027-10-29",
+      "plan_end_date": "2027-10-29",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r44",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r44",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C2",
       "milestone": "DUTs Distribution",
-      "plan_content": "Quanta: 2026/12/18Acer N8: 2026/12/19",
+      "plan_content": "2027/11/03",
       "actual_content": "",
-      "plan_start_date": "2026-12-18",
-      "plan_end_date": "2026-12-18",
+      "plan_start_date": "2027-11-03",
+      "plan_end_date": "2027-11-03",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r45",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r45",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C2",
       "milestone": "Validation Test",
-      "plan_content": "-",
+      "plan_content": "2027/11/11",
       "actual_content": "",
-      "plan_start_date": null,
-      "plan_end_date": null,
+      "plan_start_date": "2027-11-11",
+      "plan_end_date": "2027-11-11",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r46",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r46",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C2",
       "milestone": "BIOS/Driver Frozen",
-      "plan_content": "-",
+      "plan_content": "2027/11/16",
       "actual_content": "",
-      "plan_start_date": null,
-      "plan_end_date": null,
+      "plan_start_date": "2027-11-16",
+      "plan_end_date": "2027-11-16",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r47",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r47",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C2",
       "milestone": "Golden Image Candidate Release (US)",
-      "plan_content": "-",
+      "plan_content": "2027/11/24",
       "actual_content": "",
-      "plan_start_date": null,
-      "plan_end_date": null,
+      "plan_start_date": "2027-11-24",
+      "plan_end_date": "2027-11-24",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r48",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r48",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "Development Stage",
       "stage": "C2",
       "milestone": "Close Meeting",
-      "plan_content": "-",
+      "plan_content": "2027/12/02",
       "actual_content": "",
-      "plan_start_date": null,
-      "plan_end_date": null,
+      "plan_start_date": "2027-12-02",
+      "plan_end_date": "2027-12-02",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r49",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r49",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "MP Stage",
       "stage": "RAMP",
       "milestone": "Gerber Out",
-      "plan_content": "2026/12/29",
+      "plan_content": "2027/12/20",
       "actual_content": "",
-      "plan_start_date": "2026-12-29",
-      "plan_end_date": "2026-12-29",
+      "plan_start_date": "2027-12-20",
+      "plan_end_date": "2027-12-20",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r50",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r50",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "MP Stage",
       "stage": "RAMP",
       "milestone": "ME Sign-off",
-      "plan_content": "-",
+      "plan_content": "2027/12/25",
       "actual_content": "",
-      "plan_start_date": null,
-      "plan_end_date": null,
+      "plan_start_date": "2027-12-25",
+      "plan_end_date": "2027-12-25",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r51",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r51",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "MP Stage",
       "stage": "RAMP",
       "milestone": "Image Golden (US)",
-      "plan_content": "2027/1/7",
+      "plan_content": "2028/01/02",
       "actual_content": "",
-      "plan_start_date": "2027-01-07",
-      "plan_end_date": "2027-01-07",
+      "plan_start_date": "2028-01-02",
+      "plan_end_date": "2028-01-02",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r52",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r52",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "MP Stage",
       "stage": "RAMP",
       "milestone": "FAI Image Golden (FAI Language)",
-      "plan_content": "2027/1/19",
+      "plan_content": "2028/01/10",
       "actual_content": "",
-      "plan_start_date": "2027-01-19",
-      "plan_end_date": "2027-01-19",
+      "plan_start_date": "2028-01-10",
+      "plan_end_date": "2028-01-10",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r53",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r53",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "MP Stage",
       "stage": "RAMP",
       "milestone": "SMT",
-      "plan_content": "2027/1/19",
+      "plan_content": "2028/01/15",
       "actual_content": "",
-      "plan_start_date": "2027-01-19",
-      "plan_end_date": "2027-01-19",
+      "plan_start_date": "2028-01-15",
+      "plan_end_date": "2028-01-15",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r54",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r54",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "MP Stage",
       "stage": "RAMP",
       "milestone": "Pre-Build",
-      "plan_content": "2027/1/21 -> 2027/1/22",
+      "plan_content": "2028/01/23",
       "actual_content": "",
-      "plan_start_date": "2027-01-21",
-      "plan_end_date": "2027-01-21",
+      "plan_start_date": "2028-01-23",
+      "plan_end_date": "2028-01-23",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r55",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r55",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "MP Stage",
       "stage": "RAMP",
       "milestone": "System Build",
-      "plan_content": "2027/1/26 -> 2027/1/28",
+      "plan_content": "2028/01/31",
       "actual_content": "",
-      "plan_start_date": "2027-01-26",
-      "plan_end_date": "2027-01-26",
+      "plan_start_date": "2028-01-31",
+      "plan_end_date": "2028-01-31",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r56",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r56",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "MP Stage",
       "stage": "RAMP",
       "milestone": "FAI1",
-      "plan_content": "2027/1/29 -> 2027/2/3",
+      "plan_content": "2028/02/05",
       "actual_content": "",
-      "plan_start_date": "2027-01-29",
-      "plan_end_date": "2027-01-29",
+      "plan_start_date": "2028-02-05",
+      "plan_end_date": "2028-02-05",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r57",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r57",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "MP Stage",
       "stage": "RAMP",
       "milestone": "FAI2",
-      "plan_content": "2027/2/3  2027/2/4",
+      "plan_content": "2028/02/10",
       "actual_content": "",
-      "plan_start_date": "2027-02-03",
-      "plan_end_date": "2027-02-03",
+      "plan_start_date": "2028-02-10",
+      "plan_end_date": "2028-02-10",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r58",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r58",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "MP Stage",
       "stage": "RAMP",
       "milestone": "PRR",
-      "plan_content": "2027/2/4 >> 2027/2/5",
+      "plan_content": "2028/02/18",
       "actual_content": "",
-      "plan_start_date": "2027-02-04",
-      "plan_end_date": "2027-02-04",
+      "plan_start_date": "2028-02-18",
+      "plan_end_date": "2028-02-18",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r59",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r59",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "MP Stage",
       "stage": "RAMP",
       "milestone": "MDRR",
-      "plan_content": "2027/2/6 -> 2027/2/6",
+      "plan_content": "2028/02/26",
       "actual_content": "",
-      "plan_start_date": "2027-02-06",
-      "plan_end_date": "2027-02-06",
+      "plan_start_date": "2028-02-26",
+      "plan_end_date": "2028-02-26",
       "actual_start_date": null,
       "actual_end_date": null
     },
     {
-      "source_file": "bu4-template-test.pptx",
+      "source_file": "ocean-prototype-schedule.pptx",
       "slide_number": 1,
       "table_index": 1,
-      "table_id": "bu4-template-test.pptx#s1#t1",
-      "record_ref": "bu4-template-test.pptx#s1#t1#r60",
-      "project_name": "Project Alpha",
+      "table_id": "ocean-prototype-schedule.pptx#s1#t1",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r60",
+      "project_name": "Manta_16 Prototype Schedule",
       "section": "MP Stage",
       "stage": "RAMP",
       "milestone": "SSL/GL",
-      "plan_content": "2027/2/6",
+      "plan_content": "2028/03/05",
       "actual_content": "",
-      "plan_start_date": "2027-02-06",
-      "plan_end_date": "2027-02-06",
+      "plan_start_date": "2028-03-05",
+      "plan_end_date": "2028-03-05",
       "actual_start_date": null,
       "actual_end_date": null
     }
   ],
   "audit": [
     {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r2",
+      "record_ref": "ocean-prototype-schedule.pptx#s1#t1#r1",
       "warnings": [
-        "Plan: No supported date found."
+        "Plan: Prototype import warning retained for review."
       ],
       "source_cell": {
-        "row": 2,
+        "row": 1,
         "col": 4
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r2",
-      "warnings": [
-        "Actual: No supported date found."
-      ],
-      "source_cell": {
-        "row": 3,
-        "col": 4
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r3",
-      "warnings": [
-        "Plan: No supported date found."
-      ],
-      "source_cell": {
-        "row": 2,
-        "col": 5
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r3",
-      "warnings": [
-        "Actual: No supported date found."
-      ],
-      "source_cell": {
-        "row": 3,
-        "col": 5
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r4",
-      "warnings": [
-        "Plan: No supported date found."
-      ],
-      "source_cell": {
-        "row": 2,
-        "col": 6
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r4",
-      "warnings": [
-        "Actual: No supported date found."
-      ],
-      "source_cell": {
-        "row": 3,
-        "col": 6
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r6",
-      "warnings": [
-        "Plan: No supported date found."
-      ],
-      "source_cell": {
-        "row": 2,
-        "col": 8
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r6",
-      "warnings": [
-        "Actual: No supported date found."
-      ],
-      "source_cell": {
-        "row": 3,
-        "col": 8
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r8",
-      "warnings": [
-        "Plan: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 2,
-        "col": 10
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r8",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 3,
-        "col": 10
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r10",
-      "warnings": [
-        "Plan: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 2,
-        "col": 12
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r10",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 3,
-        "col": 12
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r12",
-      "warnings": [
-        "Plan: No supported date found."
-      ],
-      "source_cell": {
-        "row": 2,
-        "col": 14
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r12",
-      "warnings": [
-        "Actual: No supported date found."
-      ],
-      "source_cell": {
-        "row": 3,
-        "col": 14
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r15",
-      "warnings": [
-        "Plan: No supported date found."
-      ],
-      "source_cell": {
-        "row": 5,
-        "col": 5
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r15",
-      "warnings": [
-        "Actual: No supported date found."
-      ],
-      "source_cell": {
-        "row": 6,
-        "col": 5
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r18",
-      "warnings": [
-        "Plan: No supported date found."
-      ],
-      "source_cell": {
-        "row": 5,
-        "col": 8
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r18",
-      "warnings": [
-        "Actual: No supported date found."
-      ],
-      "source_cell": {
-        "row": 6,
-        "col": 8
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r19",
-      "warnings": [
-        "Plan: No supported date found."
-      ],
-      "source_cell": {
-        "row": 5,
-        "col": 9
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r19",
-      "warnings": [
-        "Actual: No supported date found."
-      ],
-      "source_cell": {
-        "row": 6,
-        "col": 9
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r22",
-      "warnings": [
-        "Plan: No supported date found."
-      ],
-      "source_cell": {
-        "row": 5,
-        "col": 12
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r22",
-      "warnings": [
-        "Actual: No supported date found."
-      ],
-      "source_cell": {
-        "row": 6,
-        "col": 12
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r23",
-      "warnings": [
-        "Plan: No supported date found."
-      ],
-      "source_cell": {
-        "row": 5,
-        "col": 13
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r23",
-      "warnings": [
-        "Actual: No supported date found."
-      ],
-      "source_cell": {
-        "row": 6,
-        "col": 13
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r28",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 8,
-        "col": 6
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r29",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 8,
-        "col": 7
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r30",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 8,
-        "col": 8
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r31",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 8,
-        "col": 9
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r32",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 8,
-        "col": 10
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r33",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 8,
-        "col": 11
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r34",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 8,
-        "col": 12
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r35",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 8,
-        "col": 13
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r36",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 8,
-        "col": 14
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r37",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 10,
-        "col": 3
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r38",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 10,
-        "col": 4
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r39",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 10,
-        "col": 5
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r40",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 10,
-        "col": 6
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r41",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 10,
-        "col": 7
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r42",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 10,
-        "col": 8
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r43",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 10,
-        "col": 9
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r44",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 10,
-        "col": 10
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r45",
-      "warnings": [
-        "Plan: No supported date found."
-      ],
-      "source_cell": {
-        "row": 9,
-        "col": 11
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r45",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 10,
-        "col": 11
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r46",
-      "warnings": [
-        "Plan: No supported date found."
-      ],
-      "source_cell": {
-        "row": 9,
-        "col": 12
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r46",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 10,
-        "col": 12
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r47",
-      "warnings": [
-        "Plan: No supported date found."
-      ],
-      "source_cell": {
-        "row": 9,
-        "col": 13
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r47",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 10,
-        "col": 13
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r48",
-      "warnings": [
-        "Plan: No supported date found."
-      ],
-      "source_cell": {
-        "row": 9,
-        "col": 14
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r48",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 10,
-        "col": 14
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r49",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 13,
-        "col": 3
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r50",
-      "warnings": [
-        "Plan: No supported date found."
-      ],
-      "source_cell": {
-        "row": 12,
-        "col": 4
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r50",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 13,
-        "col": 4
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r51",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 13,
-        "col": 5
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r52",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 13,
-        "col": 6
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r53",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 13,
-        "col": 7
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r54",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 13,
-        "col": 8
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r55",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 13,
-        "col": 9
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r56",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 13,
-        "col": 10
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r57",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 13,
-        "col": 11
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r58",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 13,
-        "col": 12
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r59",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 13,
-        "col": 13
-      }
-    },
-    {
-      "record_ref": "bu4-template-test.pptx#s1#t1#r60",
-      "warnings": [
-        "Actual: No date found in empty content."
-      ],
-      "source_cell": {
-        "row": 13,
-        "col": 14
       }
     }
   ]
