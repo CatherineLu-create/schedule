@@ -83,9 +83,10 @@ not inferred from legacy fixture data.
 
 ## Applicability and candidate data
 
-Only explicit `NA` or `N/A` input means Not Applicable. Legacy `-` and `*`
-symbols are not N/A and must remain raw unresolved fixture/import values until
-reviewed. Not Applicable is an explicit applicability state, never a fake date.
+Only explicit `NA` or `N/A` input means Not Applicable. Legacy `-`, `*`, and
+combined raw `-/*` tokens are not N/A and must remain unresolved fixture/import
+values until reviewed. Not Applicable is an explicit applicability state,
+never a fake date.
 
 Blocking Team candidates such as multiple Owners or an N/A Function containing
 people must remain edit/import candidate data. They must not be seeded as a
@@ -101,5 +102,6 @@ material while the current UI still depends on them. They are not inputs to
 the canonical V2 aggregate seed and must not be maintained as a second
 independent V2 Project dataset.
 
-Typed fixture modules are intentionally deferred until the V2 domain IDs,
-date-only type, Project aggregate, and PrototypeState contracts are available.
+Typed fixture modules provide reusable V2 reference, Team Template, Team, and
+Schedule candidate values. Full canonical Project aggregate seeds remain
+deferred to Task 0.4.
