@@ -19,7 +19,7 @@ adapter test material. Business rules must not be inferred from those values.
 
 ## Canonical fixture strategy
 
-The canonical V2 development fixture will be a small, scenario-driven set of
+The canonical V2 development fixture is a small, scenario-driven set of five
 Project aggregates. It is designed to exercise approved behavior, not to
 simulate or claim to represent company production data. Synthetic values must
 be visibly marked as development data, for example with `DEV` display names
@@ -30,7 +30,7 @@ IDs must not be derived from display names, normalized names, or array
 positions. Projects with duplicate or similar display names remain independent
 records and must never be merged automatically.
 
-The planned five-Project matrix is:
+The canonical five-Project matrix is:
 
 1. A Project with no Published Schedule, no Working Draft, and no Saved Team.
 2. A Project with one Published version covering completed, Not Applicable,
@@ -39,14 +39,16 @@ The planned five-Project matrix is:
    combination, multiple Published versions, a future Actual advisory, and an
    older applied Team Template.
 4. A Project with official Published data and a separate Working Draft holding
-   unmapped, invalid-date, and ambiguous-date import findings. Portfolio values
-   must continue to come from the Published version.
+   unmapped, contradictory applicability/date, Actual-without-Plan, and
+   ambiguous-date import states. Portfolio values continue to come from the
+   Published version.
 5. A punctuation-sensitive identity case with Team missing-Owner advisory,
    a project-specific Custom Function, and the remaining Team Template/update
    coverage.
 
-The set will vary Year, Customer, and Status values and use relative dates from
-an injected `today` value so attention scenarios remain deterministic in tests.
+The set varies Year, Customer, and Status values and uses the explicit
+`devScenarioToday` value `2026-09-15` so attention scenarios remain
+deterministic in tests.
 
 ## Schedule fixture rules
 
@@ -103,5 +105,7 @@ the canonical V2 aggregate seed and must not be maintained as a second
 independent V2 Project dataset.
 
 Typed fixture modules provide reusable V2 reference, Team Template, Team, and
-Schedule candidate values. Full canonical Project aggregate seeds remain
-deferred to Task 0.4.
+Schedule candidate values. `canonicalProjectFixtures.ts` assembles the five
+complete canonical Project aggregates. Invalid Team and Schedule candidate
+fixtures remain separate from Saved/Published canonical data, except for the
+deliberately invalid Project 004 Working Draft.
