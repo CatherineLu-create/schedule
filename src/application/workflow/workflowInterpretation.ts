@@ -3,6 +3,7 @@ import {
 	type CreateProjectContext,
 	type CreateProjectInput,
 	type CreateProjectResult,
+	type UpdateProjectMasterResult,
 } from "../commands/projectCommands";
 import type {
 	PublishProjectScheduleResult,
@@ -14,7 +15,10 @@ import type {
 	ProjectId,
 	ScheduleDraftId,
 } from "../../domain/shared/ids";
-import type { ValidationIssue } from "../../domain/validation/validationIssue";
+import {
+	countBlocking,
+	type ValidationIssue,
+} from "../../domain/validation/validationIssue";
 
 export type ActionDispositionKind = "completed" | "blocked" | "rejected";
 
@@ -114,6 +118,19 @@ export function confirmCreateProjectAnyway(
 			allowBusinessIdentityDuplicate: true,
 		}),
 	);
+}
+
+export type UpdateProjectMasterDisposition = ActionDisposition<
+	"completed" | "blocked",
+	UpdateProjectMasterResult
+>;
+
+export function interpretUpdateProjectMasterResult(
+	result: UpdateProjectMasterResult,
+): UpdateProjectMasterDisposition {
+	return countBlocking(result.issues) > 0
+		? { kind: "blocked", result }
+		: { kind: "completed", result };
 }
 
 export type PublishProjectScheduleDisposition = ActionDisposition<

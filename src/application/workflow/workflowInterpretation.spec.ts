@@ -25,6 +25,7 @@ import {
 	createProject,
 	type CreateProjectContext,
 	type CreateProjectInput,
+	type UpdateProjectMasterResult,
 } from "../commands/projectCommands";
 import {
 	publishProjectSchedule,
@@ -32,12 +33,14 @@ import {
 	startProjectScheduleWorkingDraft,
 } from "../commands/scheduleCommands";
 import { saveProjectTeam } from "../commands/teamCommands";
+import type { ValidationIssue } from "../../domain/validation/validationIssue";
 import {
 	confirmCreateProjectAnyway,
 	interpretCreateProjectResult,
 	interpretPublishProjectScheduleResult,
 	interpretReplaceWorkingDraftResult,
 	interpretSaveProjectTeamResult,
+	interpretUpdateProjectMasterResult,
 	requestReplaceWorkingDraftDecision,
 	requestUnsavedNavigationDecision,
 } from "./workflowInterpretation";
@@ -65,7 +68,68 @@ const createContext: CreateProjectContext = {
 	},
 };
 
+function projectMasterIssue(
+	severity: ValidationIssue["severity"],
+): ValidationIssue {
+	return {
+		code: `projectMaster.data.${severity}-test`,
+		domain: "projectMaster",
+		source: "data",
+		severity,
+		message: `${severity} Project Master test issue`,
+		target: {
+			section: "projectMaster.basicInformation",
+			entityId: devProject002.id,
+			field: "stnProjectName",
+		},
+	};
+}
+
 describe("ActionDisposition", () => {
+	describe("Project Master Update", () => {
+		it("interprets Blocking issues as blocked and preserves the original result", () => {
+			const issues = [projectMasterIssue("blocking")];
+			const result: UpdateProjectMasterResult = {
+				project: devProject002,
+				issues,
+			};
+
+			const interpretation = interpretUpdateProjectMasterResult(result);
+
+			expect(interpretation).toEqual({ kind: "blocked", result });
+			expect(interpretation.result).toBe(result);
+			expect(interpretation.result.project).toBe(result.project);
+			expect(interpretation.result.issues).toBe(result.issues);
+			expect(interpretation).not.toHaveProperty("actions");
+		});
+
+		it("interprets Advisory-only issues as completed and preserves feedback", () => {
+			const issues = [projectMasterIssue("advisory")];
+			const result: UpdateProjectMasterResult = {
+				project: devProject002,
+				issues,
+			};
+
+			const interpretation = interpretUpdateProjectMasterResult(result);
+
+			expect(interpretation).toEqual({ kind: "completed", result });
+			expect(interpretation.result).toBe(result);
+			expect(interpretation.result.issues).toBe(result.issues);
+		});
+
+		it("interprets a no-issue update as completed and preserves the original result", () => {
+			const result: UpdateProjectMasterResult = {
+				project: devProject002,
+				issues: [],
+			};
+
+			const interpretation = interpretUpdateProjectMasterResult(result);
+
+			expect(interpretation).toEqual({ kind: "completed", result });
+			expect(interpretation.result).toBe(result);
+		});
+	});
+
 	describe("Schedule Publish", () => {
 		it("interprets success as completed", () => {
 			const started = startProjectScheduleWorkingDraft(devProject001, {
