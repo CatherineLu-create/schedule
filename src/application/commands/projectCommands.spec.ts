@@ -179,6 +179,123 @@ describe("Create Project command", () => {
 		});
 	});
 
+	it("creates when only Year, Product Line, and STN Project Name have business values", () => {
+		const minimalMaster: CreateProjectMasterInput = {
+			basicInformation: {
+				year: 2030,
+				category: null,
+				productLine: productLineAlphaId,
+				panelSize: null,
+				stnProjectName: "DEV Minimal Master",
+				qciModelName: null,
+			},
+			platformHardware: {
+				cpu: null,
+				gpu: null,
+				pcbNumber: null,
+				housingNumber: null,
+			},
+			leverage: {
+				pcbLeverage: null,
+				aLeverage: null,
+				bLeverage: null,
+				cLeverage: null,
+				dLeverage: null,
+			},
+			cover: {
+				aCover: null,
+				bCover: null,
+				cCover: null,
+				dCover: null,
+			},
+			modelRegulatory: {
+				acerModelName: null,
+				acerMarketingName: null,
+				ssid: null,
+				rmn: null,
+			},
+			mechanical: {
+				product: {
+					productLengthMm: null,
+					productWidthMm: null,
+					productHeightMm: null,
+					productWeightG: null,
+				},
+				package: {
+					packageLengthMm: null,
+					packageWidthMm: null,
+					packageHeightMm: null,
+					grossWeightG: null,
+				},
+			},
+			other: { remark: null },
+		};
+
+		const result = createProject(
+			{
+				projectId: toProjectId("create-project-minimal-master"),
+				master: minimalMaster,
+				qciPm: null,
+			},
+			context,
+		);
+
+		expect(result.status).toBe("created");
+		if (result.status !== "created") return;
+		expect(result.project.master).toEqual({
+			basicInformation: {
+				status: rfqStatusId,
+				year: 2030,
+				customer: acerCustomerId,
+				category: null,
+				productLine: productLineAlphaId,
+				panelSize: null,
+				stnProjectName: "DEV Minimal Master",
+				qciModelName: null,
+			},
+			platformHardware: {
+				cpu: null,
+				gpu: null,
+				pcbNumber: null,
+				housingNumber: null,
+			},
+			leverage: {
+				pcbLeverage: null,
+				aLeverage: null,
+				bLeverage: null,
+				cLeverage: null,
+				dLeverage: null,
+			},
+			cover: {
+				aCover: null,
+				bCover: null,
+				cCover: null,
+				dCover: null,
+			},
+			modelRegulatory: {
+				acerModelName: null,
+				acerMarketingName: null,
+				ssid: null,
+				rmn: null,
+			},
+			mechanical: {
+				product: {
+					productLengthMm: null,
+					productWidthMm: null,
+					productHeightMm: null,
+					productWeightG: null,
+				},
+				package: {
+					packageLengthMm: null,
+					packageWidthMm: null,
+					packageHeightMm: null,
+					grossWeightG: null,
+				},
+			},
+			other: { remark: null },
+		});
+	});
+
 	it.each([
 		["omitted", masterWithoutCreateDefaults],
 		["canonical null", masterWithNullCreateDefaults],
@@ -297,6 +414,51 @@ describe("Create Project command", () => {
 			}),
 		]);
 		expect(result.candidate.id).toBe(devProject003.id);
+	});
+
+	it("returns every ProjectId matching a duplicate business identity", () => {
+		const result = createProject(
+			validInput({
+				projectId: toProjectId("create-project-multiple-business-matches"),
+				master: {
+					...fullMasterInput,
+					basicInformation: {
+						...fullMasterInput.basicInformation,
+						year: devProject002.master.basicInformation.year,
+						productLine:
+							devProject002.master.basicInformation.productLine,
+						stnProjectName:
+							devProject002.master.basicInformation.stnProjectName,
+					},
+				},
+			}),
+			{
+				...context,
+				existingProjects: [devProject002, devProject003],
+			},
+		);
+
+		expect(result.status).toBe("reviewRequired");
+		if (result.status !== "reviewRequired") return;
+		expect(result.matchingProjectIds).toHaveLength(2);
+		expect(result.matchingProjectIds).toEqual(
+			expect.arrayContaining([devProject002.id, devProject003.id]),
+		);
+		expect(result.issues).toHaveLength(2);
+		expect(result.issues).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					code: "projectMaster.data.duplicate-business-identity",
+					severity: "advisory",
+					target: expect.objectContaining({ entityId: devProject002.id }),
+				}),
+				expect.objectContaining({
+					code: "projectMaster.data.duplicate-business-identity",
+					severity: "advisory",
+					target: expect.objectContaining({ entityId: devProject003.id }),
+				}),
+			]),
+		);
 	});
 
 	it("supports an explicit Create Anyway path without merging Projects", () => {
