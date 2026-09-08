@@ -44,9 +44,15 @@ import {
 
 const createInput: CreateProjectInput = {
 	projectId: toProjectId("workflow-new-project"),
-	year: 2028,
-	productLineId: productLineReferenceFixtures[0]!.id,
-	stnProjectName: "DEV Workflow Project",
+	master: {
+		...devProject001.master,
+		basicInformation: {
+			...devProject001.master.basicInformation,
+			year: 2028,
+			productLine: productLineReferenceFixtures[0]!.id,
+			stnProjectName: "DEV Workflow Project",
+		},
+	},
 	qciPm: null,
 };
 
@@ -149,8 +155,18 @@ describe("ActionDisposition", () => {
 		});
 
 		it("interprets missing required fields as rejected", () => {
+			const missingYearInput: CreateProjectInput = {
+				...createInput,
+				master: {
+					...createInput.master,
+					basicInformation: {
+						...createInput.master.basicInformation,
+						year: null,
+					},
+				},
+			};
 			const result = createProject(
-				{ ...createInput, year: null },
+				missingYearInput,
 				createContext,
 			);
 
@@ -177,11 +193,17 @@ describe("ActionDisposition", () => {
 				{
 					...createInput,
 					projectId: toProjectId("workflow-duplicate-business-project"),
-					year: devProject003.master.basicInformation.year,
-					productLineId:
-						devProject003.master.basicInformation.productLine,
-					stnProjectName:
-						devProject003.master.basicInformation.stnProjectName,
+					master: {
+						...createInput.master,
+						basicInformation: {
+							...createInput.master.basicInformation,
+							year: devProject003.master.basicInformation.year,
+							productLine:
+								devProject003.master.basicInformation.productLine,
+							stnProjectName:
+								devProject003.master.basicInformation.stnProjectName,
+						},
+					},
 				},
 				{ ...createContext, existingProjects: [devProject002] },
 			);
@@ -201,9 +223,16 @@ describe("duplicate Project workflow decision", () => {
 	const duplicateInput: CreateProjectInput = {
 		...createInput,
 		projectId: toProjectId("workflow-confirmed-duplicate-project"),
-		year: devProject002.master.basicInformation.year,
-		productLineId: devProject002.master.basicInformation.productLine,
-		stnProjectName: devProject002.master.basicInformation.stnProjectName,
+		master: {
+			...createInput.master,
+			basicInformation: {
+				...createInput.master.basicInformation,
+				year: devProject002.master.basicInformation.year,
+				productLine: devProject002.master.basicInformation.productLine,
+				stnProjectName:
+					devProject002.master.basicInformation.stnProjectName,
+			},
+		},
 	};
 	const duplicateContext: CreateProjectContext = {
 		...createContext,
@@ -236,13 +265,20 @@ describe("duplicate Project workflow decision", () => {
 			duplicateContext,
 		);
 
+		expect(firstResult.status).toBe("reviewRequired");
+		if (firstResult.status !== "reviewRequired") return;
 		expect(firstInterpretation.kind).toBe("duplicateProject");
 		expect(confirmedInterpretation.kind).toBe("completed");
 		if (confirmedInterpretation.kind !== "completed") return;
 		expect(confirmedInterpretation.result.status).toBe("created");
 		if (confirmedInterpretation.result.status !== "created") return;
+		expect(firstResult.candidate.id).toBe(duplicateInput.projectId);
+		expect(firstResult.candidate.master).toEqual(duplicateInput.master);
 		expect(confirmedInterpretation.result.project.id).toBe(
 			duplicateInput.projectId,
+		);
+		expect(confirmedInterpretation.result.project.master).toEqual(
+			duplicateInput.master,
 		);
 		expect(duplicateContext.allowBusinessIdentityDuplicate).toBeUndefined();
 	});

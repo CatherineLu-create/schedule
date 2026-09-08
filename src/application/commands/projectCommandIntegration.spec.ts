@@ -120,9 +120,15 @@ describe("whole-Project command integration", () => {
 		const created = createProject(
 			{
 				projectId: toProjectId("integration-created-project"),
-				year: 2028,
-				productLineId: productLineReferenceFixtures[1]!.id,
-				stnProjectName: "DEV Integration Project",
+				master: {
+					...devProject001.master,
+					basicInformation: {
+						...devProject001.master.basicInformation,
+						year: 2028,
+						productLine: productLineReferenceFixtures[1]!.id,
+						stnProjectName: "DEV Integration Project",
+					},
+				},
 				qciPm: null,
 			},
 			{

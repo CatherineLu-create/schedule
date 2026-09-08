@@ -1,25 +1,31 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
-import { statusCatalog } from "../../config/v2/referenceData";
+import { coverCatalog, statusCatalog } from "../../config/v2/referenceData";
 import {
 	devProject002,
 	devProject003,
 	devProject005,
 } from "../../fixtures/v2/canonicalProjectFixtures";
 import {
+	categoryReferenceFixtures,
+	cpuReferenceFixtures,
 	customerReferenceFixtures,
+	gpuReferenceFixtures,
+	panelSizeReferenceFixtures,
 	productLineReferenceFixtures,
 } from "../../fixtures/v2/referenceFixtures";
 import { devTeamTemplateV2 } from "../../fixtures/v2/teamTemplateFixtures";
 import {
 	toPersonAssignmentId,
 	toProjectId,
+	type ProjectId,
 } from "../../domain/shared/ids";
 import type { ProjectRoleAssignment } from "../../domain/team/team";
 import {
 	createProject,
 	type CreateProjectContext,
 	type CreateProjectInput,
+	type CreateProjectMasterInput,
 	updateProjectMaster,
 } from "./projectCommands";
 
@@ -42,24 +48,126 @@ const qciPm: ProjectRoleAssignment = {
 	email: "create.qci.pm@example.test",
 };
 
+const fullMasterInput: CreateProjectMasterInput = {
+	basicInformation: {
+		status: statusCatalog[2]!.id,
+		year: 2029,
+		customer: customerReferenceFixtures[1]!.id,
+		category: categoryReferenceFixtures[0]!.id,
+		productLine: productLineAlphaId,
+		panelSize: panelSizeReferenceFixtures[0]!.id,
+		stnProjectName: "DEV Full Master Create",
+		qciModelName: "DEV-QCI-FULL-CREATE",
+	},
+	platformHardware: {
+		cpu: cpuReferenceFixtures[0]!.id,
+		gpu: gpuReferenceFixtures[1]!.id,
+		pcbNumber: "DEV-PCB-FULL-CREATE",
+		housingNumber: "DEV-HOUSING-FULL-CREATE",
+	},
+	leverage: {
+		pcbLeverage: devProject002.id,
+		aLeverage: devProject003.id,
+		bLeverage: null,
+		cLeverage: null,
+		dLeverage: null,
+	},
+	cover: {
+		aCover: coverCatalog[0]!.id,
+		bCover: coverCatalog[1]!.id,
+		cCover: coverCatalog[2]!.id,
+		dCover: coverCatalog[3]!.id,
+	},
+	modelRegulatory: {
+		acerModelName: "DEV Acer Full Model",
+		acerMarketingName: "DEV Acer Full Marketing",
+		ssid: "DEV-SSID-FULL",
+		rmn: "DEV-RMN-FULL",
+	},
+	mechanical: {
+		product: {
+			productLengthMm: 320.5,
+			productWidthMm: 220.25,
+			productHeightMm: 18.75,
+			productWeightG: 1500,
+		},
+		package: {
+			packageLengthMm: 450,
+			packageWidthMm: 330,
+			packageHeightMm: 90,
+			grossWeightG: 2800,
+		},
+	},
+	other: { remark: "DEV full Master Create candidate" },
+};
+
+const {
+	customer: ignoredCustomer,
+	status: ignoredStatus,
+	...basicWithoutCreateDefaults
+} = fullMasterInput.basicInformation;
+void ignoredCustomer;
+void ignoredStatus;
+
+const masterWithoutCreateDefaults: CreateProjectMasterInput = {
+	...fullMasterInput,
+	basicInformation: basicWithoutCreateDefaults,
+};
+
+const masterWithNullCreateDefaults: CreateProjectMasterInput = {
+	...fullMasterInput,
+	basicInformation: {
+		...fullMasterInput.basicInformation,
+		customer: null,
+		status: null,
+	},
+};
+
 function validInput(overrides: Partial<CreateProjectInput> = {}): CreateProjectInput {
 	return {
 		projectId: toProjectId("create-project-unique-id"),
-		year: 2027,
-		productLineId: productLineAlphaId,
-		stnProjectName: "DEV Created Project",
+		master: fullMasterInput,
 		qciPm,
 		...overrides,
 	};
 }
 
 describe("Create Project command", () => {
+	it("creates every canonical Master section from the full pre-create input", () => {
+		const result = createProject(
+			{
+				projectId: toProjectId("create-project-full-master"),
+				master: fullMasterInput,
+				qciPm,
+			},
+			context,
+		);
+
+		expect(result.status).toBe("created");
+		if (result.status !== "created") return;
+		expect(result.project.master).toEqual(fullMasterInput);
+	});
+
+	it("exposes only the single Master-shaped Create input contract", () => {
+		expectTypeOf<CreateProjectInput>().toEqualTypeOf<{
+			readonly projectId: ProjectId;
+			readonly master: CreateProjectMasterInput;
+			readonly qciPm: ProjectRoleAssignment | null;
+		}>();
+	});
+
 	it("rejects each missing Create-required field without inventing Master completeness", () => {
 		const result = createProject(
 			validInput({
-				year: null,
-				productLineId: null,
-				stnProjectName: "   ",
+				master: {
+					...fullMasterInput,
+					basicInformation: {
+						...fullMasterInput.basicInformation,
+						year: null,
+						productLine: null,
+						stnProjectName: "   ",
+					},
+				},
 			}),
 			context,
 		);
@@ -71,47 +179,59 @@ describe("Create Project command", () => {
 		});
 	});
 
-	it("uses injected Acer/RFQ defaults and keeps QCI PM in Team", () => {
-		const result = createProject(validInput(), context);
+	it.each([
+		["omitted", masterWithoutCreateDefaults],
+		["canonical null", masterWithNullCreateDefaults],
+	] as const)(
+		"uses injected Acer/RFQ defaults for %s Customer/Status and keeps QCI PM in Team",
+		(_inputKind, master) => {
+			const result = createProject(validInput({ master }), context);
 
-		expect(result.status).toBe("created");
-		if (result.status !== "created") return;
+			expect(result.status).toBe("created");
+			if (result.status !== "created") return;
 
-		expect(result.project.id).toBe("create-project-unique-id");
-		expect(result.project.master.basicInformation).toMatchObject({
-			year: 2027,
-			productLine: productLineAlphaId,
-			stnProjectName: "DEV Created Project",
-			customer: acerCustomerId,
-			status: rfqStatusId,
-		});
-		expect(result.project.team?.projectRoles).toEqual({
-			qciPm,
-			qciPjm: null,
-			acerPm: null,
-		});
-		expect(result.project.team?.functions).toHaveLength(
-			devTeamTemplateV2.functions.length,
-		);
-		expect(
-			result.project.team?.functions.every(
-				(functionTeam) =>
-					functionTeam.applicability === "pending" &&
-					functionTeam.assignments.length === 0,
-			),
-		).toBe(true);
-		expect(result.project.schedule).toEqual({
-			publishedVersions: [],
-			workingDraft: null,
-		});
-		expect(result.project.identityAliases).toEqual([]);
-	});
+			expect(result.project.id).toBe("create-project-unique-id");
+			expect(result.project.master.basicInformation).toMatchObject({
+				year: 2029,
+				productLine: productLineAlphaId,
+				stnProjectName: "DEV Full Master Create",
+				customer: acerCustomerId,
+				status: rfqStatusId,
+			});
+			expect(result.project.team?.projectRoles).toEqual({
+				qciPm,
+				qciPjm: null,
+				acerPm: null,
+			});
+			expect(result.project.team?.functions).toHaveLength(
+				devTeamTemplateV2.functions.length,
+			);
+			expect(
+				result.project.team?.functions.every(
+					(functionTeam) =>
+						functionTeam.applicability === "pending" &&
+						functionTeam.assignments.length === 0,
+				),
+			).toBe(true);
+			expect(result.project.schedule).toEqual({
+				publishedVersions: [],
+				workingDraft: null,
+			});
+			expect(result.project.identityAliases).toEqual([]);
+		},
+	);
 
 	it("allows explicit Customer and Status selections to override Create defaults", () => {
 		const result = createProject(
 			validInput({
-				customerId: customerReferenceFixtures[1]!.id,
-				statusId: statusCatalog[2]!.id,
+				master: {
+					...fullMasterInput,
+					basicInformation: {
+						...fullMasterInput.basicInformation,
+						customer: customerReferenceFixtures[1]!.id,
+						status: statusCatalog[2]!.id,
+					},
+				},
 			}),
 			context,
 		);
@@ -130,7 +250,13 @@ describe("Create Project command", () => {
 		const result = createProject(
 			validInput({
 				projectId: devProject002.id,
-				stnProjectName: "Entirely Different Name",
+				master: {
+					...fullMasterInput,
+					basicInformation: {
+						...fullMasterInput.basicInformation,
+						stnProjectName: "Entirely Different Name",
+					},
+				},
 			}),
 			{ ...context, existingProjects: [devProject002] },
 		);
@@ -145,10 +271,16 @@ describe("Create Project command", () => {
 		const result = createProject(
 			validInput({
 				projectId: devProject003.id,
-				year: devProject003.master.basicInformation.year,
-				productLineId:
-					devProject003.master.basicInformation.productLine,
-				stnProjectName: "  dev   PROJECT alpha ",
+				master: {
+					...fullMasterInput,
+					basicInformation: {
+						...fullMasterInput.basicInformation,
+						year: devProject003.master.basicInformation.year,
+						productLine:
+							devProject003.master.basicInformation.productLine,
+						stnProjectName: "  dev   PROJECT alpha ",
+					},
+				},
 			}),
 			{ ...context, existingProjects: [devProject002] },
 		);
@@ -171,11 +303,17 @@ describe("Create Project command", () => {
 		const result = createProject(
 			validInput({
 				projectId: devProject003.id,
-				year: devProject003.master.basicInformation.year,
-				productLineId:
-					devProject003.master.basicInformation.productLine,
-				stnProjectName:
-					devProject003.master.basicInformation.stnProjectName,
+				master: {
+					...fullMasterInput,
+					basicInformation: {
+						...fullMasterInput.basicInformation,
+						year: devProject003.master.basicInformation.year,
+						productLine:
+							devProject003.master.basicInformation.productLine,
+						stnProjectName:
+							devProject003.master.basicInformation.stnProjectName,
+					},
+				},
 			}),
 			{
 				...context,
@@ -201,18 +339,30 @@ describe("Create Project command", () => {
 		const nonDuplicate = createProject(
 			validInput({
 				projectId: toProjectId("create-project-signal-dash"),
-				year: base.year,
-				productLineId: base.productLine,
-				stnProjectName: "Signal-A",
+				master: {
+					...fullMasterInput,
+					basicInformation: {
+						...fullMasterInput.basicInformation,
+						year: base.year,
+						productLine: base.productLine,
+						stnProjectName: "Signal-A",
+					},
+				},
 			}),
 			{ ...context, existingProjects: [devProject005] },
 		);
 		const normalizedDuplicate = createProject(
 			validInput({
 				projectId: toProjectId("create-project-signal-underscore"),
-				year: base.year,
-				productLineId: base.productLine,
-				stnProjectName: " signal_a ",
+				master: {
+					...fullMasterInput,
+					basicInformation: {
+						...fullMasterInput.basicInformation,
+						year: base.year,
+						productLine: base.productLine,
+						stnProjectName: " signal_a ",
+					},
+				},
 			}),
 			{ ...context, existingProjects: [devProject005] },
 		);

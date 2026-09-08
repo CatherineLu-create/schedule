@@ -27,13 +27,25 @@ export type CreateProjectRequiredField =
 	| "productLine"
 	| "stnProjectName";
 
+export interface CreateProjectMasterInput {
+	readonly basicInformation: Omit<
+		ProjectMaster["basicInformation"],
+		"customer" | "status"
+	> & {
+		readonly customer?: CatalogItemId | null;
+		readonly status?: CatalogItemId | null;
+	};
+	readonly platformHardware: ProjectMaster["platformHardware"];
+	readonly leverage: ProjectMaster["leverage"];
+	readonly cover: ProjectMaster["cover"];
+	readonly modelRegulatory: ProjectMaster["modelRegulatory"];
+	readonly mechanical: ProjectMaster["mechanical"];
+	readonly other: ProjectMaster["other"];
+}
+
 export interface CreateProjectInput {
 	readonly projectId: ProjectId;
-	readonly year: number | null;
-	readonly productLineId: CatalogItemId | null;
-	readonly stnProjectName: string | null;
-	readonly customerId?: CatalogItemId;
-	readonly statusId?: CatalogItemId;
+	readonly master: CreateProjectMasterInput;
 	readonly qciPm: ProjectRoleAssignment | null;
 }
 
@@ -75,10 +87,11 @@ function missingCreateFields(
 	input: CreateProjectInput,
 ): CreateProjectRequiredField[] {
 	const missing: CreateProjectRequiredField[] = [];
+	const basic = input.master.basicInformation;
 
-	if (input.year === null) missing.push("year");
-	if (input.productLineId === null) missing.push("productLine");
-	if (input.stnProjectName?.trim().length === 0 || input.stnProjectName === null) {
+	if (basic.year === null) missing.push("year");
+	if (basic.productLine === null) missing.push("productLine");
+	if (basic.stnProjectName?.trim().length === 0 || basic.stnProjectName === null) {
 		missing.push("stnProjectName");
 	}
 
@@ -86,60 +99,24 @@ function missingCreateFields(
 }
 
 function createInitialProjectMaster(
-	input: CreateProjectInput,
+	input: CreateProjectMasterInput,
 	defaults: CreateProjectDefaults,
 ): ProjectMaster {
 	return {
 		basicInformation: {
-			status: input.statusId ?? defaults.statusId,
-			year: input.year,
-			customer: input.customerId ?? defaults.customerId,
-			category: null,
-			productLine: input.productLineId,
-			panelSize: null,
-			stnProjectName: input.stnProjectName,
-			qciModelName: null,
+			...input.basicInformation,
+			status: input.basicInformation.status ?? defaults.statusId,
+			customer: input.basicInformation.customer ?? defaults.customerId,
 		},
-		platformHardware: {
-			cpu: null,
-			gpu: null,
-			pcbNumber: null,
-			housingNumber: null,
-		},
-		leverage: {
-			pcbLeverage: null,
-			aLeverage: null,
-			bLeverage: null,
-			cLeverage: null,
-			dLeverage: null,
-		},
-		cover: {
-			aCover: null,
-			bCover: null,
-			cCover: null,
-			dCover: null,
-		},
-		modelRegulatory: {
-			acerModelName: null,
-			acerMarketingName: null,
-			ssid: null,
-			rmn: null,
-		},
+		platformHardware: { ...input.platformHardware },
+		leverage: { ...input.leverage },
+		cover: { ...input.cover },
+		modelRegulatory: { ...input.modelRegulatory },
 		mechanical: {
-			product: {
-				productLengthMm: null,
-				productWidthMm: null,
-				productHeightMm: null,
-				productWeightG: null,
-			},
-			package: {
-				packageLengthMm: null,
-				packageWidthMm: null,
-				packageHeightMm: null,
-				grossWeightG: null,
-			},
+			product: { ...input.mechanical.product },
+			package: { ...input.mechanical.package },
 		},
-		other: { remark: null },
+		other: { ...input.other },
 	};
 }
 
@@ -162,11 +139,15 @@ function matchesBusinessIdentity(
 	input: CreateProjectInput,
 ): boolean {
 	const basic = project.master.basicInformation;
+	const candidateBasic = input.master.basicInformation;
 
 	return (
-		basic.year === input.year &&
-		basic.productLine === input.productLineId &&
-		projectIdentityNamesMatch(basic.stnProjectName, input.stnProjectName)
+		basic.year === candidateBasic.year &&
+		basic.productLine === candidateBasic.productLine &&
+		projectIdentityNamesMatch(
+			basic.stnProjectName,
+			candidateBasic.stnProjectName,
+		)
 	);
 }
 
@@ -200,7 +181,7 @@ export function createProject(
 
 	const project: Project = {
 		id: input.projectId,
-		master: createInitialProjectMaster(input, context.defaults),
+		master: createInitialProjectMaster(input.master, context.defaults),
 		identityAliases: [],
 		schedule: { publishedVersions: [], workingDraft: null },
 		team: createInitialProjectTeam(input.qciPm, context.defaults.teamTemplate),
