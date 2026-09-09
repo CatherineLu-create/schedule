@@ -8,30 +8,59 @@ import {
   type ColumnWidths,
   type ProjectListColumnKey,
 } from "./dashboardColumns";
+import type { DashboardProject as LegacyDashboardProject } from "./projectMaster";
 import {
-  buildProjectFromForm,
-  dashboardExportRow,
-  dashboardProjectsFromWorksheetRows,
-  projectStatusOptions,
-  toProjectForm,
-  updateProjectFromForm,
-  type DashboardProject,
-  type ProjectForm,
-} from "./projectMaster";
+  createProject,
+  updateProjectMaster,
+  type CreateProjectContext,
+  type CreateProjectDefaults,
+  type CreateProjectInput,
+  type CreateProjectRequiredField,
+} from "./application/commands/projectCommands";
+import { prototypeReducer } from "./application/state/prototypeReducer";
+import type { PrototypeState } from "./application/state/prototypeState";
 import {
-  addCustomField,
-  createEmptyMember,
+  selectDashboardProjectRow,
+  selectDashboardProjectRows,
+  type DashboardProjectRow,
+} from "./application/selectors/dashboardProjectRows";
+import { getProjectById } from "./application/selectors/projectSelectors";
+import {
+  confirmCreateProjectAnyway,
+  interpretCreateProjectResult,
+  interpretUpdateProjectMasterResult,
+  type CreateProjectInterpretation,
+  type DuplicateProjectDecisionRequest,
+} from "./application/workflow/workflowInterpretation";
+import { statusCatalog } from "./config/v2/referenceData";
+import type { Project } from "./domain/project/project";
+import type { CatalogItem } from "./domain/reference-data/catalog";
+import { toCatalogItemId, toProjectId, type CatalogItemId, type ProjectId } from "./domain/shared/ids";
+import type { ValidationIssue } from "./domain/validation/validationIssue";
+import { DuplicateProjectReview } from "./duplicateProjectReview";
+import { canonicalProjectFixtures } from "./fixtures/v2/canonicalProjectFixtures";
+import {
+  cpuReferenceFixtures,
+  customerReferenceFixtures,
+  gpuReferenceFixtures,
+  panelSizeReferenceFixtures,
+  productLineReferenceFixtures,
+} from "./fixtures/v2/referenceFixtures";
+import { devTeamTemplateV2 } from "./fixtures/v2/teamTemplateFixtures";
+import {
+  emptyProjectMasterForm,
+  overwriteProjectMasterFromForm,
+  toCreateProjectMasterInput,
+  toProjectMasterForm,
+  type CatalogSelection,
+  type ProjectMasterForm,
+} from "./projectMasterForm";
+import {
   defaultTeamMemberFields,
-  deleteCustomField,
-  deleteMember,
-  emptyTeamMembersState,
-  teamMembersFromWorksheetRows,
-  updateMemberValue,
   type TeamMembersState,
 } from "./teamMembers";
 import {
   countScheduleWarnings,
-  createInitialScheduleWarnings,
   hasScheduleWarning,
   resolveScheduleWarning,
   type ScheduleWarnings,
@@ -47,18 +76,12 @@ import {
   type ScheduleFilterKey,
   type ScheduleFilterState,
 } from "./scheduleFilters";
-import {
-  createInitialVersionHistory,
-  publishVersion as publishScheduleVersion,
-  selectVersion,
-} from "./versionHistory";
-import dashboardProjectRows from "./dashboardProjectRows.json";
 import scheduleOutput from "./schedule-output_3108.json";
 import "./styles.css";
 
-type Page = "dashboard" | "workspace" | "draft";
+type Page = "dashboard" | "workspace";
 
-type WorkspaceResource = "schedule" | "teamMembers";
+type WorkspaceResource = "projectMaster";
 
 type ScheduleItem = {
   id: string;
@@ -71,16 +94,27 @@ type ScheduleItem = {
 
 type ScheduleKey = keyof ScheduleItem;
 
-type ScheduleVersionMeta = {
-  warnings: ScheduleWarnings;
-};
-
 type FilterKey = "year" | "productLine" | "size" | "cpu" | "customer";
 
 type DashboardFilters = Record<FilterKey, string>;
 
-const dashboardProjects: DashboardProject[] = dashboardProjectsFromWorksheetRows(dashboardProjectRows as unknown[][]);
-const project = dashboardProjects[0];
+interface PendingDuplicateCreate {
+  readonly input: CreateProjectInput;
+  readonly context: CreateProjectContext;
+  readonly decision: DuplicateProjectDecisionRequest;
+}
+
+type CreateFieldErrors = Partial<Record<CreateProjectRequiredField, string>>;
+
+const initialPrototypeState: PrototypeState = {
+  projects: canonicalProjectFixtures,
+};
+
+const createDefaults: CreateProjectDefaults = {
+  customerId: toCatalogItemId("dev-customer-acer"),
+  statusId: toCatalogItemId("status-rfq"),
+  teamTemplate: devTeamTemplateV2,
+};
 
 const schedule: ScheduleItem[] = scheduleOutput.records.map((record, index) => ({
   id: `schedule-row-${index + 1}`,
@@ -108,7 +142,27 @@ function exportScheduleToExcel() {
   XLSX.writeFile(workbook, "ThinkBook_X14_Current_Schedule.xlsx");
 }
 
-function exportDashboardProjectListToExcel(projects: DashboardProject[]) {
+function dashboardExportRow(project: DashboardProjectRow) {
+  return {
+    Year: project.year,
+    Customer: project.customer,
+    "Product Line": project.productLine,
+    "Project Name": project.projectName,
+    "QCI Model Name": project.qciModelName,
+    "Acer Model Name": project.acerModelName,
+    "Acer Marketing Name": project.acerMarketingName,
+    "Panel Size": project.panelSize,
+    CPU: project.cpu,
+    GPU: project.gpu,
+    SSID: project.ssid,
+    RMN: project.rmn,
+    "Project Status": project.projectStatus,
+    "Current Stage": project.currentStage,
+    MDRR: project.mdrr,
+  };
+}
+
+function exportDashboardProjectListToExcel(projects: readonly DashboardProjectRow[]) {
   const rows = projects.map(dashboardExportRow);
   const worksheet = XLSX.utils.json_to_sheet(rows);
   const workbook = XLSX.utils.book_new();
@@ -117,206 +171,249 @@ function exportDashboardProjectListToExcel(projects: DashboardProject[]) {
   XLSX.writeFile(workbook, "PIP_Dashboard_Project_List.xlsx");
 }
 
-function App() {
+export function App() {
   const [page, setPage] = React.useState<Page>("dashboard");
-  const [projects, setProjects] = React.useState<DashboardProject[]>(dashboardProjects);
-  const [selectedProject, setSelectedProject] = React.useState<DashboardProject>(project);
-  const [activeResource, setActiveResource] = React.useState<WorkspaceResource>("schedule");
+  const [state, dispatch] = React.useReducer(prototypeReducer, initialPrototypeState);
+  const [selectedProjectId, setSelectedProjectId] = React.useState<ProjectId | null>(null);
+  const [activeResource, setActiveResource] = React.useState<WorkspaceResource>("projectMaster");
   const [isCreateProjectOpen, setIsCreateProjectOpen] = React.useState(false);
   const [isEditProjectOpen, setIsEditProjectOpen] = React.useState(false);
-  const [teamMembersByProject, setTeamMembersByProject] = React.useState<Record<string, TeamMembersState>>({});
-  const teamMemberIdCounter = React.useRef(1);
-  const [versionHistory, setVersionHistory] = React.useState(() =>
-    createInitialVersionHistory<ScheduleItem, ScheduleVersionMeta>(schedule, {
-      warnings: createInitialScheduleWarnings(),
-    }),
-  );
-  const latestVersion = versionHistory.versions[versionHistory.versions.length - 1].version;
-  const selectedProjectKey = selectedProject.id || selectedProject.name;
-  const selectedTeamMembers = teamMembersByProject[selectedProjectKey] || emptyTeamMembersState;
-  const selectedScheduleWarnings = versionHistory.currentMeta?.warnings || {};
+  const [createCandidateId, setCreateCandidateId] = React.useState<ProjectId | null>(null);
+  const [createForm, setCreateForm] = React.useState<ProjectMasterForm>(emptyProjectMasterForm);
+  const [createFieldErrors, setCreateFieldErrors] = React.useState<CreateFieldErrors>({});
+  const [createIssues, setCreateIssues] = React.useState<readonly ValidationIssue[]>([]);
+  const [createFeedback, setCreateFeedback] = React.useState<string | null>(null);
+  const [pendingDuplicateCreate, setPendingDuplicateCreate] =
+    React.useState<PendingDuplicateCreate | null>(null);
+  const [editForm, setEditForm] = React.useState<ProjectMasterForm>(emptyProjectMasterForm);
+  const [editIssues, setEditIssues] = React.useState<readonly ValidationIssue[]>([]);
+  const [editFeedback, setEditFeedback] = React.useState<readonly ValidationIssue[]>([]);
 
-  const openProject = (item: DashboardProject) => {
-    setSelectedProject(item);
-    setActiveResource("schedule");
+  const selectedCanonicalProject =
+    selectedProjectId === null ? null : getProjectById(state, selectedProjectId);
+  const dashboardRows = selectDashboardProjectRows(state);
+  const selectedDashboardRow =
+    selectedProjectId === null ? null : selectDashboardProjectRow(state, selectedProjectId);
+
+  React.useEffect(() => {
+    if (selectedProjectId !== null && selectedCanonicalProject === null) {
+      setSelectedProjectId(null);
+      setIsEditProjectOpen(false);
+      setPendingDuplicateCreate(null);
+      setActiveResource("projectMaster");
+      setPage("dashboard");
+    }
+  }, [selectedProjectId, selectedCanonicalProject]);
+
+  const openProject = (projectId: ProjectId) => {
+    setSelectedProjectId(projectId);
+    setActiveResource("projectMaster");
     setPage("workspace");
   };
-  const publishVersion = (draftSchedule: ScheduleItem[], warnings: ScheduleWarnings) => {
-    setVersionHistory((current) => publishScheduleVersion(current, draftSchedule, { warnings }));
-    setActiveResource("schedule");
-    setPage("workspace");
-  };
-  const createProject = (input: ProjectForm) => {
-    const newProject = {
-      ...buildProjectFromForm(input),
-      id: `created-project-${projects.length + 1}`,
-    };
-
-    setProjects((current) => [...current, newProject]);
-    setTeamMembersByProject((current) => ({
-      ...current,
-      [newProject.id || newProject.name]: emptyTeamMembersState,
-    }));
+  const closeCreate = () => {
     setIsCreateProjectOpen(false);
+    setPendingDuplicateCreate(null);
+    setCreateCandidateId(null);
+    setCreateForm(emptyProjectMasterForm);
+    setCreateFieldErrors({});
+    setCreateIssues([]);
+    setCreateFeedback(null);
   };
-  const saveProjectChanges = (input: ProjectForm) => {
-    const previousKey = selectedProjectKey;
-    const updatedProject = updateProjectFromForm(selectedProject, input);
+  const openCreate = () => {
+    setCreateCandidateId(toProjectId(globalThis.crypto.randomUUID()));
+    setCreateForm(emptyProjectMasterForm);
+    setCreateFieldErrors({});
+    setCreateIssues([]);
+    setCreateFeedback(null);
+    setPendingDuplicateCreate(null);
+    setIsCreateProjectOpen(true);
+  };
+  const completeCreate = (project: Project, issues: readonly ValidationIssue[]) => {
+    dispatch({ type: "projectAdded", project });
+    setSelectedProjectId(project.id);
+    setEditFeedback(issues);
+    setActiveResource("projectMaster");
+    setPage("workspace");
+    closeCreate();
+  };
+  const handleCreateInterpretation = (
+    interpretation: CreateProjectInterpretation,
+    input: CreateProjectInput,
+    context: CreateProjectContext,
+  ) => {
+    if (interpretation.kind === "completed") {
+      completeCreate(interpretation.result.project, interpretation.result.issues);
+      return;
+    }
 
-    setProjects((current) => current.map((item) => (item === selectedProject ? updatedProject : item)));
-    setTeamMembersByProject((current) => {
-      if (previousKey === (updatedProject.id || updatedProject.name)) {
-        return current;
-      }
+    if (interpretation.kind === "duplicateProject") {
+      setPendingDuplicateCreate({ input, context, decision: interpretation });
+      setCreateIssues(interpretation.issues);
+      return;
+    }
 
-      const { [previousKey]: existingTeamMembers, ...remainingProjects } = current;
-
-      return {
-        ...remainingProjects,
-        [updatedProject.id || updatedProject.name]: existingTeamMembers || emptyTeamMembersState,
+    const result = interpretation.result;
+    if (result.reason === "requiredFields") {
+      const messages: Record<CreateProjectRequiredField, string> = {
+        year: "Year is required.",
+        productLine: "Product Line is required.",
+        stnProjectName: "STN Project Name is required.",
       };
-    });
-    setSelectedProject(updatedProject);
+      setCreateFieldErrors(Object.fromEntries(
+        result.missingFields.map((field) => [field, messages[field]]),
+      ));
+      setCreateFeedback(null);
+    } else {
+      setCreateFieldErrors({});
+      setCreateFeedback("A Project with this Project ID already exists.");
+    }
+  };
+  const saveCreate = () => {
+    if (createCandidateId === null) return;
+
+    const input: CreateProjectInput = {
+      projectId: createCandidateId,
+      master: toCreateProjectMasterInput(createForm),
+      qciPm: null,
+    };
+    const context: CreateProjectContext = {
+      existingProjects: state.projects,
+      defaults: createDefaults,
+    };
+    handleCreateInterpretation(
+      interpretCreateProjectResult(createProject(input, context)),
+      input,
+      context,
+    );
+  };
+  const createAnyway = () => {
+    if (pendingDuplicateCreate === null) return;
+
+    handleCreateInterpretation(
+      confirmCreateProjectAnyway(
+        pendingDuplicateCreate.input,
+        pendingDuplicateCreate.context,
+      ),
+      pendingDuplicateCreate.input,
+      pendingDuplicateCreate.context,
+    );
+  };
+  const openEdit = () => {
+    if (selectedCanonicalProject === null) return;
+    setEditForm(toProjectMasterForm(selectedCanonicalProject.master));
+    setEditIssues([]);
+    setIsEditProjectOpen(true);
+  };
+  const saveEdit = () => {
+    if (selectedCanonicalProject === null) return;
+
+    const candidateMaster = overwriteProjectMasterFromForm(
+      selectedCanonicalProject.master,
+      editForm,
+    );
+    const interpretation = interpretUpdateProjectMasterResult(
+      updateProjectMaster(selectedCanonicalProject, { master: candidateMaster }),
+    );
+    setEditIssues(interpretation.result.issues);
+    if (interpretation.kind === "blocked") return;
+
+    dispatch({ type: "projectReplaced", project: interpretation.result.project });
+    setEditFeedback(interpretation.result.issues);
     setIsEditProjectOpen(false);
+    setActiveResource("projectMaster");
   };
-  const updateSelectedTeamMembers = (nextState: TeamMembersState) => {
-    setTeamMembersByProject((current) => ({
-      ...current,
-      [selectedProjectKey]: nextState,
-    }));
-  };
-  const importTeamMembers = async (file: File) => {
-    if (
-      selectedTeamMembers.members.length > 0 &&
-      !window.confirm("Importing a new file will replace the current Team Member table. Continue?")
-    ) {
-      return;
-    }
 
-    const nextImportId = teamMemberIdCounter.current++;
-    const workbook = XLSX.read(await file.arrayBuffer());
-    const firstWorksheetName = workbook.SheetNames[0];
-
-    if (!firstWorksheetName) {
-      return;
-    }
-
-    const worksheet = workbook.Sheets[firstWorksheetName];
-    const rows = XLSX.utils.sheet_to_json<unknown[]>(worksheet, { header: 1, defval: "" });
-
-    updateSelectedTeamMembers(teamMembersFromWorksheetRows(rows, `import-${nextImportId}`, file.name));
-  };
-  const addTeamMember = () => {
-    const nextMemberId = teamMemberIdCounter.current++;
-
-    updateSelectedTeamMembers({
-      ...selectedTeamMembers,
-      members: [
-        ...selectedTeamMembers.members,
-        createEmptyMember(selectedTeamMembers.fields, `member-${nextMemberId}`),
-      ],
-    });
-  };
-  const editTeamMemberValue = (memberId: string, field: string, value: string) => {
-    updateSelectedTeamMembers(updateMemberValue(selectedTeamMembers, memberId, field, value));
-  };
-  const removeTeamMember = (memberId: string) => {
-    updateSelectedTeamMembers(deleteMember(selectedTeamMembers, memberId));
-  };
-  const addTeamMemberField = (fieldName: string) => {
-    updateSelectedTeamMembers(addCustomField(selectedTeamMembers, fieldName));
-  };
-  const removeTeamMemberField = (fieldName: string) => {
-    updateSelectedTeamMembers(deleteCustomField(selectedTeamMembers, fieldName));
-  };
+  const matchingRows = pendingDuplicateCreate === null
+    ? []
+    : pendingDuplicateCreate.decision.matchingProjectIds
+        .map((projectId) => getProjectById(state, projectId))
+        .filter((project): project is Project => project !== null)
+        .map((project) => selectDashboardProjectRow(state, project.id))
+        .filter((row): row is DashboardProjectRow => row !== null);
+  const renderWorkspace =
+    page === "workspace" && selectedCanonicalProject !== null && selectedDashboardRow !== null;
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-slate-100 text-slate-950">
-      {page === "dashboard" && (
+      {!renderWorkspace && (
         <Dashboard
-          onCreateProject={() => setIsCreateProjectOpen(true)}
+          onCreateProject={openCreate}
           onOpenProject={openProject}
-          projects={projects}
+          projects={dashboardRows}
         />
       )}
-      {page === "workspace" && (
+      {renderWorkspace && (
         <ProjectWorkspace
           activeResource={activeResource}
-          onAddTeamMember={addTeamMember}
-          onAddTeamMemberField={addTeamMemberField}
+          feedback={editFeedback}
           onBack={() => setPage("dashboard")}
-          onDeleteTeamMember={removeTeamMember}
-          onDeleteTeamMemberField={removeTeamMemberField}
-          onEditProject={() => setIsEditProjectOpen(true)}
-          onEditSchedule={() => setPage("draft")}
-          onImportTeamMembers={importTeamMembers}
-          onSelectResource={setActiveResource}
-          onSelectVersion={(version) => setVersionHistory((current) => selectVersion(current, version))}
-          onUpdateTeamMember={editTeamMemberValue}
-          project={selectedProject}
-          schedule={versionHistory.currentSchedule}
-          scheduleWarnings={selectedScheduleWarnings}
-          teamMembers={selectedTeamMembers}
-          version={versionHistory.selectedVersion}
-          versions={versionHistory.versions.map((entry) => entry.version)}
-          isLatestVersion={versionHistory.selectedVersion === latestVersion}
-        />
-      )}
-      {page === "draft" && (
-        <WorkingDraft
-          onCancelDraft={() => setPage("workspace")}
-          onPublishComplete={publishVersion}
-          project={selectedProject}
-          schedule={versionHistory.currentSchedule}
-          scheduleWarnings={selectedScheduleWarnings}
-          version={versionHistory.selectedVersion}
-          versions={versionHistory.versions.map((entry) => entry.version)}
+          onEditProject={openEdit}
+          project={selectedCanonicalProject}
+          row={selectedDashboardRow}
         />
       )}
       {isCreateProjectOpen && (
-        <ProjectDialog
-          initialValue={{
-            year: "",
-            customer: "",
-            productLine: "",
-            projectName: "",
-            qciModelName: "",
-            acerModelName: "",
-            acerMarketingName: "",
-            panelSize: "",
-            cpu: "",
-            gpu: "",
-            ssid: "",
-            rmn: "",
-            projectStatus: "Pending",
-          }}
-          onCancel={() => setIsCreateProjectOpen(false)}
-          onSave={createProject}
-          saveLabel="Save"
-          title="Create Project"
-        />
+        pendingDuplicateCreate === null ? (
+          <ProjectDialog
+            fieldErrors={createFieldErrors}
+            feedback={createFeedback}
+            issues={createIssues}
+            onCancel={closeCreate}
+            onChange={setCreateForm}
+            onSave={saveCreate}
+            saveLabel="Save"
+            title="Create Project"
+            value={createForm}
+          />
+        ) : (
+          <div
+            aria-label="Create Project"
+            className="fixed inset-0 z-10 flex items-center justify-center bg-black/20 px-4"
+            role="dialog"
+          >
+            <div className="w-full max-w-2xl rounded-md border border-slate-300 bg-white p-5">
+              <h2 className="text-lg font-semibold">Create Project</h2>
+              <div className="mt-4">
+                <DuplicateProjectReview
+                  decision={pendingDuplicateCreate.decision}
+                  matchingRows={matchingRows}
+                  onBackToForm={() => setPendingDuplicateCreate(null)}
+                  onCreateAnyway={createAnyway}
+                  onSelectProject={(projectId) => {
+                    openProject(projectId);
+                    closeCreate();
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )
       )}
-      {isEditProjectOpen && (
+      {isEditProjectOpen && selectedCanonicalProject !== null && (
         <ProjectDialog
-          initialValue={toProjectForm(selectedProject)}
+          fieldErrors={{}}
+          feedback={null}
+          issues={editIssues}
           onCancel={() => setIsEditProjectOpen(false)}
-          onSave={saveProjectChanges}
+          onChange={setEditForm}
+          onSave={saveEdit}
           saveLabel="Save Changes"
           title="Edit Project"
+          value={editForm}
         />
       )}
     </main>
   );
 }
 
-function projectListCellValue(project: DashboardProject, key: ProjectListColumnKey) {
+function projectListCellValue(project: DashboardProjectRow, key: ProjectListColumnKey) {
   const values: Record<ProjectListColumnKey, React.ReactNode> = {
     year: project.year,
     customer: project.customer,
     productLine: project.productLine,
-    name: <span className="font-medium">{project.name}</span>,
-    qciProjectName: project.qciProjectName,
-    size: project.size,
+    name: <span className="font-medium">{project.projectName}</span>,
+    qciProjectName: project.qciModelName,
+    size: project.panelSize,
     cpu: project.cpu,
     gpu: project.gpu,
     projectStatus: <StatusBadge status={project.projectStatus} />,
@@ -333,8 +430,8 @@ function Dashboard({
   projects,
 }: {
   onCreateProject: () => void;
-  onOpenProject: (project: DashboardProject) => void;
-  projects: DashboardProject[];
+  onOpenProject: (projectId: ProjectId) => void;
+  projects: readonly DashboardProjectRow[];
 }) {
   const [searchTerm, setSearchTerm] = React.useState("");
   const [filters, setFilters] = React.useState<DashboardFilters>({
@@ -357,8 +454,8 @@ function Dashboard({
       const matchesSearch =
         !normalizedSearch ||
         [
-          item.name,
-          item.qciProjectName,
+          item.projectName,
+          item.qciModelName,
           item.productLine,
           item.customer,
           item.cpu,
@@ -368,7 +465,7 @@ function Dashboard({
       return matchesSearch &&
       (!filters.year || item.year === filters.year) &&
       (!filters.productLine || item.productLine === filters.productLine) &&
-      (!filters.size || item.size === filters.size) &&
+      (!filters.size || item.panelSize === filters.size) &&
       (!filters.cpu || item.cpu === filters.cpu) &&
       (!filters.customer || item.customer === filters.customer);
     },
@@ -376,7 +473,7 @@ function Dashboard({
   const filterOptions = {
     year: Array.from(new Set(projects.map((item) => item.year).filter(Boolean))),
     productLine: Array.from(new Set(projects.map((item) => item.productLine).filter(Boolean))),
-    size: Array.from(new Set(projects.map((item) => item.size).filter(Boolean))),
+    size: Array.from(new Set(projects.map((item) => item.panelSize).filter(Boolean))),
     cpu: Array.from(new Set(projects.map((item) => item.cpu).filter(Boolean))),
     customer: Array.from(new Set(projects.map((item) => item.customer).filter(Boolean))),
   };
@@ -463,24 +560,7 @@ function Dashboard({
 
       <section className="rounded-md border border-amber-200 bg-amber-50 p-4">
         <h2 className="text-lg font-semibold">Needs Attention</h2>
-        <div className="mt-3 grid gap-3 text-sm md:grid-cols-2">
-          <div>
-            <div className="font-semibold text-amber-950">Import Warning</div>
-            {["Valour_ARX", "Macan S_ARX", "Mufasa_FRX"].map((name) => projects.find((item) => item.name === name)).filter((item): item is DashboardProject => Boolean(item)).map((item) => (
-              <button className="mt-2 block text-left text-amber-900 underline" key={`parser-${item.id || item.qciProjectName}`} onClick={() => onOpenProject(item)}>
-                {item.name}
-              </button>
-            ))}
-          </div>
-          <div>
-            <div className="font-semibold text-amber-950">Milestone Due</div>
-            {["Sportswagon_PNH", "GLS_Ni", "Sorento_PTZ"].map((name) => projects.find((item) => item.name === name)).filter((item): item is DashboardProject => Boolean(item)).map((item) => (
-              <button className="mt-2 block text-left text-amber-900 underline" key={`due-${item.id || item.qciProjectName}`} onClick={() => onOpenProject(item)}>
-                {item.name}
-              </button>
-            ))}
-          </div>
-        </div>
+        <div className="mt-3 text-sm text-slate-600">No items requiring attention.</div>
       </section>
 
       <section className="rounded-md border border-slate-200 bg-white p-4">
@@ -624,11 +704,11 @@ function Dashboard({
               {filteredProjects.map((item) => (
                 <tr
                   className="cursor-pointer border-t border-slate-200 hover:bg-slate-50"
-                  key={item.id || item.name}
-                  onClick={() => onOpenProject(item)}
+                  key={item.projectId}
+                  onClick={() => onOpenProject(item.projectId)}
                 >
                   {projectListColumns.map((column) => (
-                    <td className="px-4 py-3 align-top" key={`${item.id || item.name}-${column.key}`}>
+                    <td className="px-4 py-3 align-top" key={`${item.projectId}-${column.key}`}>
                       {projectListCellValue(item, column.key)}
                     </td>
                   ))}
@@ -644,68 +724,87 @@ function Dashboard({
 }
 
 function ProjectDialog({
-  initialValue,
+  fieldErrors,
+  feedback,
+  issues,
   onCancel,
+  onChange,
   onSave,
   saveLabel,
   title,
+  value,
 }: {
-  initialValue: ProjectForm;
-  onCancel: () => void;
-  onSave: (input: ProjectForm) => void;
-  saveLabel: string;
-  title: string;
+  readonly fieldErrors: CreateFieldErrors;
+  readonly feedback: string | null;
+  readonly issues: readonly ValidationIssue[];
+  readonly onCancel: () => void;
+  readonly onChange: (form: ProjectMasterForm) => void;
+  readonly onSave: () => void;
+  readonly saveLabel: string;
+  readonly title: string;
+  readonly value: ProjectMasterForm;
 }) {
-  const [form, setForm] = React.useState<ProjectForm>(initialValue);
-  const updateForm = (key: keyof ProjectForm, value: string) => {
-    setForm((current) => ({
-      ...current,
-      [key]: value,
-    }));
+  const updateForm = <TKey extends keyof ProjectMasterForm>(
+    key: TKey,
+    nextValue: ProjectMasterForm[TKey],
+  ) => {
+    onChange({ ...value, [key]: nextValue });
   };
 
   return (
-    <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/20 px-4">
+    <div
+      aria-label={title}
+      className="fixed inset-0 z-10 flex items-center justify-center bg-black/20 px-4"
+      role="dialog"
+    >
       <div className="w-full max-w-2xl rounded-md border border-slate-300 bg-white p-5">
         <h2 className="text-lg font-semibold">{title}</h2>
 
         <div className="mt-4 grid max-h-[70vh] gap-5 overflow-y-auto pr-1">
           <fieldset className="grid gap-3 rounded-md border border-slate-200 p-4">
             <legend className="px-1 text-sm font-semibold">Project Identity</legend>
-            <ProjectInput label="Project Name" value={form.projectName} onChange={(value) => updateForm("projectName", value)} />
-            <ProjectInput label="QCI Model Name" value={form.qciModelName} onChange={(value) => updateForm("qciModelName", value)} />
-            <ProjectInput label="Acer Model Name" value={form.acerModelName} onChange={(value) => updateForm("acerModelName", value)} />
-            <ProjectInput label="Acer Marketing Name" value={form.acerMarketingName} onChange={(value) => updateForm("acerMarketingName", value)} />
+            <ProjectInput
+              error={fieldErrors.stnProjectName}
+              label="STN Project Name"
+              value={value.stnProjectName}
+              onChange={(nextValue) => updateForm("stnProjectName", nextValue)}
+            />
+            <ProjectInput label="QCI Model Name" value={value.qciModelName} onChange={(nextValue) => updateForm("qciModelName", nextValue)} />
+            <ProjectInput label="Acer Model Name" value={value.acerModelName} onChange={(nextValue) => updateForm("acerModelName", nextValue)} />
+            <ProjectInput label="Acer Marketing Name" value={value.acerMarketingName} onChange={(nextValue) => updateForm("acerMarketingName", nextValue)} />
           </fieldset>
 
           <fieldset className="grid gap-3 rounded-md border border-slate-200 p-4">
             <legend className="px-1 text-sm font-semibold">Project Classification</legend>
-            <ProjectInput label="Year" value={form.year} onChange={(value) => updateForm("year", value)} />
-            <ProjectInput label="Customer" value={form.customer} onChange={(value) => updateForm("customer", value)} />
-            <ProjectInput label="Product Line" value={form.productLine} onChange={(value) => updateForm("productLine", value)} />
+            <ProjectInput error={fieldErrors.year} label="Year" value={value.year} onChange={(nextValue) => updateForm("year", nextValue)} />
+            <ProjectCatalogSelect emptyLabel="Select Customer" label="Customer" options={customerReferenceFixtures} value={value.customerId} onChange={(nextValue) => updateForm("customerId", nextValue)} />
+            <ProjectCatalogSelect error={fieldErrors.productLine} emptyLabel="Select Product Line" label="Product Line" options={productLineReferenceFixtures} value={value.productLineId} onChange={(nextValue) => updateForm("productLineId", nextValue)} />
           </fieldset>
 
           <fieldset className="grid gap-3 rounded-md border border-slate-200 p-4">
             <legend className="px-1 text-sm font-semibold">Hardware</legend>
-            <ProjectInput label="Panel Size" value={form.panelSize} onChange={(value) => updateForm("panelSize", value)} />
-            <ProjectInput label="CPU" value={form.cpu} onChange={(value) => updateForm("cpu", value)} />
-            <ProjectInput label="GPU" value={form.gpu} onChange={(value) => updateForm("gpu", value)} />
+            <ProjectCatalogSelect emptyLabel="Select Panel Size" label="Panel Size" options={panelSizeReferenceFixtures} value={value.panelSizeId} onChange={(nextValue) => updateForm("panelSizeId", nextValue)} />
+            <ProjectCatalogSelect emptyLabel="Select CPU" label="CPU" options={cpuReferenceFixtures} value={value.cpuId} onChange={(nextValue) => updateForm("cpuId", nextValue)} />
+            <ProjectCatalogSelect emptyLabel="Select GPU" label="GPU" options={gpuReferenceFixtures} value={value.gpuId} onChange={(nextValue) => updateForm("gpuId", nextValue)} />
           </fieldset>
 
           <fieldset className="grid gap-3 rounded-md border border-slate-200 p-4">
             <legend className="px-1 text-sm font-semibold">Internal Identifier</legend>
-            <ProjectInput label="SSID" value={form.ssid} onChange={(value) => updateForm("ssid", value)} />
-            <ProjectInput label="RMN" value={form.rmn} onChange={(value) => updateForm("rmn", value)} />
+            <ProjectInput label="SSID" value={value.ssid} onChange={(nextValue) => updateForm("ssid", nextValue)} />
+            <ProjectInput label="RMN" value={value.rmn} onChange={(nextValue) => updateForm("rmn", nextValue)} />
           </fieldset>
 
           <fieldset className="grid gap-3 rounded-md border border-slate-200 p-4">
             <legend className="px-1 text-sm font-semibold">Project Management</legend>
-            <ProjectSelect
-              label="Project Status"
-              value={form.projectStatus || "Pending"}
-              onChange={(value) => updateForm("projectStatus", value)}
-            />
+            <ProjectCatalogSelect emptyLabel="Select Project Status" label="Project Status" options={statusCatalog} value={value.statusId} onChange={(nextValue) => updateForm("statusId", nextValue)} />
           </fieldset>
+
+          {feedback !== null && <div className="text-sm text-rose-700">{feedback}</div>}
+          {issues.map((issue) => (
+            <div className="text-sm text-amber-800" key={`${issue.code}-${issue.target.field ?? "section"}`}>
+              {issue.message}
+            </div>
+          ))}
         </div>
 
         <div className="mt-5 flex justify-end gap-2">
@@ -714,7 +813,7 @@ function ProjectDialog({
           </button>
           <button
             className="rounded-md border border-slate-900 bg-slate-900 px-4 py-2 text-sm text-white"
-            onClick={() => onSave(form)}
+            onClick={onSave}
           >
             {saveLabel}
           </button>
@@ -724,38 +823,55 @@ function ProjectDialog({
   );
 }
 
-function ProjectSelect({
+function ProjectCatalogSelect({
+  emptyLabel,
+  error,
   label,
   onChange,
+  options,
   value,
 }: {
-  label: string;
-  onChange: (value: ProjectForm["projectStatus"]) => void;
-  value: ProjectForm["projectStatus"];
+  readonly emptyLabel: string;
+  readonly error?: string;
+  readonly label: string;
+  readonly onChange: (value: CatalogSelection) => void;
+  readonly options: readonly CatalogItem<CatalogItemId>[];
+  readonly value: CatalogSelection;
 }) {
+  const hasResolvedValue = value === "" || options.some((option) => option.id === value);
+
   return (
     <label className="grid gap-1 text-sm md:grid-cols-[180px_1fr] md:items-center">
       <span>{label}</span>
-      <select
-        className="rounded-md border border-slate-300 px-3 py-2"
-        onChange={(event) => onChange(event.target.value as ProjectForm["projectStatus"])}
-        value={value}
-      >
-        {projectStatusOptions.map((status) => (
-          <option key={status}>{status}</option>
-        ))}
-      </select>
+      <span className="grid gap-1">
+        <select
+          className="rounded-md border border-slate-300 px-3 py-2"
+          onChange={(event) => onChange(
+            event.target.value === "" ? "" : toCatalogItemId(event.target.value),
+          )}
+          value={value}
+        >
+          <option value="">{emptyLabel}</option>
+          {!hasResolvedValue && <option value={value}>-</option>}
+          {options.map((option) => (
+            <option key={option.id} value={option.id}>{option.displayName}</option>
+          ))}
+        </select>
+        {error !== undefined && <span className="text-xs text-rose-700">{error}</span>}
+      </span>
     </label>
   );
 }
 
-function StatusBadge({ status }: { status: DashboardProject["projectStatus"] }) {
-  const colorClass = {
+function StatusBadge({ status }: { status: string }) {
+  const colorClass = ({
+    RFQ: "border-violet-200 bg-violet-50 text-violet-700",
+    "Kick off": "border-cyan-200 bg-cyan-50 text-cyan-700",
     Pending: "border-slate-300 bg-slate-100 text-slate-700",
-    Ongoing: "border-blue-200 bg-blue-50 text-blue-700",
+    "On Going": "border-blue-200 bg-blue-50 text-blue-700",
     MP: "border-emerald-200 bg-emerald-50 text-emerald-700",
     EOL: "border-zinc-300 bg-zinc-100 text-zinc-700",
-  }[status];
+  } satisfies Record<string, string>)[status] ?? "border-slate-300 bg-white text-slate-700";
 
   return (
     <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${colorClass}`}>
@@ -765,66 +881,45 @@ function StatusBadge({ status }: { status: DashboardProject["projectStatus"] }) 
 }
 
 function ProjectInput({
+  error,
   label,
   onChange,
   value,
 }: {
-  label: string;
-  onChange: (value: string) => void;
-  value: string;
+  readonly error?: string;
+  readonly label: string;
+  readonly onChange: (value: string) => void;
+  readonly value: string;
 }) {
   return (
     <label className="grid gap-1 text-sm md:grid-cols-[180px_1fr] md:items-center">
       <span>{label}</span>
-      <input
-        className="rounded-md border border-slate-300 px-3 py-2"
-        onChange={(event) => onChange(event.target.value)}
-        value={value}
-      />
+      <span className="grid gap-1">
+        <input
+          className="rounded-md border border-slate-300 px-3 py-2"
+          onChange={(event) => onChange(event.target.value)}
+          value={value}
+        />
+        {error !== undefined && <span className="text-xs text-rose-700">{error}</span>}
+      </span>
     </label>
   );
 }
 
 function ProjectWorkspace({
   activeResource,
-  isLatestVersion,
-  onAddTeamMember,
-  onAddTeamMemberField,
+  feedback,
   onBack,
-  onDeleteTeamMember,
-  onDeleteTeamMemberField,
   onEditProject,
-  onEditSchedule,
-  onImportTeamMembers,
-  onSelectResource,
-  onSelectVersion,
-  onUpdateTeamMember,
   project,
-  schedule,
-  scheduleWarnings,
-  teamMembers,
-  version,
-  versions,
+  row,
 }: {
-  activeResource: WorkspaceResource;
-  isLatestVersion: boolean;
-  onAddTeamMember: () => void;
-  onAddTeamMemberField: (fieldName: string) => void;
-  onBack: () => void;
-  onDeleteTeamMember: (memberId: string) => void;
-  onDeleteTeamMemberField: (fieldName: string) => void;
-  onEditProject: () => void;
-  onEditSchedule: () => void;
-  onImportTeamMembers: (file: File) => void;
-  onSelectResource: (resource: WorkspaceResource) => void;
-  onSelectVersion: (version: string) => void;
-  onUpdateTeamMember: (memberId: string, field: string, value: string) => void;
-  project: DashboardProject;
-  schedule: ScheduleItem[];
-  scheduleWarnings: ScheduleWarnings;
-  teamMembers: TeamMembersState;
-  version: string;
-  versions: string[];
+  readonly activeResource: WorkspaceResource;
+  readonly feedback: readonly ValidationIssue[];
+  readonly onBack: () => void;
+  readonly onEditProject: () => void;
+  readonly project: Project;
+  readonly row: DashboardProjectRow;
 }) {
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5 px-6 py-6">
@@ -832,7 +927,11 @@ function ProjectWorkspace({
         Back to Dashboard
       </button>
 
-      <section aria-label="Project Header" className="rounded-md border border-slate-200 bg-white p-4">
+      <section
+        aria-label="Project Header"
+        className="rounded-md border border-slate-200 bg-white p-4"
+        data-project-id={project.id}
+      >
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl font-semibold">Project Master</h1>
@@ -840,56 +939,44 @@ function ProjectWorkspace({
               <div>
                 <div className="font-semibold">Project Identity</div>
                 <div className="mt-2 grid gap-1">
-                  <div>Project Name: {project.name}</div>
-                  <div>QCI Model Name: {project.qciProjectName}</div>
-                  <div>Acer Model Name: {project.acerModelName || "-"}</div>
-                  <div>Acer Marketing Name: {project.acerMarketingName || "-"}</div>
+                  <div>Project Name: {row.projectName}</div>
+                  <div>QCI Model Name: {row.qciModelName}</div>
+                  <div>Acer Model Name: {row.acerModelName}</div>
+                  <div>Acer Marketing Name: {row.acerMarketingName}</div>
                 </div>
               </div>
               <div>
                 <div className="font-semibold">Project Classification</div>
                 <div className="mt-2 grid gap-1">
-                  <div>Year: {project.year || "-"}</div>
-                  <div>Customer: {project.customer || "-"}</div>
-                  <div>Product Line: {project.productLine || "-"}</div>
+                  <div>Year: {row.year}</div>
+                  <div>Customer: {row.customer}</div>
+                  <div>Product Line: {row.productLine}</div>
                 </div>
               </div>
               <div>
                 <div className="font-semibold">Hardware</div>
                 <div className="mt-2 grid gap-1">
-                  <div>Panel Size: {project.size}</div>
-                  <div>CPU: {project.cpu}</div>
-                  <div>GPU: {project.gpu}</div>
+                  <div>Panel Size: {row.panelSize}</div>
+                  <div>CPU: {row.cpu}</div>
+                  <div>GPU: {row.gpu}</div>
                 </div>
               </div>
               <div>
                 <div className="font-semibold">Internal Identifier</div>
                 <div className="mt-2 grid gap-1">
-                  <div>SSID: {project.ssid || "-"}</div>
-                  <div>RMN: {project.rmn || project.platform || "-"}</div>
+                  <div>SSID: {row.ssid}</div>
+                  <div>RMN: {row.rmn}</div>
                 </div>
               </div>
               <div>
                 <div className="font-semibold">Project Management</div>
                 <div className="mt-2">
-                  <StatusBadge status={project.projectStatus} />
+                  <StatusBadge status={row.projectStatus} />
                 </div>
               </div>
             </div>
           </div>
           <div className="flex flex-col items-end gap-3">
-            <label className="text-sm">
-              Version Selector
-              <select
-                className="ml-2 rounded-md border border-slate-300 px-2 py-1"
-                value={version}
-                onChange={(event) => onSelectVersion(event.target.value)}
-              >
-                {versions.map((item) => (
-                  <option key={item}>{item}</option>
-                ))}
-              </select>
-            </label>
             <button className="rounded-md border border-slate-300 px-4 py-2 text-sm" onClick={onEditProject}>
               Edit Project
             </button>
@@ -899,61 +986,48 @@ function ProjectWorkspace({
 
       <section className="rounded-md border border-slate-200 bg-white p-4">
         <h2 className="text-lg font-semibold">Resources</h2>
-        <div className="mt-3 grid gap-3 md:grid-cols-4">
-          <div className={`rounded-md border p-4 ${activeResource === "schedule" ? "border-slate-900" : "border-slate-300"}`}>
-            <div className="font-semibold">Schedule</div>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <div className={`rounded-md border p-4 ${activeResource === "projectMaster" ? "border-slate-900" : "border-slate-300"}`}>
+            <div className="font-semibold">Project Master</div>
             <div className="mt-2 text-sm text-slate-600">Enabled</div>
-            <button className="mt-3 rounded-md border border-slate-300 px-3 py-1.5 text-sm" onClick={() => onSelectResource("schedule")}>
-              Open
-            </button>
             <button
-              className="ml-2 mt-3 rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-              disabled={!isLatestVersion}
-              onClick={onEditSchedule}
+              aria-pressed={activeResource === "projectMaster"}
+              className="mt-3 rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+              type="button"
             >
-              Edit Schedule
-            </button>
-            {!isLatestVersion && <div className="mt-2 text-xs text-slate-500">Read-only version</div>}
-          </div>
-          <div className={`rounded-md border p-4 ${activeResource === "teamMembers" ? "border-slate-900" : "border-slate-300"}`}>
-            <div className="font-semibold">Team Members</div>
-            <div className="mt-2 text-sm text-slate-600">Enabled</div>
-            <button className="mt-3 rounded-md border border-slate-300 px-3 py-1.5 text-sm" onClick={() => onSelectResource("teamMembers")}>
-              Open
+              Open Project Master
             </button>
           </div>
-          {["Documents", "Future Modules"].map((item) => (
-            <div className="rounded-md border border-slate-200 p-4" key={item}>
-              <div className="font-semibold">{item}</div>
-              <div className="mt-2 text-sm text-slate-600">Coming Soon</div>
-            </div>
-          ))}
+          <div className="rounded-md border border-slate-300 p-4">
+            <div className="font-semibold">Schedule</div>
+            <div className="mt-2 text-sm text-slate-600">Migration pending</div>
+            <button
+              className="mt-3 rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+              disabled
+              type="button"
+            >
+              Open Schedule
+            </button>
+          </div>
+          <div className="rounded-md border border-slate-300 p-4">
+            <div className="font-semibold">Team</div>
+            <div className="mt-2 text-sm text-slate-600">Migration pending</div>
+            <button
+              className="mt-3 rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+              disabled
+              type="button"
+            >
+              Open Team
+            </button>
+          </div>
         </div>
       </section>
 
-      {activeResource === "schedule" && <ScheduleSection schedule={schedule} warnings={scheduleWarnings} />}
-
-      {activeResource === "teamMembers" && (
-        <TeamMembersSection
-          onAddField={onAddTeamMemberField}
-          onAddMember={onAddTeamMember}
-          onDeleteField={onDeleteTeamMemberField}
-          onDeleteMember={onDeleteTeamMember}
-          onImport={onImportTeamMembers}
-          onUpdateMember={onUpdateTeamMember}
-          teamMembers={teamMembers}
-        />
-      )}
-
-      <section className="rounded-md border border-slate-200 bg-white p-4">
-        <h2 className="text-lg font-semibold">Export Section</h2>
-        <button
-          className="mt-3 rounded-md border border-slate-300 px-4 py-2 text-sm"
-          onClick={exportScheduleToExcel}
-        >
-          Export to Excel
-        </button>
-      </section>
+      {feedback.map((issue) => (
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm" key={`${issue.code}-${issue.target.field ?? "section"}`}>
+          {issue.message}
+        </div>
+      ))}
     </div>
   );
 }
@@ -1273,7 +1347,7 @@ function WorkingDraft({
 }: {
   onCancelDraft: () => void;
   onPublishComplete: (draftSchedule: ScheduleItem[], warnings: ScheduleWarnings) => void;
-  project: DashboardProject;
+  project: LegacyDashboardProject;
   schedule: ScheduleItem[];
   scheduleWarnings: ScheduleWarnings;
   version: string;
@@ -1517,4 +1591,7 @@ function PublishDialog({
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
+const rootElement = document.getElementById("root");
+if (rootElement !== null) {
+  ReactDOM.createRoot(rootElement).render(<App />);
+}
