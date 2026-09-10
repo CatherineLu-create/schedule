@@ -183,7 +183,6 @@ export function createProject(
 		id: input.projectId,
 		master: createInitialProjectMaster(input.master, context.defaults),
 		identityAliases: [],
-		schedule: { publishedVersions: [], workingDraft: null },
 		team: createInitialProjectTeam(input.qciPm, context.defaults.teamTemplate),
 	};
 	const matchingProjectIds = context.existingProjects

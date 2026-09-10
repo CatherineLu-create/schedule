@@ -1,35 +1,29 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
+
 import type { Project } from "../../domain/project/project";
-import type { ProjectMaster } from "../../domain/project/projectMaster";
-import { toProjectId } from "../../domain/shared/ids";
+import type { CanonicalProjectSchedule } from "../../domain/schedule/officialSchedule";
+import { canonicalProjectFixtures } from "../../fixtures/v2/canonicalProjectFixtures";
+import { canonicalScheduleFixtures } from "../../fixtures/v2/canonicalScheduleFixtures";
 import type { PrototypeState } from "./prototypeState";
 
-function makeProject(id: string, stnProjectName: string): Project {
-	return {
-		id: toProjectId(id),
-		master: {
-			basicInformation: { stnProjectName },
-		} as ProjectMaster,
-		identityAliases: [],
-		schedule: { publishedVersions: [], workingDraft: null },
-		team: null,
-	};
-}
-
 describe("PrototypeState", () => {
-	it("represents an empty canonical Project collection", async () => {
-		const stateModule = await import("./prototypeState");
-		const state: PrototypeState = { projects: [] };
+  it("owns exactly the canonical Project and Schedule collections", () => {
+    const state = {
+      projects: canonicalProjectFixtures,
+      schedules: canonicalScheduleFixtures,
+    } as PrototypeState;
 
-		expect(stateModule).toBeDefined();
-		expect(state.projects).toEqual([]);
-	});
+    expect(Object.keys(state)).toEqual(["projects", "schedules"]);
+    expect(state.projects).toBe(canonicalProjectFixtures);
+    expect(state.schedules).toBe(canonicalScheduleFixtures);
+  });
 
-	it("represents multiple Projects in their canonical order", () => {
-		const first = makeProject("dev-project-001", "Fixture Project");
-		const second = makeProject("dev-project-002", "Fixture Project");
-		const state: PrototypeState = { projects: [first, second] };
-
-		expect(state.projects).toEqual([first, second]);
-	});
+  it("exposes both canonical collections as readonly", () => {
+    expectTypeOf<PrototypeState["projects"]>().toEqualTypeOf<
+      readonly Project[]
+    >();
+    expectTypeOf<PrototypeState["schedules"]>().toEqualTypeOf<
+      readonly CanonicalProjectSchedule[]
+    >();
+  });
 });

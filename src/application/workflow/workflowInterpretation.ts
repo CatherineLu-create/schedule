@@ -10,7 +10,7 @@ import type {
 	ReplaceProjectScheduleWorkingDraftResult,
 } from "../commands/scheduleCommands";
 import type { SaveProjectTeamResult } from "../commands/teamCommands";
-import type { Project } from "../../domain/project/project";
+import type { ProjectSchedule } from "../../domain/schedule/schedule";
 import type {
 	ProjectId,
 	ScheduleDraftId,
@@ -164,9 +164,10 @@ export function interpretSaveProjectTeamResult(
 }
 
 export function requestReplaceWorkingDraftDecision(
-	project: Project,
+	projectId: ProjectId,
+	schedule: ProjectSchedule,
 ): ReplaceWorkingDraftDecisionRequest | null {
-	const draft = project.schedule.workingDraft;
+	const draft = schedule.workingDraft;
 
 	if (draft === null) {
 		return null;
@@ -174,7 +175,7 @@ export function requestReplaceWorkingDraftDecision(
 
 	return {
 		kind: "replaceWorkingDraft",
-		projectId: project.id,
+		projectId,
 		workingDraftId: draft.id,
 		actions: [
 			{ id: "cancel", direction: "backward" },

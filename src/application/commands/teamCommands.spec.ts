@@ -39,7 +39,7 @@ describe("Team Save command", () => {
 		expect(devProject002.team).not.toBe(multipleOwnerTeamCandidate);
 	});
 
-	it("allows an Advisory-only Team and preserves Master and Schedule", () => {
+	it("allows an Advisory-only Team and preserves Project identity, Master, and aliases", () => {
 		const result = saveProjectTeam(devProject002, {
 			team: applicableWithoutOwnerTeamCandidate,
 		});
@@ -53,8 +53,9 @@ describe("Team Save command", () => {
 			}),
 		);
 		expect(result.project.team).toBe(applicableWithoutOwnerTeamCandidate);
+		expect(result.project.id).toBe(devProject002.id);
 		expect(result.project.master).toBe(devProject002.master);
-		expect(result.project.schedule).toBe(devProject002.schedule);
+		expect(result.project.identityAliases).toBe(devProject002.identityAliases);
 	});
 
 	it("keeps canonical Project 005 saveable with Advisory issues", () => {

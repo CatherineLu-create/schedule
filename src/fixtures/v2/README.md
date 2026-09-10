@@ -19,38 +19,43 @@ adapter test material. Business rules must not be inferred from those values.
 
 ## Canonical fixture strategy
 
-The canonical V2 development fixture is a small, scenario-driven set of five
-Project aggregates. It is designed to exercise approved behavior, not to
-simulate or claim to represent company production data. Synthetic values must
-be visibly marked as development data, for example with `DEV` display names
-and `example.test` email addresses.
+The canonical V2 development fixtures are separate, scenario-driven
+collections of five Projects and five Project-owned Schedules. They exercise
+approved behavior rather than simulate or claim to represent company
+production data. Synthetic values must be visibly marked as development data,
+for example with `DEV` display names and `example.test` email addresses.
 
 Stable immutable internal IDs are mandatory for Projects and catalog records.
 IDs must not be derived from display names, normalized names, or array
 positions. Projects with duplicate or similar display names remain independent
 records and must never be merged automatically.
 
-The canonical five-Project matrix is:
+The canonical fixture matrix is:
 
-1. A Project with no Published Schedule, no Working Draft, and no Saved Team.
-2. A Project with one Published version covering completed, Not Applicable,
-   coming-soon, overdue, and MDRR attention cases, plus a valid Saved Team.
-3. A different Project with the same Year/Product Line/STN Project Name
-   combination, multiple Published versions, a future Actual advisory, and an
-   older applied Team Template.
-4. A Project with official Published data and a separate Working Draft holding
-   unmapped, contradictory applicability/date, Actual-without-Plan, and
-   ambiguous-date import states. Portfolio values continue to come from the
+1. A Project with no Saved Team and a separately owned Schedule with no
+   Published versions.
+2. A Project with a valid Saved Team and a separately owned Schedule with one
    Published version.
+3. A different Project with the same Year/Product Line/STN Project Name
+   combination, a separately owned non-contiguous Published history, and an
+   older applied Team Template.
+4. A Project with a separately owned Published version containing zero
+   milestones.
 5. A punctuation-sensitive identity case with Team missing-Owner advisory,
-   a project-specific Custom Function, and the remaining Team Template/update
-   coverage.
+   a project-specific Custom Function, and a separately owned empty Schedule.
 
-The set varies Year, Customer, and Status values and uses the explicit
-`devScenarioToday` value `2026-09-15` so attention scenarios remain
-deterministic in tests.
+The set varies Year, Customer, and Status values.
 
-## Schedule fixture rules
+## Canonical Schedule fixture rules
+
+`canonicalProjectFixtures.ts` owns Project/Master and Team fixture values only.
+`canonicalScheduleFixtures.ts` explicitly owns one canonical Schedule for each
+fixture Project by immutable `ProjectId`; it is not derived from Project values
+or legacy Schedule data. Published versions use positive version numbers and
+canonical milestone lineage IDs. A Schedule with no Published versions is an
+existing empty Schedule, not a missing resource or fake v0.
+
+## Disconnected predecessor Schedule fixtures
 
 `ScheduleWorkingDraft.basePublishedVersionId` is
 `ScheduleVersionId | null`. A first-ever Working Draft uses `null`; publishing
@@ -58,10 +63,10 @@ it creates Published v1. A normal edit Draft for a Project with existing
 Published versions must use the latest Published version as its base. Fixtures
 must not create a fake v0 or seed a fake Published version.
 
-Working Draft values are not official Portfolio values. Draft/import Blocking
-metadata may support a Dashboard Blocking Issues summary, but that summary must
-not expose unpublished milestone or date values. Navigation does not discard a
-Working Draft; only an explicit discard operation does so.
+Working Draft and import-candidate values remain predecessor test data. They
+are disconnected from canonical runtime ownership and are not official
+Portfolio values. Navigation does not discard a predecessor Working Draft;
+only its explicit predecessor discard operation does so.
 
 Invalid, ambiguous, conflicting, or unmapped Schedule cases belong in Working
 Draft/import candidate fixtures. They must never be seeded as Published
@@ -104,8 +109,9 @@ material while the current UI still depends on them. They are not inputs to
 the canonical V2 aggregate seed and must not be maintained as a second
 independent V2 Project dataset.
 
-Typed fixture modules provide reusable V2 reference, Team Template, Team, and
-Schedule candidate values. `canonicalProjectFixtures.ts` assembles the five
-complete canonical Project aggregates. Invalid Team and Schedule candidate
-fixtures remain separate from Saved/Published canonical data, except for the
-deliberately invalid Project 004 Working Draft.
+Typed fixture modules provide reusable V2 reference, Team Template, Team,
+canonical Schedule, and disconnected Schedule candidate values.
+`canonicalProjectFixtures.ts` assembles the five canonical Project/Master and
+Team values; `canonicalScheduleFixtures.ts` separately assembles their five
+canonical Schedule resources. Invalid Team and predecessor Schedule candidate
+fixtures remain separate from saved canonical data.

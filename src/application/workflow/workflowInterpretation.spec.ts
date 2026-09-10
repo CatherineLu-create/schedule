@@ -5,10 +5,9 @@ import {
 	devProject001,
 	devProject002,
 	devProject003,
-	devProject004,
 	devProject005,
-	devScenarioToday,
 } from "../../fixtures/v2/canonicalProjectFixtures";
+import { unmappedMilestoneDraftCandidate } from "../../fixtures/v2/scheduleCandidateFixtures";
 import {
 	customerReferenceFixtures,
 	productLineReferenceFixtures,
@@ -21,6 +20,11 @@ import {
 	toScheduleDraftId,
 	toScheduleVersionId,
 } from "../../domain/shared/ids";
+import { parseDateOnly } from "../../domain/shared/dateOnly";
+import {
+	toScheduleVersionNumber,
+	type ProjectSchedule,
+} from "../../domain/schedule/schedule";
 import {
 	createProject,
 	type CreateProjectContext,
@@ -66,6 +70,24 @@ const createContext: CreateProjectContext = {
 		statusId: statusCatalog[0]!.id,
 		teamTemplate: devTeamTemplateV2,
 	},
+};
+
+const workflowReferenceDate = parseDateOnly("2026-09-15")!;
+const workflowPublishedV1 = {
+	id: toScheduleVersionId("workflow-predecessor-v1"),
+	versionNumber: toScheduleVersionNumber(1),
+	versionNote: "Workflow predecessor version",
+	publishedAt: "2026-09-01T00:00:00Z",
+	milestones: [],
+};
+const workflowExistingDraft = {
+	...unmappedMilestoneDraftCandidate,
+	id: toScheduleDraftId("workflow-existing-draft"),
+	basePublishedVersionId: workflowPublishedV1.id,
+};
+const workflowScheduleWithDraft: ProjectSchedule = {
+	publishedVersions: [workflowPublishedV1],
+	workingDraft: workflowExistingDraft,
 };
 
 function projectMasterIssue(
@@ -132,18 +154,21 @@ describe("ActionDisposition", () => {
 
 	describe("Schedule Publish", () => {
 		it("interprets success as completed", () => {
-			const started = startProjectScheduleWorkingDraft(devProject001, {
+			const started = startProjectScheduleWorkingDraft(
+				{ publishedVersions: [], workingDraft: null },
+				{
 				draftId: toScheduleDraftId("workflow-first-draft"),
 				createRowId: () => toMilestoneRowId("workflow-unexpected-row"),
-			});
+				},
+			);
 			expect(started.ok).toBe(true);
 			if (!started.ok) return;
 
-			const result = publishProjectSchedule(started.project, {
+			const result = publishProjectSchedule(started.schedule, {
 				versionId: toScheduleVersionId("workflow-first-version"),
 				versionNote: "Workflow publish",
 				publishedAt: "2026-09-15T08:00:00.000Z",
-				referenceDate: devScenarioToday,
+				referenceDate: workflowReferenceDate,
 			});
 
 			expect(interpretPublishProjectScheduleResult(result)).toEqual({
@@ -153,11 +178,11 @@ describe("ActionDisposition", () => {
 		});
 
 		it("interprets validation failure as blocked", () => {
-			const result = publishProjectSchedule(devProject004, {
+			const result = publishProjectSchedule(workflowScheduleWithDraft, {
 				versionId: toScheduleVersionId("workflow-project-004-v2"),
 				versionNote: "Must remain blocked",
 				publishedAt: "2026-09-15T08:00:00.000Z",
-				referenceDate: devScenarioToday,
+				referenceDate: workflowReferenceDate,
 			});
 
 			expect(interpretPublishProjectScheduleResult(result)).toEqual({
@@ -349,38 +374,42 @@ describe("duplicate Project workflow decision", () => {
 });
 
 describe("replace Working Draft workflow decision", () => {
-	it("does not request replacement when the Project has no Working Draft", () => {
-		expect(requestReplaceWorkingDraftDecision(devProject002)).toBeNull();
+	it("does not request replacement when the Schedule has no Working Draft", () => {
+		expect(
+			requestReplaceWorkingDraftDecision(devProject002.id, {
+				publishedVersions: [],
+				workingDraft: null,
+			}),
+		).toBeNull();
 	});
 
-	it("requests explicit replacement without modifying the Project", () => {
-		const existingDraft = devProject004.schedule.workingDraft;
-		expect(existingDraft).not.toBeNull();
-
-		const decision = requestReplaceWorkingDraftDecision(devProject004);
+	it("requests explicit replacement without modifying the Schedule", () => {
+		const decision = requestReplaceWorkingDraftDecision(
+			devProject002.id,
+			workflowScheduleWithDraft,
+		);
 
 		expect(decision).toEqual({
 			kind: "replaceWorkingDraft",
-			projectId: devProject004.id,
-			workingDraftId: existingDraft?.id,
+			projectId: devProject002.id,
+			workingDraftId: workflowExistingDraft.id,
 			actions: [
 				{ id: "cancel", direction: "backward" },
 				{ id: "replaceAndImport", direction: "forward" },
 			],
 		});
-		expect(devProject004.schedule.workingDraft).toBe(existingDraft);
+		expect(workflowScheduleWithDraft.workingDraft).toBe(workflowExistingDraft);
 	});
 
 	it("keeps stale-base replacement as rejected rather than a decision", () => {
-		const existingDraft = devProject004.schedule.workingDraft;
-		expect(existingDraft).not.toBeNull();
-		if (existingDraft === null) return;
-
-		const result = replaceProjectScheduleWorkingDraft(devProject004, {
-			...existingDraft,
+		const result = replaceProjectScheduleWorkingDraft(
+			workflowScheduleWithDraft,
+			{
+			...workflowExistingDraft,
 			id: toScheduleDraftId("workflow-stale-replacement"),
 			basePublishedVersionId: null,
-		});
+			},
+		);
 
 		expect(interpretReplaceWorkingDraftResult(result)).toEqual({
 			kind: "rejected",
@@ -405,16 +434,9 @@ describe("unsaved navigation workflow decision", () => {
 	});
 
 	it("does not infer unsaved navigation from an existing Schedule Working Draft", () => {
-		const state = Object.freeze({
-			projects: Object.freeze([devProject004]),
-		});
-		const existingDraft = devProject004.schedule.workingDraft;
-		expect(existingDraft).not.toBeNull();
-
 		const decision = requestUnsavedNavigationDecision(false);
 
 		expect(decision).toBeNull();
-		expect(state.projects[0]).toBe(devProject004);
-		expect(devProject004.schedule.workingDraft).toBe(existingDraft);
+		expect(workflowScheduleWithDraft.workingDraft).toBe(workflowExistingDraft);
 	});
 });

@@ -1,4 +1,3 @@
-import type { Project } from "../../domain/project/project";
 import {
 	appendPublishedVersion,
 	createWorkingDraftFromLatestPublished,
@@ -9,6 +8,7 @@ import {
 	type CreateWorkingDraftFromLatestPublishedInput,
 	type PublishedScheduleMilestone,
 	type PublishedScheduleVersion,
+	type ProjectSchedule,
 	type ScheduleWorkingDraft,
 } from "../../domain/schedule/schedule";
 import { validateScheduleWorkingDraft } from "../../domain/schedule/scheduleValidation";
@@ -28,7 +28,7 @@ export interface StartProjectScheduleWorkingDraftInput {
 export type StartProjectScheduleWorkingDraftResult =
 	| {
 			readonly ok: true;
-			readonly project: Project;
+			readonly schedule: ProjectSchedule;
 			readonly draft: ScheduleWorkingDraft;
 	  }
 	| {
@@ -37,14 +37,14 @@ export type StartProjectScheduleWorkingDraftResult =
 	  };
 
 export function startProjectScheduleWorkingDraft(
-	project: Project,
+	schedule: ProjectSchedule,
 	input: StartProjectScheduleWorkingDraftInput,
 ): StartProjectScheduleWorkingDraftResult {
-	if (project.schedule.workingDraft !== null) {
+	if (schedule.workingDraft !== null) {
 		return { ok: false, reason: "workingDraftExists" };
 	}
 
-	const draft = createWorkingDraftFromLatestPublished(project.schedule, {
+	const draft = createWorkingDraftFromLatestPublished(schedule, {
 		id: input.draftId,
 		createRowId: input.createRowId,
 	});
@@ -52,25 +52,22 @@ export function startProjectScheduleWorkingDraft(
 	return {
 		ok: true,
 		draft,
-		project: {
-			...project,
-			schedule: {
-				...project.schedule,
-				workingDraft: draft,
-			},
+		schedule: {
+			...schedule,
+			workingDraft: draft,
 		},
 	};
 }
 
 export type ReplaceProjectScheduleWorkingDraftResult =
-	| { readonly ok: true; readonly project: Project }
+	| { readonly ok: true; readonly schedule: ProjectSchedule }
 	| { readonly ok: false; readonly reason: "staleBase" };
 
 export function replaceProjectScheduleWorkingDraft(
-	project: Project,
+	schedule: ProjectSchedule,
 	replacement: ScheduleWorkingDraft,
 ): ReplaceProjectScheduleWorkingDraftResult {
-	const expectedBase = getLatestPublishedVersion(project.schedule)?.id ?? null;
+	const expectedBase = getLatestPublishedVersion(schedule)?.id ?? null;
 
 	if (replacement.basePublishedVersionId !== expectedBase) {
 		return { ok: false, reason: "staleBase" };
@@ -78,18 +75,14 @@ export function replaceProjectScheduleWorkingDraft(
 
 	return {
 		ok: true,
-		project: {
-			...project,
-			schedule: replaceWorkingDraft(project.schedule, replacement),
-		},
+		schedule: replaceWorkingDraft(schedule, replacement),
 	};
 }
 
-export function discardProjectScheduleWorkingDraft(project: Project): Project {
-	return {
-		...project,
-		schedule: discardWorkingDraft(project.schedule),
-	};
+export function discardProjectScheduleWorkingDraft(
+	schedule: ProjectSchedule,
+): ProjectSchedule {
+	return discardWorkingDraft(schedule);
 }
 
 export interface PublishProjectScheduleInput {
@@ -102,7 +95,7 @@ export interface PublishProjectScheduleInput {
 export type PublishProjectScheduleResult =
 	| {
 			readonly ok: true;
-			readonly project: Project;
+			readonly schedule: ProjectSchedule;
 			readonly version: PublishedScheduleVersion;
 			readonly issues: readonly ValidationIssue[];
 	  }
@@ -133,22 +126,22 @@ function toPublishedMilestone(
 }
 
 export function publishProjectSchedule(
-	project: Project,
+	schedule: ProjectSchedule,
 	input: PublishProjectScheduleInput,
 ): PublishProjectScheduleResult {
-	const draft = project.schedule.workingDraft;
+	const draft = schedule.workingDraft;
 
 	if (draft === null) {
 		return { ok: false, reason: "missingDraft", issues: [] };
 	}
 
-	const latest = getLatestPublishedVersion(project.schedule);
+	const latest = getLatestPublishedVersion(schedule);
 	if (draft.basePublishedVersionId !== (latest?.id ?? null)) {
 		return { ok: false, reason: "staleBase", issues: [] };
 	}
 
 	if (
-		project.schedule.publishedVersions.some(
+		schedule.publishedVersions.some(
 			(version) => version.id === input.versionId,
 		)
 	) {
@@ -172,18 +165,15 @@ export function publishProjectSchedule(
 		publishedAt: input.publishedAt,
 		milestones: draft.milestones.map(toPublishedMilestone),
 	};
-	const appended = appendPublishedVersion(project.schedule, version);
+	const appended = appendPublishedVersion(schedule, version);
 
 	return {
 		ok: true,
 		version,
 		issues,
-		project: {
-			...project,
-			schedule: {
-				...appended,
-				workingDraft: null,
-			},
+		schedule: {
+			...appended,
+			workingDraft: null,
 		},
 	};
 }

@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-	devProject003,
-	devProject004,
-	devScenarioToday,
-} from "../../fixtures/v2/canonicalProjectFixtures";
-import {
 	actualWithoutPlanDraftCandidate,
 	futureActualDraftCandidate,
 	importAmbiguityDraftCandidate,
@@ -15,12 +10,14 @@ import {
 import { mdrrMilestoneDefinition } from "../../config/v2/referenceData";
 import { parseDateOnly, type DateOnly } from "../shared/dateOnly";
 import {
+	toMilestoneDefinitionId,
 	toMilestoneRowId,
 	toScheduleDraftId,
 	toScheduleVersionId,
 } from "../shared/ids";
 import {
 	toScheduleVersionNumber,
+	type PublishedScheduleVersion,
 	type ScheduleWorkingDraft,
 } from "./schedule";
 import {
@@ -43,6 +40,53 @@ function issueSummary(draft: ScheduleWorkingDraft) {
 		referenceDate: devScenarioToday,
 	}).map(({ code, source, severity }) => ({ code, source, severity }));
 }
+
+const devScenarioToday = dateOnly("2026-09-15");
+
+const combinedInvalidDraft: ScheduleWorkingDraft = {
+	id: toScheduleDraftId("validation-combined-invalid-draft"),
+	basePublishedVersionId: null,
+	milestones: [
+		{
+			...unmappedMilestoneDraftCandidate.milestones[0]!,
+			rowId: toMilestoneRowId("validation-combined-unmapped"),
+		},
+		{
+			...notApplicableWithDateDraftCandidate.milestones[0]!,
+			rowId: toMilestoneRowId("validation-combined-not-applicable"),
+			milestoneDefinitionId: toMilestoneDefinitionId(
+				"milestone-design-id-fix",
+			),
+		},
+		{
+			...actualWithoutPlanDraftCandidate.milestones[0]!,
+			rowId: toMilestoneRowId("validation-combined-actual-without-plan"),
+			milestoneDefinitionId: toMilestoneDefinitionId("milestone-c1-c-test"),
+		},
+		{
+			...importAmbiguityDraftCandidate.milestones[0]!,
+			rowId: toMilestoneRowId("validation-combined-import-ambiguity"),
+			milestoneDefinitionId: toMilestoneDefinitionId("milestone-c2-c-smt"),
+		},
+	],
+	importFindings: importAmbiguityDraftCandidate.importFindings,
+};
+
+const publishedFutureActualVersion: PublishedScheduleVersion = {
+	id: toScheduleVersionId("validation-published-v2"),
+	versionNumber: toScheduleVersionNumber(2),
+	versionNote: "Validation fixture",
+	publishedAt: "2026-09-10T00:00:00Z",
+	milestones: [
+		{
+			rowId: toMilestoneRowId("validation-published-future-actual"),
+			milestoneDefinitionId: mdrrMilestoneDefinition.id,
+			applicability: "applicable",
+			plan: dateOnly("2026-09-01"),
+			actual: dateOnly("2026-12-01"),
+		},
+	],
+};
 
 describe("Schedule Working Draft validation", () => {
 	it("classifies an unmapped milestone as Blocking Import", () => {
@@ -178,11 +222,8 @@ describe("Schedule Working Draft validation", () => {
 		]);
 	});
 
-	it("finds all approved Project 004 Draft blockers without changing official data", () => {
-		const draft = devProject004.schedule.workingDraft;
-		expect(draft).not.toBeNull();
-
-		const issues = validateScheduleWorkingDraft(draft!, {
+	it("finds all approved predecessor Draft blockers without mutating the Draft", () => {
+		const issues = validateScheduleWorkingDraft(combinedInvalidDraft, {
 			referenceDate: devScenarioToday,
 		});
 
@@ -198,16 +239,14 @@ describe("Schedule Working Draft validation", () => {
 				"schedule.data.future-actual",
 			]),
 		);
+		expect(combinedInvalidDraft.milestones).toHaveLength(4);
 	});
 });
 
 describe("Published Schedule inspection", () => {
-	it("derives Project 003 future Actual as Advisory without changing history", () => {
-		const latest = devProject003.schedule.publishedVersions[1];
-		expect(latest).toBeDefined();
-		const originalHistory = devProject003.schedule.publishedVersions;
-
-		const issues = validatePublishedScheduleVersion(latest!, {
+	it("derives future Actual as Advisory without changing the Published snapshot", () => {
+		const originalMilestones = publishedFutureActualVersion.milestones;
+		const issues = validatePublishedScheduleVersion(publishedFutureActualVersion, {
 			referenceDate: devScenarioToday,
 		});
 
@@ -219,8 +258,12 @@ describe("Published Schedule inspection", () => {
 				severity: "advisory",
 			}),
 		);
-		expect(devProject003.schedule.publishedVersions).toBe(originalHistory);
-		expect(latest?.id).toBe(toScheduleVersionId("dev-project-003-schedule-v2"));
-		expect(latest?.versionNumber).toBe(toScheduleVersionNumber(2));
+		expect(publishedFutureActualVersion.milestones).toBe(originalMilestones);
+		expect(publishedFutureActualVersion.id).toBe(
+			toScheduleVersionId("validation-published-v2"),
+		);
+		expect(publishedFutureActualVersion.versionNumber).toBe(
+			toScheduleVersionNumber(2),
+		);
 	});
 });

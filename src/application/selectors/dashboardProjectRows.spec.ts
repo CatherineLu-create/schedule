@@ -7,6 +7,11 @@ import {
 	devProject002,
 	devProject004,
 } from "../../fixtures/v2/canonicalProjectFixtures";
+import {
+	canonicalScheduleFixtures,
+	devSchedule001,
+	devSchedule004,
+} from "../../fixtures/v2/canonicalScheduleFixtures";
 import type { PrototypeState } from "../state/prototypeState";
 import {
 	selectDashboardProjectRow,
@@ -47,7 +52,10 @@ describe("Dashboard Project row projection", () => {
 				},
 			},
 		};
-		const state: PrototypeState = { projects: [displayProject] };
+		const state: PrototypeState = {
+			projects: [displayProject],
+			schedules: [canonicalScheduleFixtures[1]!],
+		};
 
 		expect(selectDashboardProjectRow(state, displayProject.id)).toEqual({
 			projectId: displayProject.id,
@@ -98,7 +106,10 @@ describe("Dashboard Project row projection", () => {
 				},
 			},
 		};
-		const state: PrototypeState = { projects: [unresolvedProject] };
+		const state: PrototypeState = {
+			projects: [unresolvedProject],
+			schedules: [canonicalScheduleFixtures[1]!],
+		};
 
 		expect(selectDashboardProjectRow(state, unresolvedProject.id)).toEqual({
 			projectId: unresolvedProject.id,
@@ -121,53 +132,46 @@ describe("Dashboard Project row projection", () => {
 	});
 
 	it("keeps Current Stage and MDRR unsupported when no Published Schedule exists", () => {
-		const state: PrototypeState = { projects: [devProject001] };
+		const state: PrototypeState = {
+			projects: [devProject001],
+			schedules: [devSchedule001],
+		};
 
 		const row = selectDashboardProjectRow(state, devProject001.id);
 
-		expect(devProject001.schedule.publishedVersions).toHaveLength(0);
+		expect(devSchedule001.publishedVersions).toHaveLength(0);
 		expect(row?.currentStage).toBe("-");
 		expect(row?.mdrr).toBe("-");
 	});
 
-	it("ignores Working Draft data and does not infer from the latest Published Schedule", () => {
-		const originalState: PrototypeState = { projects: [devProject004] };
+	it("does not infer Portfolio values from canonical Published Schedule changes", () => {
+		const originalState: PrototypeState = {
+			projects: [devProject004],
+			schedules: [devSchedule004],
+		};
 		const originalRow = selectDashboardProjectRow(
 			originalState,
 			devProject004.id,
 		);
-		const draft = devProject004.schedule.workingDraft;
+		expect(devSchedule004.publishedVersions).toHaveLength(1);
 
-		expect(devProject004.schedule.publishedVersions).toHaveLength(1);
-		expect(draft).not.toBeNull();
-
-		const changedDraftProject: Project = {
-			...devProject004,
-			schedule: {
-				...devProject004.schedule,
-				workingDraft:
-					draft === null
-						? null
-						: {
-								...draft,
-								milestones: [],
-								importFindings: [],
-							},
-			},
-		};
-		const changedDraftState: PrototypeState = {
-			projects: [changedDraftProject],
+		const changedScheduleState: PrototypeState = {
+			projects: [devProject004],
+			schedules: [{ ...devSchedule004, publishedVersions: [] }],
 		};
 
 		expect(
-			selectDashboardProjectRow(changedDraftState, changedDraftProject.id),
+			selectDashboardProjectRow(changedScheduleState, devProject004.id),
 		).toEqual(originalRow);
 		expect(originalRow?.currentStage).toBe("-");
 		expect(originalRow?.mdrr).toBe("-");
 	});
 
 	it("projects one row per canonical Project in canonical collection order", () => {
-		const state: PrototypeState = { projects: canonicalProjectFixtures };
+		const state: PrototypeState = {
+			projects: canonicalProjectFixtures,
+			schedules: canonicalScheduleFixtures,
+		};
 
 		const rows = selectDashboardProjectRows(state);
 

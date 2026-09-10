@@ -1,124 +1,207 @@
 import { describe, expect, it } from "vitest";
+
 import type { Project } from "../../domain/project/project";
 import type { ProjectMaster } from "../../domain/project/projectMaster";
-import { toProjectId } from "../../domain/shared/ids";
-import { prototypeReducer } from "./prototypeReducer";
+import {
+  createEmptyCanonicalProjectSchedule,
+  type CanonicalProjectSchedule,
+} from "../../domain/schedule/officialSchedule";
+import { toScheduleVersionNumber } from "../../domain/schedule/schedule";
+import { toProjectId, type ProjectId } from "../../domain/shared/ids";
+import { prototypeReducer, type PrototypeAction } from "./prototypeReducer";
 import type { PrototypeState } from "./prototypeState";
 
 function makeProject(id: string, stnProjectName: string): Project {
-	return {
-		id: toProjectId(id),
-		master: {
-			basicInformation: { stnProjectName },
-		} as ProjectMaster,
-		identityAliases: [],
-		schedule: { publishedVersions: [], workingDraft: null },
-		team: null,
-	};
+  return {
+    id: toProjectId(id),
+    master: {
+      basicInformation: { stnProjectName },
+    } as ProjectMaster,
+    identityAliases: [],
+    team: null,
+  } as Project;
+}
+
+function makeState(
+  projects: readonly Project[],
+  schedules: readonly CanonicalProjectSchedule[],
+): PrototypeState {
+  return { projects, schedules } as PrototypeState;
+}
+
+function nonEmptySchedule(projectId: ProjectId): CanonicalProjectSchedule {
+  return {
+    projectId,
+    publishedVersions: [
+      {
+        versionNumber: toScheduleVersionNumber(1),
+        versionNote: null,
+        publishedAt: "2026-09-10T00:00:00Z",
+        milestones: [],
+      },
+    ],
+  };
+}
+
+function expectAtomicRejection(
+  state: PrototypeState,
+  action: PrototypeAction,
+): void {
+  const projects = state.projects;
+  const schedules = state.schedules;
+  const projectValues = structuredClone(state.projects);
+  const scheduleValues = structuredClone(state.schedules);
+
+  expect(() => prototypeReducer(state, action)).toThrow();
+  expect(state.projects).toBe(projects);
+  expect(state.schedules).toBe(schedules);
+  expect(state.projects).toEqual(projectValues);
+  expect(state.schedules).toEqual(scheduleValues);
 }
 
 describe("prototypeReducer projectAdded", () => {
-	it("immutably appends an already-formed Project", () => {
-		const existing = Object.freeze(
-			makeProject("dev-project-001", "Fixture Project Alpha"),
-		);
-		const added = makeProject("dev-project-002", "Fixture Project Beta");
-		const projects = Object.freeze([existing]);
-		const state: PrototypeState = Object.freeze({ projects });
+  it("atomically appends one Project and its same-ID empty Schedule", () => {
+    const existing = makeProject("dev-project-001", "Fixture Project Alpha");
+    const existingSchedule = createEmptyCanonicalProjectSchedule(existing.id);
+    const added = makeProject("dev-project-002", "Fixture Project Beta");
+    const addedSchedule = createEmptyCanonicalProjectSchedule(added.id);
+    const state = makeState(
+      Object.freeze([existing]),
+      Object.freeze([existingSchedule]),
+    );
 
-		const next = prototypeReducer(state, { type: "projectAdded", project: added });
+    const next = prototypeReducer(state, {
+      type: "projectAdded",
+      project: added,
+      schedule: addedSchedule,
+    });
 
-		expect(next).not.toBe(state);
-		expect(next.projects).not.toBe(state.projects);
-		expect(next.projects).toEqual([existing, added]);
-		expect(next.projects[0]).toBe(existing);
-		expect(state.projects).toEqual([existing]);
-	});
+    expect(next.projects).toEqual([existing, added]);
+    expect(next.schedules).toEqual([existingSchedule, addedSchedule]);
+    expect(next.projects).not.toBe(state.projects);
+    expect(next.schedules).not.toBe(state.schedules);
+    expect(state.projects).toEqual([existing]);
+    expect(state.schedules).toEqual([existingSchedule]);
+  });
 
-	it("rejects a duplicate ProjectId without changing the state", () => {
-		const existing = makeProject(
-			"dev-project-001",
-			"Fixture Project Alpha",
-		);
-		const state: PrototypeState = Object.freeze({
-			projects: Object.freeze([existing]),
-		});
-		const duplicateId = makeProject(
-			"dev-project-001",
-			"A different display name",
-		);
+  it("rejects an existing ProjectId without changing either collection", () => {
+    const existing = makeProject("dev-project-001", "Fixture Project Alpha");
+    const state = makeState(
+      Object.freeze([existing]),
+      Object.freeze([createEmptyCanonicalProjectSchedule(existing.id)]),
+    );
+    const duplicate = makeProject("dev-project-001", "Different Name");
 
-		expect(() =>
-			prototypeReducer(state, {
-				type: "projectAdded",
-				project: duplicateId,
-			}),
-		).toThrow("Project ID already exists: dev-project-001");
-		expect(state.projects).toEqual([existing]);
-	});
+    expectAtomicRejection(state, {
+      type: "projectAdded",
+      project: duplicate,
+      schedule: createEmptyCanonicalProjectSchedule(duplicate.id),
+    });
+  });
 
-	it("allows the same business display name under a different ProjectId", () => {
-		const first = makeProject("dev-project-001", "Duplicate Fixture Name");
-		const second = makeProject("dev-project-002", "Duplicate Fixture Name");
-		const state: PrototypeState = { projects: [first] };
+  it("rejects a Schedule owned by a different ProjectId atomically", () => {
+    const added = makeProject("dev-project-002", "Fixture Project Beta");
+    const state = makeState([], []);
 
-		const next = prototypeReducer(state, {
-			type: "projectAdded",
-			project: second,
-		});
+    expectAtomicRejection(state, {
+      type: "projectAdded",
+      project: added,
+      schedule: createEmptyCanonicalProjectSchedule(
+        toProjectId("dev-project-other"),
+      ),
+    });
+  });
 
-		expect(next.projects).toEqual([first, second]);
-	});
+  it("rejects duplicate Schedule ownership atomically", () => {
+    const added = makeProject("dev-project-002", "Fixture Project Beta");
+    const state = makeState(
+      [],
+      [createEmptyCanonicalProjectSchedule(added.id)],
+    );
+
+    expectAtomicRejection(state, {
+      type: "projectAdded",
+      project: added,
+      schedule: createEmptyCanonicalProjectSchedule(added.id),
+    });
+  });
+
+  it("rejects a non-empty creation Schedule atomically", () => {
+    const added = makeProject("dev-project-002", "Fixture Project Beta");
+    const state = makeState([], []);
+
+    expectAtomicRejection(state, {
+      type: "projectAdded",
+      project: added,
+      schedule: nonEmptySchedule(added.id),
+    });
+  });
+
+  it("rejects a Project payload contaminated with an own schedule property", () => {
+    const project = makeProject("dev-project-002", "Fixture Project Beta");
+    const contaminated = {
+      ...project,
+      schedule: { publishedVersions: [], workingDraft: null },
+    } as Project;
+    const state = makeState([], []);
+
+    expectAtomicRejection(state, {
+      type: "projectAdded",
+      project: contaminated,
+      schedule: createEmptyCanonicalProjectSchedule(project.id),
+    });
+  });
 });
 
 describe("prototypeReducer projectReplaced", () => {
-	it("immutably replaces exactly one Project without merging or reordering", () => {
-		const first = Object.freeze(
-			makeProject("dev-project-001", "Fixture Project Alpha"),
-		);
-		const second = Object.freeze(
-			makeProject("dev-project-002", "Fixture Project Beta"),
-		);
-		const replacement = makeProject(
-			"dev-project-001",
-			"Fixture Project Alpha Updated",
-		);
-		const state: PrototypeState = Object.freeze({
-			projects: Object.freeze([first, second]),
-		});
+  it("replaces Project data while preserving Schedule ownership by reference", () => {
+    const original = makeProject("dev-project-001", "Fixture Project Alpha");
+    const schedule = nonEmptySchedule(original.id);
+    const replacement = makeProject(
+      "dev-project-001",
+      "Fixture Project Alpha Renamed",
+    );
+    const schedules = Object.freeze([schedule]);
+    const state = makeState(Object.freeze([original]), schedules);
 
-		const next = prototypeReducer(state, {
-			type: "projectReplaced",
-			project: replacement,
-		});
+    const next = prototypeReducer(state, {
+      type: "projectReplaced",
+      project: replacement,
+    });
 
-		expect(next).not.toBe(state);
-		expect(next.projects).not.toBe(state.projects);
-		expect(next.projects).toEqual([replacement, second]);
-		expect(next.projects[0]).toBe(replacement);
-		expect(next.projects[1]).toBe(second);
-		expect(state.projects).toEqual([first, second]);
-	});
+    expect(next.projects).toEqual([replacement]);
+    expect(next.schedules).toBe(schedules);
+    expect(next.schedules[0]?.projectId).toBe(original.id);
+  });
 
-	it("rejects replacement of an unknown ProjectId without mutation", () => {
-		const existing = makeProject(
-			"dev-project-001",
-			"Fixture Project Alpha",
-		);
-		const state: PrototypeState = Object.freeze({
-			projects: Object.freeze([existing]),
-		});
-		const unknown = makeProject(
-			"dev-project-999",
-			"Unknown Fixture Project",
-		);
+  it("rejects replacement of an unknown ProjectId without mutation", () => {
+    const existing = makeProject("dev-project-001", "Fixture Project Alpha");
+    const state = makeState(
+      Object.freeze([existing]),
+      Object.freeze([createEmptyCanonicalProjectSchedule(existing.id)]),
+    );
+    const unknown = makeProject("dev-project-999", "Unknown Project");
 
-		expect(() =>
-			prototypeReducer(state, {
-				type: "projectReplaced",
-				project: unknown,
-			}),
-		).toThrow("Project ID not found: dev-project-999");
-		expect(state.projects).toEqual([existing]);
-	});
+    expectAtomicRejection(state, {
+      type: "projectReplaced",
+      project: unknown,
+    });
+  });
+
+  it("rejects a contaminated replacement and preserves both collections", () => {
+    const existing = makeProject("dev-project-001", "Fixture Project Alpha");
+    const state = makeState(
+      Object.freeze([existing]),
+      Object.freeze([createEmptyCanonicalProjectSchedule(existing.id)]),
+    );
+    const contaminated = {
+      ...makeProject("dev-project-001", "Fixture Project Updated"),
+      schedule: { publishedVersions: [], workingDraft: null },
+    } as Project;
+
+    expectAtomicRejection(state, {
+      type: "projectReplaced",
+      project: contaminated,
+    });
+  });
 });

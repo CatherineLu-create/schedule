@@ -1,28 +1,16 @@
 import {
 	coverCatalog,
-	milestoneDefinitions,
 	statusCatalog,
 } from "../../config/v2/referenceData";
 import type { Project } from "../../domain/project/project";
 import type { ProjectMaster } from "../../domain/project/projectMaster";
 import type { CatalogItem } from "../../domain/reference-data/catalog";
 import {
-	toScheduleVersionNumber,
-	type PublishedScheduleVersion,
-	type ScheduleWorkingDraft,
-} from "../../domain/schedule/schedule";
-import { parseDateOnly, type DateOnly } from "../../domain/shared/dateOnly";
-import {
 	toCatalogItemId,
-	toMilestoneDefinitionId,
-	toMilestoneRowId,
 	toPersonAssignmentId,
 	toProjectId,
-	toScheduleDraftId,
-	toScheduleVersionId,
 	toTeamFunctionId,
 	type CatalogItemId,
-	type MilestoneDefinitionId,
 } from "../../domain/shared/ids";
 import {
 	categoryReferenceFixtures,
@@ -33,12 +21,6 @@ import {
 	productLineReferenceFixtures,
 } from "./referenceFixtures";
 import {
-	actualWithoutPlanDraftCandidate,
-	importAmbiguityDraftCandidate,
-	notApplicableWithDateDraftCandidate,
-	unmappedMilestoneDraftCandidate,
-} from "./scheduleCandidateFixtures";
-import {
 	devBiosTeamFunctionDefinition,
 	devEeTeamFunctionDefinition,
 	devMeTeamFunctionDefinition,
@@ -48,16 +30,6 @@ import {
 	validSavedTeamFixture,
 } from "./teamTemplateFixtures";
 import type { ProjectTeam } from "../../domain/team/team";
-
-function fixtureDate(value: string): DateOnly {
-	const parsed = parseDateOnly(value);
-
-	if (parsed === null) {
-		throw new Error(`Invalid canonical V2 fixture DateOnly: ${value}`);
-	}
-
-	return parsed;
-}
 
 function requireCatalogItemId(
 	catalog: readonly CatalogItem<CatalogItemId>[],
@@ -71,19 +43,6 @@ function requireCatalogItemId(
 	}
 
 	return item.id;
-}
-
-function requireMilestoneDefinitionId(idValue: string): MilestoneDefinitionId {
-	const id = toMilestoneDefinitionId(idValue);
-	const definition = milestoneDefinitions.find(
-		(candidate) => candidate.id === id,
-	);
-
-	if (definition === undefined) {
-		throw new Error(`Missing canonical V2 milestone definition: ${idValue}`);
-	}
-
-	return definition.id;
 }
 
 const noLeverage: ProjectMaster["leverage"] = {
@@ -122,8 +81,6 @@ const noMechanical: ProjectMaster["mechanical"] = {
 		grossWeightG: null,
 	},
 };
-
-export const devScenarioToday = fixtureDate("2026-09-15");
 
 export const devProject001: Project = {
 	id: toProjectId("dev-project-001"),
@@ -165,63 +122,7 @@ export const devProject001: Project = {
 		},
 	},
 	identityAliases: [],
-	schedule: {
-		publishedVersions: [],
-		workingDraft: null,
-	},
 	team: null,
-};
-
-const devProject002PublishedV1: PublishedScheduleVersion = {
-	id: toScheduleVersionId("dev-project-002-schedule-v1"),
-	versionNumber: toScheduleVersionNumber(1),
-	versionNote: "DEV initial schedule",
-	publishedAt: "2026-08-20T00:00:00Z",
-	milestones: [
-		{
-			rowId: toMilestoneRowId("dev-project-002-v1-row-kickoff"),
-			milestoneDefinitionId: requireMilestoneDefinitionId(
-				"milestone-design-kickoff",
-			),
-			applicability: "applicable",
-			plan: fixtureDate("2026-08-15"),
-			actual: fixtureDate("2026-08-18"),
-		},
-		{
-			rowId: toMilestoneRowId("dev-project-002-v1-row-id-fix"),
-			milestoneDefinitionId: requireMilestoneDefinitionId(
-				"milestone-design-id-fix",
-			),
-			applicability: "notApplicable",
-			plan: null,
-			actual: null,
-		},
-		{
-			rowId: toMilestoneRowId("dev-project-002-v1-row-a1-go"),
-			milestoneDefinitionId: requireMilestoneDefinitionId(
-				"milestone-a1-a-g-o",
-			),
-			applicability: "applicable",
-			plan: fixtureDate("2026-09-20"),
-			actual: null,
-		},
-		{
-			rowId: toMilestoneRowId("dev-project-002-v1-row-a1-smt"),
-			milestoneDefinitionId: requireMilestoneDefinitionId(
-				"milestone-a1-a-smt",
-			),
-			applicability: "applicable",
-			plan: fixtureDate("2026-09-01"),
-			actual: null,
-		},
-		{
-			rowId: toMilestoneRowId("dev-project-002-v1-row-mdrr"),
-			milestoneDefinitionId: requireMilestoneDefinitionId("milestone-mdrr"),
-			applicability: "applicable",
-			plan: fixtureDate("2026-09-25"),
-			actual: null,
-		},
-	],
 };
 
 export const devProject002: Project = {
@@ -267,47 +168,7 @@ export const devProject002: Project = {
 		},
 	},
 	identityAliases: [],
-	schedule: {
-		publishedVersions: [devProject002PublishedV1],
-		workingDraft: null,
-	},
 	team: validSavedTeamFixture,
-};
-
-const devProject003PublishedV1: PublishedScheduleVersion = {
-	id: toScheduleVersionId("dev-project-003-schedule-v1"),
-	versionNumber: toScheduleVersionNumber(1),
-	versionNote: "DEV initial schedule",
-	publishedAt: "2026-08-25T00:00:00Z",
-	milestones: [
-		{
-			rowId: toMilestoneRowId("dev-project-003-v1-row-c1-go"),
-			milestoneDefinitionId: requireMilestoneDefinitionId(
-				"milestone-c1-c-g-o",
-			),
-			applicability: "applicable",
-			plan: fixtureDate("2026-09-30"),
-			actual: null,
-		},
-	],
-};
-
-const devProject003PublishedV2: PublishedScheduleVersion = {
-	id: toScheduleVersionId("dev-project-003-schedule-v2"),
-	versionNumber: toScheduleVersionNumber(2),
-	versionNote: "DEV schedule update",
-	publishedAt: "2026-09-10T00:00:00Z",
-	milestones: [
-		{
-			rowId: toMilestoneRowId("dev-project-003-v2-row-c1-go"),
-			milestoneDefinitionId: requireMilestoneDefinitionId(
-				"milestone-c1-c-g-o",
-			),
-			applicability: "applicable",
-			plan: fixtureDate("2026-10-01"),
-			actual: fixtureDate("2026-12-01"),
-		},
-	],
 };
 
 const devProject003Team: ProjectTeam = {
@@ -419,79 +280,7 @@ export const devProject003: Project = {
 			normalizedValue: "dev project alpha legacy",
 		},
 	],
-	schedule: {
-		publishedVersions: [
-			devProject003PublishedV1,
-			devProject003PublishedV2,
-		],
-		workingDraft: null,
-	},
 	team: devProject003Team,
-};
-
-const devProject004PublishedV1: PublishedScheduleVersion = {
-	id: toScheduleVersionId("dev-project-004-schedule-v1"),
-	versionNumber: toScheduleVersionNumber(1),
-	versionNote: "DEV published schedule before import review",
-	publishedAt: "2026-09-05T00:00:00Z",
-	milestones: [
-		{
-			rowId: toMilestoneRowId("dev-project-004-v1-row-c1-go"),
-			milestoneDefinitionId: requireMilestoneDefinitionId(
-				"milestone-c1-c-g-o",
-			),
-			applicability: "applicable",
-			plan: fixtureDate("2026-10-10"),
-			actual: null,
-		},
-	],
-};
-
-const devProject004Draft: ScheduleWorkingDraft = {
-	id: toScheduleDraftId("dev-project-004-working-draft"),
-	basePublishedVersionId: devProject004PublishedV1.id,
-	milestones: [
-		{
-			...unmappedMilestoneDraftCandidate.milestones[0],
-			rowId: toMilestoneRowId("dev-project-004-draft-row-unmapped"),
-		},
-		{
-			...notApplicableWithDateDraftCandidate.milestones[0],
-			rowId: toMilestoneRowId(
-				"dev-project-004-draft-row-not-applicable-with-date",
-			),
-			milestoneDefinitionId: requireMilestoneDefinitionId(
-				"milestone-design-id-fix",
-			),
-		},
-		{
-			...actualWithoutPlanDraftCandidate.milestones[0],
-			rowId: toMilestoneRowId(
-				"dev-project-004-draft-row-actual-without-plan",
-			),
-			milestoneDefinitionId: requireMilestoneDefinitionId(
-				"milestone-c1-c-test",
-			),
-		},
-		{
-			...importAmbiguityDraftCandidate.milestones[0],
-			rowId: toMilestoneRowId(
-				"dev-project-004-draft-row-import-ambiguity",
-			),
-			milestoneDefinitionId: requireMilestoneDefinitionId(
-				"milestone-c2-c-smt",
-			),
-		},
-	],
-	importFindings: importAmbiguityDraftCandidate.importFindings.map(
-		(finding) => ({
-			...finding,
-			target: {
-				...finding.target,
-				entityId: "dev-project-004-draft-row-import-ambiguity",
-			},
-		}),
-	),
 };
 
 const devProject004Team: ProjectTeam = {
@@ -622,27 +411,7 @@ export const devProject004: Project = {
 		},
 	},
 	identityAliases: [],
-	schedule: {
-		publishedVersions: [devProject004PublishedV1],
-		workingDraft: devProject004Draft,
-	},
 	team: devProject004Team,
-};
-
-const devProject005PublishedV1: PublishedScheduleVersion = {
-	id: toScheduleVersionId("dev-project-005-schedule-v1"),
-	versionNumber: toScheduleVersionNumber(1),
-	versionNote: "DEV initial schedule",
-	publishedAt: "2026-09-05T00:00:00Z",
-	milestones: [
-		{
-			rowId: toMilestoneRowId("dev-project-005-v1-row-mdrr"),
-			milestoneDefinitionId: requireMilestoneDefinitionId("milestone-mdrr"),
-			applicability: "applicable",
-			plan: fixtureDate("2026-09-01"),
-			actual: null,
-		},
-	],
 };
 
 const devProject005Team: ProjectTeam = {
@@ -791,10 +560,6 @@ export const devProject005: Project = {
 		},
 	},
 	identityAliases: [],
-	schedule: {
-		publishedVersions: [devProject005PublishedV1],
-		workingDraft: null,
-	},
 	team: devProject005Team,
 };
 

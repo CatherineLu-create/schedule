@@ -34,11 +34,13 @@ import {
 } from "./application/workflow/workflowInterpretation";
 import { statusCatalog } from "./config/v2/referenceData";
 import type { Project } from "./domain/project/project";
+import { createEmptyCanonicalProjectSchedule } from "./domain/schedule/officialSchedule";
 import type { CatalogItem } from "./domain/reference-data/catalog";
 import { toCatalogItemId, toProjectId, type CatalogItemId, type ProjectId } from "./domain/shared/ids";
 import type { ValidationIssue } from "./domain/validation/validationIssue";
 import { DuplicateProjectReview } from "./duplicateProjectReview";
 import { canonicalProjectFixtures } from "./fixtures/v2/canonicalProjectFixtures";
+import { canonicalScheduleFixtures } from "./fixtures/v2/canonicalScheduleFixtures";
 import {
   cpuReferenceFixtures,
   customerReferenceFixtures,
@@ -108,6 +110,7 @@ type CreateFieldErrors = Partial<Record<CreateProjectRequiredField, string>>;
 
 const initialPrototypeState: PrototypeState = {
   projects: canonicalProjectFixtures,
+  schedules: canonicalScheduleFixtures,
 };
 
 const createDefaults: CreateProjectDefaults = {
@@ -229,7 +232,11 @@ export function App() {
     setIsCreateProjectOpen(true);
   };
   const completeCreate = (project: Project, issues: readonly ValidationIssue[]) => {
-    dispatch({ type: "projectAdded", project });
+    dispatch({
+      type: "projectAdded",
+      project,
+      schedule: createEmptyCanonicalProjectSchedule(project.id),
+    });
     setSelectedProjectId(project.id);
     setEditFeedback(issues);
     setActiveResource("projectMaster");

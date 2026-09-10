@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Project } from "../../domain/project/project";
 import type { ProjectMaster } from "../../domain/project/projectMaster";
 import { toProjectId } from "../../domain/shared/ids";
+import { createEmptyCanonicalProjectSchedule } from "../../domain/schedule/officialSchedule";
 import type { PrototypeState } from "../state/prototypeState";
 import { getProjectById } from "./projectSelectors";
 
@@ -12,7 +13,6 @@ function makeProject(id: string, stnProjectName: string): Project {
 			basicInformation: { stnProjectName },
 		} as ProjectMaster,
 		identityAliases: [],
-		schedule: { publishedVersions: [], workingDraft: null },
 		team: null,
 	};
 }
@@ -23,6 +23,10 @@ describe("getProjectById", () => {
 		const second = makeProject("dev-project-002", "Duplicate Fixture Name");
 		const state: PrototypeState = Object.freeze({
 			projects: Object.freeze([first, second]),
+			schedules: Object.freeze([
+				createEmptyCanonicalProjectSchedule(first.id),
+				createEmptyCanonicalProjectSchedule(second.id),
+			]),
 		});
 
 		const selected = getProjectById(state, toProjectId("dev-project-002"));
@@ -33,7 +37,10 @@ describe("getProjectById", () => {
 
 	it("returns null when the ProjectId is absent", () => {
 		const project = makeProject("dev-project-001", "Fixture Project");
-		const state: PrototypeState = { projects: [project] };
+		const state: PrototypeState = {
+			projects: [project],
+			schedules: [createEmptyCanonicalProjectSchedule(project.id)],
+		};
 
 		expect(getProjectById(state, toProjectId("dev-project-999"))).toBeNull();
 		expect(

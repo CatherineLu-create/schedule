@@ -1,15 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
-import {
-  toPersonAssignmentId,
-  toProjectId,
-  toScheduleDraftId,
-  toScheduleVersionId,
-} from "../shared/ids";
-import {
-  toScheduleVersionNumber,
-  type ProjectSchedule,
-} from "../schedule/schedule";
+import { devProject002 } from "../../fixtures/v2/canonicalProjectFixtures";
+import { toPersonAssignmentId, toProjectId } from "../shared/ids";
 import type { ProjectTeam } from "../team/team";
 import type { Project } from "./project";
 import type { ProjectIdentityAlias } from "./projectIdentity";
@@ -70,7 +62,7 @@ function makeMaster(stnProjectName: string): ProjectMaster {
   };
 }
 
-function makeTeam(role: "qciPm" | "qciPjm", label: string): ProjectTeam {
+function makeTeam(label: string): ProjectTeam {
   const assignment = {
     assignmentId: toPersonAssignmentId(`assignment-${label}`),
     name: `${label} Person`,
@@ -79,8 +71,8 @@ function makeTeam(role: "qciPm" | "qciPjm", label: string): ProjectTeam {
 
   return {
     projectRoles: {
-      qciPm: role === "qciPm" ? assignment : null,
-      qciPjm: role === "qciPjm" ? assignment : null,
+      qciPm: assignment,
+      qciPjm: null,
       acerPm: null,
     },
     functions: [],
@@ -89,119 +81,54 @@ function makeTeam(role: "qciPm" | "qciPjm", label: string): ProjectTeam {
 }
 
 describe("Project aggregate", () => {
-  it("defines the canonical aggregate module and its five owned values", async () => {
-    const projectDomain = await import("./project");
-    const master = makeMaster("Fixture Project Alpha");
+  it("owns only Project/Master identity, aliases, and current Team state", () => {
+    expect(Object.keys(devProject002)).toEqual([
+      "id",
+      "master",
+      "identityAliases",
+      "team",
+    ]);
+    expectTypeOf<keyof Project>().toEqualTypeOf<
+      "id" | "master" | "identityAliases" | "team"
+    >();
+    expect(devProject002.id).not.toBe(
+      devProject002.master.basicInformation.stnProjectName,
+    );
+  });
+
+  it("keeps Project identity independent from Master and Team values", () => {
+    const project: Project = {
+      id: toProjectId("project-fixture-alpha"),
+      master: makeMaster("Fixture Project Alpha"),
+      identityAliases: [],
+      team: makeTeam("project-alpha"),
+    };
+
+    expect(project.id).toBe("project-fixture-alpha");
+    expect(project.master.basicInformation.stnProjectName).toBe(
+      "Fixture Project Alpha",
+    );
+    expect(project.team?.projectRoles.qciPm?.name).toBe(
+      "project-alpha Person",
+    );
+  });
+
+  it("retains readonly identity-alias semantics", () => {
     const alias: ProjectIdentityAlias = {
       kind: "stnProjectName",
       originalValue: "Fixture Project Previous",
       normalizedValue: "fixture project previous",
     };
     const project: Project = {
-      id: toProjectId("project-fixture-alpha"),
-      master,
+      id: toProjectId("project-fixture-alias"),
+      master: makeMaster("Fixture Project Current"),
       identityAliases: [alias],
-      schedule: { publishedVersions: [], workingDraft: null },
       team: null,
     };
 
-    expect(projectDomain).toBeDefined();
-    expect(Object.keys(project)).toEqual([
-      "id",
-      "master",
-      "identityAliases",
-      "schedule",
-      "team",
-    ]);
-    expect(project.id).toBe("project-fixture-alpha");
-    expect(project.id).not.toBe(master.basicInformation.stnProjectName);
     expect(project.identityAliases).toEqual([alias]);
     expectTypeOf(project.identityAliases).toEqualTypeOf<
       readonly ProjectIdentityAlias[]
     >();
-  });
-
-  it("represents an empty Schedule and an uninitialized Team", () => {
-    const project: Project = {
-      id: toProjectId("project-fixture-empty"),
-      master: makeMaster("Fixture Empty Project"),
-      identityAliases: [],
-      schedule: { publishedVersions: [], workingDraft: null },
-      team: null,
-    };
-
-    expect(project.schedule).toEqual({
-      publishedVersions: [],
-      workingDraft: null,
-    });
-    expect(project.team).toBeNull();
-  });
-
-  it("allows two Projects to own independent Schedule histories, Drafts, and Teams", () => {
-    const scheduleA: ProjectSchedule = {
-      publishedVersions: [
-        {
-          id: toScheduleVersionId("schedule-a-v1"),
-          versionNumber: toScheduleVersionNumber(1),
-          versionNote: "Project A initial",
-          publishedAt: "2026-09-02T01:00:00Z",
-          milestones: [],
-        },
-      ],
-      workingDraft: {
-        id: toScheduleDraftId("draft-a"),
-        basePublishedVersionId: toScheduleVersionId("schedule-a-v1"),
-        milestones: [],
-        importFindings: [],
-      },
-    };
-    const scheduleB: ProjectSchedule = {
-      publishedVersions: [
-        {
-          id: toScheduleVersionId("schedule-b-v1"),
-          versionNumber: toScheduleVersionNumber(1),
-          versionNote: "Project B initial",
-          publishedAt: "2026-09-02T02:00:00Z",
-          milestones: [],
-        },
-        {
-          id: toScheduleVersionId("schedule-b-v2"),
-          versionNumber: toScheduleVersionNumber(2),
-          versionNote: "Project B updated",
-          publishedAt: "2026-09-02T03:00:00Z",
-          milestones: [],
-        },
-      ],
-      workingDraft: {
-        id: toScheduleDraftId("draft-b"),
-        basePublishedVersionId: toScheduleVersionId("schedule-b-v2"),
-        milestones: [],
-        importFindings: [],
-      },
-    };
-    const projectA: Project = {
-      id: toProjectId("project-a"),
-      master: makeMaster("Fixture Project A"),
-      identityAliases: [],
-      schedule: scheduleA,
-      team: makeTeam("qciPm", "project-a"),
-    };
-    const projectB: Project = {
-      id: toProjectId("project-b"),
-      master: makeMaster("Fixture Project B"),
-      identityAliases: [],
-      schedule: scheduleB,
-      team: makeTeam("qciPjm", "project-b"),
-    };
-
-    expect(projectA.master).not.toBe(projectB.master);
-    expect(projectA.schedule).not.toBe(projectB.schedule);
-    expect(projectA.schedule.workingDraft?.id).toBe("draft-a");
-    expect(projectB.schedule.workingDraft?.id).toBe("draft-b");
-    expect(projectA.schedule.publishedVersions).toHaveLength(1);
-    expect(projectB.schedule.publishedVersions).toHaveLength(2);
-    expect(projectA.team).not.toBe(projectB.team);
-    expect(projectA.team?.projectRoles.qciPm?.name).toBe("project-a Person");
-    expect(projectB.team?.projectRoles.qciPjm?.name).toBe("project-b Person");
   });
 });

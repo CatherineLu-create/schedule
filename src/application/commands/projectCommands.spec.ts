@@ -146,6 +146,7 @@ describe("Create Project command", () => {
 		expect(result.status).toBe("created");
 		if (result.status !== "created") return;
 		expect(result.project.master).toEqual(fullMasterInput);
+		expect(Object.hasOwn(result.project, "schedule")).toBe(false);
 	});
 
 	it("exposes only the single Master-shaped Create input contract", () => {
@@ -330,10 +331,7 @@ describe("Create Project command", () => {
 						functionTeam.assignments.length === 0,
 				),
 			).toBe(true);
-			expect(result.project.schedule).toEqual({
-				publishedVersions: [],
-				workingDraft: null,
-			});
+			expect(Object.hasOwn(result.project, "schedule")).toBe(false);
 			expect(result.project.identityAliases).toEqual([]);
 		},
 	);
@@ -414,6 +412,7 @@ describe("Create Project command", () => {
 			}),
 		]);
 		expect(result.candidate.id).toBe(devProject003.id);
+		expect(Object.hasOwn(result.candidate, "schedule")).toBe(false);
 	});
 
 	it("returns every ProjectId matching a duplicate business identity", () => {
@@ -567,7 +566,6 @@ describe("Project Master update command", () => {
 				normalizedValue: "dev-qci-alpha-01",
 			},
 		]);
-		expect(result.project.schedule).toBe(devProject002.schedule);
 		expect(result.project.team).toBe(devProject002.team);
 		expect(devProject002.identityAliases).toEqual([]);
 	});
