@@ -16,6 +16,7 @@ export type ProjectId = OpaqueId<"ProjectId">;
 export type ScheduleVersionId = OpaqueId<"ScheduleVersionId">;
 export type ScheduleDraftId = OpaqueId<"ScheduleDraftId">;
 export type MilestoneDefinitionId = OpaqueId<"MilestoneDefinitionId">;
+export type MilestoneId = OpaqueId<"MilestoneId">;
 export type MilestoneRowId = OpaqueId<"MilestoneRowId">;
 export type StageGroupId = OpaqueId<"StageGroupId">;
 export type MilestoneTypeId = OpaqueId<"MilestoneTypeId">;
@@ -36,6 +37,9 @@ export const toScheduleDraftId = (value: string): ScheduleDraftId =>
 export const toMilestoneDefinitionId = (
   value: string,
 ): MilestoneDefinitionId => requireId<"MilestoneDefinitionId">(value);
+
+export const toMilestoneId = (value: string): MilestoneId =>
+  requireId<"MilestoneId">(value);
 
 export const toMilestoneRowId = (value: string): MilestoneRowId =>
   requireId<"MilestoneRowId">(value);

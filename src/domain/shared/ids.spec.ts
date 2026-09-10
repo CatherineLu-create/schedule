@@ -3,6 +3,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   toCatalogItemId,
   toMilestoneDefinitionId,
+  toMilestoneId,
   toMilestoneRowId,
   toMilestoneTypeId,
   toPersonAssignmentId,
@@ -13,6 +14,9 @@ import {
   toTeamFunctionId,
   toTeamTemplateId,
   type CatalogItemId,
+  type MilestoneDefinitionId,
+  type MilestoneId,
+  type MilestoneRowId,
   type ProjectId,
   type ScheduleVersionId,
 } from "./ids";
@@ -33,6 +37,7 @@ describe("opaque domain IDs", () => {
     ["ScheduleVersionId", toScheduleVersionId],
     ["ScheduleDraftId", toScheduleDraftId],
     ["MilestoneDefinitionId", toMilestoneDefinitionId],
+    ["MilestoneId", toMilestoneId],
     ["MilestoneRowId", toMilestoneRowId],
     ["StageGroupId", toStageGroupId],
     ["MilestoneTypeId", toMilestoneTypeId],
@@ -48,10 +53,15 @@ describe("opaque domain IDs", () => {
   it("keeps logically different ID types distinct", () => {
     const projectId = toProjectId("dev-project-002");
     const versionId = toScheduleVersionId("dev-version-002-v1");
+    const milestoneId = toMilestoneId("dev-project-003-milestone-c1-go");
 
     expectTypeOf(projectId).toEqualTypeOf<ProjectId>();
     expectTypeOf(versionId).toEqualTypeOf<ScheduleVersionId>();
     expectTypeOf(projectId).not.toEqualTypeOf<ScheduleVersionId>();
+    expectTypeOf(milestoneId).toEqualTypeOf<MilestoneId>();
+    expectTypeOf(milestoneId).not.toEqualTypeOf<MilestoneDefinitionId>();
+    expectTypeOf(milestoneId).not.toEqualTypeOf<MilestoneRowId>();
+    expect(milestoneId).toBe("dev-project-003-milestone-c1-go");
   });
 
   it("allows equal display names to refer to different catalog identities", () => {
