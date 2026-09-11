@@ -8,7 +8,6 @@ import {
   type ColumnWidths,
   type ProjectListColumnKey,
 } from "./dashboardColumns";
-import type { DashboardProject as LegacyDashboardProject } from "./projectMaster";
 import {
   createProject,
   updateProjectMaster,
@@ -24,6 +23,10 @@ import {
   selectDashboardProjectRows,
   type DashboardProjectRow,
 } from "./application/selectors/dashboardProjectRows";
+import {
+  selectCurrentPublishedSchedule,
+  type CurrentPublishedScheduleRead,
+} from "./application/selectors/scheduleSelectors";
 import { getProjectById } from "./application/selectors/projectSelectors";
 import {
   confirmCreateProjectAnyway,
@@ -57,44 +60,16 @@ import {
   type CatalogSelection,
   type ProjectMasterForm,
 } from "./projectMasterForm";
+import { OfficialScheduleView } from "./officialScheduleView";
 import {
   defaultTeamMemberFields,
   type TeamMembersState,
 } from "./teamMembers";
-import {
-  countScheduleWarnings,
-  hasScheduleWarning,
-  resolveScheduleWarning,
-  type ScheduleWarnings,
-} from "./scheduleWarnings";
-import {
-  emptyScheduleFilters,
-  filterScheduleRows,
-  isScheduleRowCompleteOrNotApplicable,
-  removeScheduleFilter,
-  scheduleFilterChips,
-  scheduleFilterOptions,
-  updateScheduleFilter,
-  type ScheduleFilterKey,
-  type ScheduleFilterState,
-} from "./scheduleFilters";
-import scheduleOutput from "./schedule-output_3108.json";
 import "./styles.css";
 
 type Page = "dashboard" | "workspace";
 
-type WorkspaceResource = "projectMaster";
-
-type ScheduleItem = {
-  id: string;
-  phase: string;
-  stage: string;
-  milestone: string;
-  plan: string;
-  actual: string;
-};
-
-type ScheduleKey = keyof ScheduleItem;
+export type WorkspaceResource = "projectMaster" | "schedule";
 
 type FilterKey = "year" | "productLine" | "size" | "cpu" | "customer";
 
@@ -118,32 +93,6 @@ const createDefaults: CreateProjectDefaults = {
   statusId: toCatalogItemId("status-rfq"),
   teamTemplate: devTeamTemplateV2,
 };
-
-const schedule: ScheduleItem[] = scheduleOutput.records.map((record, index) => ({
-  id: `schedule-row-${index + 1}`,
-  phase: record.section || "-",
-  stage: record.stage || "-",
-  milestone: record.milestone || "-",
-  plan: record.plan_content || "-",
-  actual: record.actual_content || "-",
-}));
-
-const scheduleColumns: ScheduleKey[] = ["phase", "stage", "milestone", "plan", "actual"];
-
-function exportScheduleToExcel() {
-  const rows = schedule.map((item) => ({
-    Phase: item.phase,
-    Stage: item.stage,
-    Milestone: item.milestone,
-    Plan: item.plan,
-    Actual: item.actual,
-  }));
-  const worksheet = XLSX.utils.json_to_sheet(rows);
-  const workbook = XLSX.utils.book_new();
-
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Current Schedule");
-  XLSX.writeFile(workbook, "ThinkBook_X14_Current_Schedule.xlsx");
-}
 
 function dashboardExportRow(project: DashboardProjectRow) {
   return {
@@ -197,6 +146,10 @@ export function App() {
   const dashboardRows = selectDashboardProjectRows(state);
   const selectedDashboardRow =
     selectedProjectId === null ? null : selectDashboardProjectRow(state, selectedProjectId);
+  const selectedScheduleRead =
+    selectedProjectId === null
+      ? null
+      : selectCurrentPublishedSchedule(state, selectedProjectId);
 
   React.useEffect(() => {
     if (selectedProjectId !== null && selectedCanonicalProject === null) {
@@ -338,7 +291,10 @@ export function App() {
         .map((project) => selectDashboardProjectRow(state, project.id))
         .filter((row): row is DashboardProjectRow => row !== null);
   const renderWorkspace =
-    page === "workspace" && selectedCanonicalProject !== null && selectedDashboardRow !== null;
+    page === "workspace" &&
+    selectedCanonicalProject !== null &&
+    selectedDashboardRow !== null &&
+    selectedScheduleRead !== null;
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-slate-100 text-slate-950">
@@ -355,8 +311,10 @@ export function App() {
           feedback={editFeedback}
           onBack={() => setPage("dashboard")}
           onEditProject={openEdit}
+          onOpenResource={setActiveResource}
           project={selectedCanonicalProject}
           row={selectedDashboardRow}
+          scheduleRead={selectedScheduleRead}
         />
       )}
       {isCreateProjectOpen && (
@@ -913,21 +871,27 @@ function ProjectInput({
   );
 }
 
-function ProjectWorkspace({
-  activeResource,
-  feedback,
-  onBack,
-  onEditProject,
-  project,
-  row,
-}: {
+export interface ProjectWorkspaceProps {
   readonly activeResource: WorkspaceResource;
   readonly feedback: readonly ValidationIssue[];
   readonly onBack: () => void;
   readonly onEditProject: () => void;
+  readonly onOpenResource: (resource: WorkspaceResource) => void;
   readonly project: Project;
   readonly row: DashboardProjectRow;
-}) {
+  readonly scheduleRead: CurrentPublishedScheduleRead;
+}
+
+export function ProjectWorkspace({
+  activeResource,
+  feedback,
+  onBack,
+  onEditProject,
+  onOpenResource,
+  project,
+  row,
+  scheduleRead,
+}: ProjectWorkspaceProps): React.ReactElement {
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5 px-6 py-6">
       <button className="w-fit text-sm text-slate-600 underline" onClick={onBack}>
@@ -1000,17 +964,19 @@ function ProjectWorkspace({
             <button
               aria-pressed={activeResource === "projectMaster"}
               className="mt-3 rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+              onClick={() => onOpenResource("projectMaster")}
               type="button"
             >
               Open Project Master
             </button>
           </div>
-          <div className="rounded-md border border-slate-300 p-4">
+          <div className={`rounded-md border p-4 ${activeResource === "schedule" ? "border-slate-900" : "border-slate-300"}`}>
             <div className="font-semibold">Schedule</div>
-            <div className="mt-2 text-sm text-slate-600">Migration pending</div>
+            <div className="mt-2 text-sm text-slate-600">Official read-only</div>
             <button
-              className="mt-3 rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-              disabled
+              aria-pressed={activeResource === "schedule"}
+              className="mt-3 rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+              onClick={() => onOpenResource("schedule")}
               type="button"
             >
               Open Schedule
@@ -1030,179 +996,15 @@ function ProjectWorkspace({
         </div>
       </section>
 
+      {activeResource === "schedule" && (
+        <OfficialScheduleView read={scheduleRead} />
+      )}
+
       {feedback.map((issue) => (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm" key={`${issue.code}-${issue.target.field ?? "section"}`}>
           {issue.message}
         </div>
       ))}
-    </div>
-  );
-}
-
-function ScheduleSection({ schedule, warnings }: { schedule: ScheduleItem[]; warnings: ScheduleWarnings }) {
-  const [filters, setFilters] = React.useState<ScheduleFilterState>(emptyScheduleFilters);
-  const filteredSchedule = filterScheduleRows(schedule, filters);
-
-  return (
-    <section className="overflow-hidden rounded-md border border-slate-200 bg-white">
-      <div className="p-4">
-        <h2 className="text-lg font-semibold">Current Schedule</h2>
-        <ScheduleFilters
-          filters={filters}
-          onClearAll={() => setFilters(emptyScheduleFilters)}
-          onRemoveFilter={(key) => setFilters((current) => removeScheduleFilter(current, key))}
-          onUpdateFilter={(key, value) => setFilters((current) => updateScheduleFilter(current, key, value))}
-          schedule={schedule}
-        />
-        <div className="mt-3 text-sm text-slate-600">
-          Showing {filteredSchedule.length} of {schedule.length} milestones
-        </div>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] border-t border-slate-200 text-left text-sm">
-          <thead className="bg-slate-50 text-slate-600">
-            <tr>
-              <th className="px-4 py-3 font-semibold">Phase</th>
-              <th className="px-4 py-3 font-semibold">Stage</th>
-              <th className="px-4 py-3 font-semibold">Milestone</th>
-              <th className="px-4 py-3 font-semibold">Plan</th>
-              <th className="px-4 py-3 font-semibold">Actual</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredSchedule.map((item) => (
-              <tr
-                key={item.id}
-                className={`border-t border-slate-200 ${isScheduleRowCompleteOrNotApplicable(item.actual) ? "text-slate-500" : ""}`}
-              >
-                {scheduleColumns.map((key) => (
-                  <td className={`px-4 py-3 ${key === "phase" ? "font-medium" : ""}`} key={`${item.id}-${key}`}>
-                    <span className="flex items-center gap-2">
-                      {hasScheduleWarning(warnings, item.id, key) && (
-                        <span aria-label="Warning" className="font-semibold text-amber-700">
-                          ⚠
-                        </span>
-                      )}
-                      <span>{item[key]}</span>
-                    </span>
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
-function ScheduleFilters({
-  filters,
-  onClearAll,
-  onRemoveFilter,
-  onUpdateFilter,
-  schedule,
-}: {
-  filters: ScheduleFilterState;
-  onClearAll: () => void;
-  onRemoveFilter: (key: ScheduleFilterKey | "planRange" | "actualRange") => void;
-  onUpdateFilter: <TKey extends ScheduleFilterKey>(key: TKey, value: ScheduleFilterState[TKey]) => void;
-  schedule: ScheduleItem[];
-}) {
-  const options = scheduleFilterOptions(schedule);
-  const chips = scheduleFilterChips(filters);
-
-  return (
-    <div className="mt-4 grid gap-3">
-      <div className="flex flex-wrap gap-3">
-        <label className="text-sm">
-          Phase
-          <select
-            className="mt-1 block w-40 rounded-md border border-slate-300 px-2 py-1.5"
-            onChange={(event) => onUpdateFilter("phase", event.target.value)}
-            value={filters.phase}
-          >
-            <option value="">All Phases</option>
-            {options.phase.map((phase) => (
-              <option key={phase}>{phase}</option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm">
-          Stage
-          <select
-            className="mt-1 block w-40 rounded-md border border-slate-300 px-2 py-1.5"
-            onChange={(event) => onUpdateFilter("stage", event.target.value)}
-            value={filters.stage}
-          >
-            <option value="">All Stages</option>
-            {options.stage.map((stage) => (
-              <option key={stage}>{stage}</option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm">
-          Milestone
-          <input
-            className="mt-1 block w-44 rounded-md border border-slate-300 px-2 py-1.5"
-            onChange={(event) => onUpdateFilter("milestone", event.target.value)}
-            placeholder="Search milestone"
-            value={filters.milestone}
-          />
-        </label>
-        <label className="text-sm">
-          Plan From
-          <input
-            className="mt-1 block w-40 rounded-md border border-slate-300 px-2 py-1.5"
-            onChange={(event) => onUpdateFilter("planFrom", event.target.value)}
-            type="date"
-            value={filters.planFrom}
-          />
-        </label>
-        <label className="text-sm">
-          Plan To
-          <input
-            className="mt-1 block w-40 rounded-md border border-slate-300 px-2 py-1.5"
-            onChange={(event) => onUpdateFilter("planTo", event.target.value)}
-            type="date"
-            value={filters.planTo}
-          />
-        </label>
-        <label className="text-sm">
-          Actual From
-          <input
-            className="mt-1 block w-40 rounded-md border border-slate-300 px-2 py-1.5"
-            onChange={(event) => onUpdateFilter("actualFrom", event.target.value)}
-            type="date"
-            value={filters.actualFrom}
-          />
-        </label>
-        <label className="text-sm">
-          Actual To
-          <input
-            className="mt-1 block w-40 rounded-md border border-slate-300 px-2 py-1.5"
-            onChange={(event) => onUpdateFilter("actualTo", event.target.value)}
-            type="date"
-            value={filters.actualTo}
-          />
-        </label>
-      </div>
-      {chips.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {chips.map((chip) => (
-            <button
-              className="rounded-full bg-slate-200 px-3 py-1 text-sm"
-              key={chip.key}
-              onClick={() => onRemoveFilter(chip.key)}
-            >
-              {chip.label}
-            </button>
-          ))}
-          <button className="rounded-full border border-slate-300 px-3 py-1 text-sm" onClick={onClearAll}>
-            Clear All
-          </button>
-        </div>
-      )}
     </div>
   );
 }
@@ -1340,261 +1142,6 @@ function TeamMembersSection({
         </table>
       </div>
     </section>
-  );
-}
-
-function WorkingDraft({
-  onCancelDraft,
-  onPublishComplete,
-  project,
-  schedule,
-  scheduleWarnings,
-  version,
-  versions,
-}: {
-  onCancelDraft: () => void;
-  onPublishComplete: (draftSchedule: ScheduleItem[], warnings: ScheduleWarnings) => void;
-  project: LegacyDashboardProject;
-  schedule: ScheduleItem[];
-  scheduleWarnings: ScheduleWarnings;
-  version: string;
-  versions: string[];
-}) {
-  const [draftSchedule, setDraftSchedule] = React.useState<ScheduleItem[]>(schedule);
-  const [draftWarnings, setDraftWarnings] = React.useState<ScheduleWarnings>(scheduleWarnings);
-  const [selectedCell, setSelectedCell] = React.useState<string | null>(null);
-  const [editingCell, setEditingCell] = React.useState<string | null>(null);
-  const [filters, setFilters] = React.useState<ScheduleFilterState>(emptyScheduleFilters);
-  const [isPublishOpen, setIsPublishOpen] = React.useState(false);
-  const warningCount = countScheduleWarnings(draftWarnings);
-  const canPublish = warningCount === 0;
-  const filteredDraftSchedule = filterScheduleRows(draftSchedule, filters);
-
-  const updateCell = (rowId: string, key: ScheduleKey, value: string) => {
-    setDraftSchedule((items) =>
-      items.map((item, index) =>
-        item.id === rowId
-          ? {
-              ...item,
-              [key]: value,
-            }
-          : item,
-      ),
-    );
-    setDraftWarnings((current) => resolveScheduleWarning(current, rowId, key, value));
-  };
-
-  const publish = () => {
-    if (!canPublish) {
-      return;
-    }
-
-    setIsPublishOpen(false);
-    onPublishComplete(draftSchedule, draftWarnings);
-  };
-
-  return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-5 px-6 py-6">
-      <section aria-label="Project Header" className="rounded-md border border-slate-200 bg-white p-4">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold">{project.name}</h1>
-            <div className="mt-3 grid gap-2 text-sm md:grid-cols-2">
-              <div>Customer: {project.customer}</div>
-              <div>PM: {project.pm || "Catherine"}</div>
-              <div>Target MP: {project.targetMp || "2026/06"}</div>
-              <div>Version: {version}</div>
-              <div>Working Draft: Yes</div>
-              <div>Need Attention: {project.needsAttention || "Yes"}</div>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button
-              className="rounded-md border border-slate-300 px-4 py-2 text-sm"
-              onClick={onCancelDraft}
-            >
-              Cancel
-            </button>
-            <button
-              className="rounded-md border border-slate-900 bg-slate-900 px-4 py-2 text-sm text-white disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-400"
-              disabled={!canPublish}
-              onClick={() => setIsPublishOpen(true)}
-            >
-              Publish
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section className="overflow-hidden rounded-md border border-slate-200 bg-white">
-        <div className="p-4">
-          <h2 className="text-lg font-semibold">Editable Schedule</h2>
-          <ScheduleFilters
-            filters={filters}
-            onClearAll={() => setFilters(emptyScheduleFilters)}
-            onRemoveFilter={(key) => setFilters((current) => removeScheduleFilter(current, key))}
-            onUpdateFilter={(key, value) => setFilters((current) => updateScheduleFilter(current, key, value))}
-            schedule={draftSchedule}
-          />
-          <div className="mt-3 text-sm text-slate-600">
-            Showing {filteredDraftSchedule.length} of {draftSchedule.length} milestones
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] border-t border-slate-200 text-left text-sm">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="px-4 py-3 font-semibold">Phase</th>
-                <th className="px-4 py-3 font-semibold">Stage</th>
-                <th className="px-4 py-3 font-semibold">Milestone</th>
-                <th className="px-4 py-3 font-semibold">Plan</th>
-                <th className="px-4 py-3 font-semibold">Actual</th>
-              </tr>
-          </thead>
-          <tbody>
-              {filteredDraftSchedule.map((item) => (
-                <tr
-                  key={item.id}
-                  className={`border-t border-slate-200 ${isScheduleRowCompleteOrNotApplicable(item.actual) ? "text-slate-500" : ""}`}
-                >
-                  {scheduleColumns.map((key) => (
-                    <EditableCell
-                      key={key}
-                      cellKey={`${item.id}-${key}`}
-                      isEditing={editingCell === `${item.id}-${key}`}
-                      isSelected={selectedCell === `${item.id}-${key}`}
-                      isWarning={hasScheduleWarning(draftWarnings, item.id, key)}
-                      value={item[key]}
-                      onChange={(value) => updateCell(item.id, key, value)}
-                      onEdit={() => setEditingCell(`${item.id}-${key}`)}
-                      onSelect={() => setSelectedCell(`${item.id}-${key}`)}
-                      onStopEdit={() => setEditingCell(null)}
-                    />
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="rounded-md border border-slate-200 bg-white p-4">
-        <h2 className="text-lg font-semibold">Publish Area</h2>
-        <div className="mt-3 text-sm">{canPublish ? "Ready to Publish" : "Resolve warnings before publishing"}</div>
-        <div className="mt-2 text-sm">Warnings: {warningCount}</div>
-        <button
-          className="mt-3 rounded-md border border-slate-900 bg-slate-900 px-4 py-2 text-sm text-white disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-400"
-          disabled={!canPublish}
-          onClick={() => setIsPublishOpen(true)}
-        >
-          Publish
-        </button>
-      </section>
-
-      {isPublishOpen && (
-        <PublishDialog
-          currentVersion={version}
-          newVersion={`v${versions.length + 1}`}
-          onCancel={() => setIsPublishOpen(false)}
-          onPublish={publish}
-        />
-      )}
-    </div>
-  );
-}
-
-function EditableCell({
-  cellKey,
-  isEditing,
-  isSelected,
-  isWarning,
-  onChange,
-  onEdit,
-  onSelect,
-  onStopEdit,
-  value,
-}: {
-  cellKey: string;
-  isEditing: boolean;
-  isSelected: boolean;
-  isWarning: boolean;
-  onChange: (value: string) => void;
-  onEdit: () => void;
-  onSelect: () => void;
-  onStopEdit: () => void;
-  value: string;
-}) {
-  return (
-    <td
-      className={`px-4 py-3 ${isSelected ? "outline outline-2 outline-slate-400" : ""}`}
-      data-cell={cellKey}
-      onClick={onSelect}
-      onDoubleClick={onEdit}
-    >
-      {isEditing ? (
-        <input
-          autoFocus
-          className="w-full rounded-sm border border-slate-400 px-2 py-1"
-          onBlur={onStopEdit}
-          onChange={(event) => onChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              onStopEdit();
-            }
-          }}
-          value={value}
-        />
-      ) : (
-        <span className="flex items-center gap-2">
-          {isWarning && (
-            <span aria-label="Warning" className="font-semibold text-amber-700">
-              ⚠
-            </span>
-          )}
-          <span>{value}</span>
-        </span>
-      )}
-    </td>
-  );
-}
-
-function PublishDialog({
-  currentVersion,
-  newVersion,
-  onCancel,
-  onPublish,
-}: {
-  currentVersion: string;
-  newVersion: string;
-  onCancel: () => void;
-  onPublish: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black/20 px-4">
-      <div className="w-full max-w-md rounded-md border border-slate-300 bg-white p-5">
-        <h2 className="text-lg font-semibold">Publish New Version</h2>
-        <p className="mt-3 text-sm">You are about to publish a new version.</p>
-        <div className="mt-4 grid gap-2 text-sm">
-          <div>Current Version: {currentVersion}</div>
-          <div>New Version: {newVersion}</div>
-          <label>
-            Version Note
-            <textarea className="mt-1 h-20 w-full rounded-md border border-slate-300 px-3 py-2" />
-          </label>
-        </div>
-        <div className="mt-5 flex justify-end gap-2">
-          <button className="rounded-md border border-slate-300 px-4 py-2 text-sm" onClick={onCancel}>
-            Cancel
-          </button>
-          <button
-            className="rounded-md border border-slate-900 bg-slate-900 px-4 py-2 text-sm text-white"
-            onClick={onPublish}
-          >
-            Publish
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
 

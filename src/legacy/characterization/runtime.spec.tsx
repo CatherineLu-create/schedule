@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import React from "react";
 import * as XLSX from "xlsx";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -6,9 +7,18 @@ import {
   type UpdateProjectMasterInput,
   type UpdateProjectMasterResult,
 } from "../../application/commands/projectCommands";
+import { selectDashboardProjectRow } from "../../application/selectors/dashboardProjectRows";
+import { selectCurrentPublishedSchedule } from "../../application/selectors/scheduleSelectors";
+import type { PrototypeState } from "../../application/state/prototypeState";
 import type { Project } from "../../domain/project/project";
+import type { ScheduleVersionNumber } from "../../domain/schedule/schedule";
 import { devProject003 } from "../../fixtures/v2/canonicalProjectFixtures";
-import { App } from "../../main";
+import { devSchedule003 } from "../../fixtures/v2/canonicalScheduleFixtures";
+import {
+  App,
+  ProjectWorkspace,
+  type WorkspaceResource,
+} from "../../main";
 
 vi.mock("../../application/commands/projectCommands", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../application/commands/projectCommands")>();
@@ -49,6 +59,13 @@ function openProjectByQci(qciModelName: string): void {
   fireEvent.click(row);
 }
 
+function openProjectByName(projectName: string): void {
+  const nameCell = within(dashboardTable()).getByText(projectName);
+  const row = nameCell.closest("tr");
+  if (row === null) throw new Error(`Missing Dashboard row for ${projectName}`);
+  fireEvent.click(row);
+}
+
 function openCreateDialog(): HTMLElement {
   fireEvent.click(screen.getByRole("button", { name: "Create Project" }));
   return screen.getByRole("dialog", { name: "Create Project" });
@@ -81,7 +98,47 @@ function projectHeader(): HTMLElement {
   return screen.getByRole("region", { name: "Project Header" });
 }
 
-describe("Task 2.1 canonical Project/Master runtime", () => {
+function MalformedScheduleWorkspaceHarness() {
+  const [activeResource, setActiveResource] =
+    React.useState<WorkspaceResource>("projectMaster");
+  const malformedState: PrototypeState = {
+    projects: [devProject003],
+    schedules: [
+      {
+        ...devSchedule003,
+        publishedVersions: [
+          {
+            ...devSchedule003.publishedVersions[0]!,
+            versionNumber: 0 as ScheduleVersionNumber,
+          },
+        ],
+      },
+    ],
+  };
+  const row = selectDashboardProjectRow(malformedState, devProject003.id);
+
+  if (row === null) {
+    throw new Error("Missing canonical Dashboard row for malformed Schedule harness");
+  }
+
+  return (
+    <ProjectWorkspace
+      activeResource={activeResource}
+      feedback={[]}
+      onBack={() => undefined}
+      onEditProject={() => undefined}
+      onOpenResource={setActiveResource}
+      project={devProject003}
+      row={row}
+      scheduleRead={selectCurrentPublishedSchedule(
+        malformedState,
+        devProject003.id,
+      )}
+    />
+  );
+}
+
+describe("Task 2.2 canonical Project/Master and Schedule runtime", () => {
   it("renders exactly five canonical Dashboard rows with preserved columns, search, and filters", () => {
     render(<App />);
 
@@ -109,7 +166,7 @@ describe("Task 2.1 canonical Project/Master runtime", () => {
     expect(within(dashboardTable()).getByText("DEV-QCI-ALPHA-02")).toBeInTheDocument();
   });
 
-  it("opens the selected canonical Project Master by ProjectId and gates Schedule and Team", () => {
+  it("opens canonical Current Published Schedule by ProjectId while keeping Team gated", () => {
     render(<App />);
     openProjectByQci("DEV-QCI-ALPHA-02");
 
@@ -117,15 +174,74 @@ describe("Task 2.1 canonical Project/Master runtime", () => {
     expect(within(projectHeader()).getByText("Project Name: DEV Project Alpha")).toBeInTheDocument();
     expect(within(projectHeader()).getByText("QCI Model Name: DEV-QCI-ALPHA-02")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open Project Master" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "Open Schedule" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Open Schedule" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Open Team" })).toBeDisabled();
-    expect(screen.getAllByText("Migration pending")).toHaveLength(2);
+    expect(screen.getByText("Official read-only")).toBeInTheDocument();
+    expect(screen.getAllByText("Migration pending")).toHaveLength(1);
 
     fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    expect(screen.getByRole("button", { name: "Open Schedule" })).toHaveAttribute("aria-pressed", "true");
+    const scheduleView = screen.getByRole("region", { name: "Schedule" });
+    expect(within(scheduleView).getByText("Published v03")).toBeInTheDocument();
+    expect(within(scheduleView).queryByText("Published v01")).not.toBeInTheDocument();
+    expect(within(scheduleView).getByText("C G/O")).toBeInTheDocument();
+    expect(within(scheduleView).getByText("C-SMT")).toBeInTheDocument();
+    expect(projectHeader()).toHaveAttribute("data-project-id", "dev-project-003");
+
     fireEvent.click(screen.getByRole("button", { name: "Open Team" }));
-    expect(screen.getByRole("button", { name: "Open Project Master" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.queryByRole("heading", { name: "Current Schedule" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open Schedule" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByRole("heading", { name: "Team Members" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to Dashboard" }));
+    openProjectByName("DEV Empty Project");
+
+    expect(projectHeader()).toHaveAttribute("data-project-id", "dev-project-001");
+    expect(screen.getByRole("button", { name: "Open Project Master" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("region", { name: "Schedule" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    const nextScheduleView = screen.getByRole("region", { name: "Schedule" });
+    expect(within(nextScheduleView).getByText("No published schedule")).toBeInTheDocument();
+    expect(within(nextScheduleView).queryByText("Published v03")).not.toBeInTheDocument();
+    expect(within(nextScheduleView).queryByText("C-SMT")).not.toBeInTheDocument();
+  });
+
+  it("shows the valid no-Published Schedule state", () => {
+    render(<App />);
+    openProjectByName("DEV Empty Project");
+
+    expect(screen.getByRole("button", { name: "Open Project Master" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+
+    const scheduleView = screen.getByRole("region", { name: "Schedule" });
+    expect(within(scheduleView).getByText("No published schedule")).toBeInTheDocument();
+    expect(within(scheduleView).queryByText(/^Published v/)).not.toBeInTheDocument();
+  });
+
+  it("shows a Published version with zero milestones distinctly", () => {
+    render(<App />);
+    openProjectByQci("DEV-QCI-DRAFT-04");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+
+    const scheduleView = screen.getByRole("region", { name: "Schedule" });
+    expect(within(scheduleView).getByText("Published v01")).toBeInTheDocument();
+    expect(within(scheduleView).getByText("No milestones")).toBeInTheDocument();
+    expect(within(scheduleView).queryByText("No published schedule")).not.toBeInTheDocument();
+  });
+
+  it("isolates malformed Schedule data from the canonical Project Master", () => {
+    render(<MalformedScheduleWorkspaceHarness />);
+
+    expect(projectHeader()).toHaveAttribute("data-project-id", "dev-project-003");
+    expect(within(projectHeader()).getByText("Project Name: DEV Project Alpha")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    expect(screen.getByText("Schedule data unavailable")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Project Master" }));
+    expect(screen.queryByText("Schedule data unavailable")).not.toBeInTheDocument();
+    expect(projectHeader()).toHaveAttribute("data-project-id", "dev-project-003");
+    expect(within(projectHeader()).getByText("Project Name: DEV Project Alpha")).toBeInTheDocument();
+    expect(within(projectHeader()).getByRole("button", { name: "Edit Project" })).toBeEnabled();
   });
 
   it("shows canonical-safe attention and exports all canonical rows despite active filters", () => {
@@ -186,6 +302,9 @@ describe("Task 2.1 canonical Project/Master runtime", () => {
     expect(within(projectHeader()).getByText("Customer: Acer")).toBeInTheDocument();
     expect(within(projectHeader()).getByText("RFQ")).toBeInTheDocument();
     expect(randomUuid).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    expect(screen.getByText("No published schedule")).toBeInTheDocument();
+    expect(projectHeader()).toHaveAttribute("data-project-id", fixedUuid);
     fireEvent.click(screen.getByRole("button", { name: "Back to Dashboard" }));
     expect(dashboardRows()).toHaveLength(6);
     expect(within(dashboardTable()).getByText("Runtime Created Project")).toBeInTheDocument();
@@ -236,6 +355,10 @@ describe("Task 2.1 canonical Project/Master runtime", () => {
     expect(projectHeader()).toHaveAttribute("data-project-id", fixedUuid);
     expect(within(projectHeader()).getByText("QCI Model Name: NEW-DUPLICATE-QCI")).toBeInTheDocument();
     expect(randomUuid).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    expect(screen.getByText("No published schedule")).toBeInTheDocument();
+    expect(screen.queryByText("Schedule data unavailable")).not.toBeInTheDocument();
+    expect(projectHeader()).toHaveAttribute("data-project-id", fixedUuid);
   });
 
   it("edits through the Master command, preserves hidden fields, and retains ProjectId", () => {
@@ -278,6 +401,9 @@ describe("Task 2.1 canonical Project/Master runtime", () => {
     ]));
     expect(projectHeader()).toHaveAttribute("data-project-id", "dev-project-003");
     expect(within(projectHeader()).getByText("Project Name: DEV Project Alpha Revised")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    expect(screen.getByText("Published v03")).toBeInTheDocument();
+    expect(projectHeader()).toHaveAttribute("data-project-id", "dev-project-003");
     fireEvent.click(screen.getByRole("button", { name: "Back to Dashboard" }));
     expect(within(dashboardTable()).getByText("DEV Project Alpha Revised")).toBeInTheDocument();
   });
