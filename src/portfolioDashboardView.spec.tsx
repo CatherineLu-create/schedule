@@ -21,12 +21,13 @@ function select(label: string, value: string) {
 }
 
 describe("Portfolio Dashboard shell", () => {
-  it("contains sticky table layers in the Dashboard stacking context below sibling dialogs", () => {
+  it("contains desktop-only sticky table layers in the Dashboard stacking context below sibling dialogs", () => {
     setup();
     const dashboard = screen.getByRole("region", { name: "Portfolio Dashboard" });
     const stickyHeader = dashboard.querySelector('th[data-column-key="projectStatus"]');
-    expect(stickyHeader).toHaveStyle({ position: "sticky", zIndex: "30" });
-    // Removing this boundary lets the table's z-index 30 outrank App's sibling dialog z-index 10.
+    expect(stickyHeader).toHaveClass("lg:sticky", "lg:z-30");
+    expect((stickyHeader as HTMLElement).style.position).toBe("");
+    // At desktop width, removing this boundary lets the table's z-index 30 outrank App's sibling dialog z-index 10.
     expect(getComputedStyle(dashboard).isolation).toBe("isolate");
   });
 

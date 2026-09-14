@@ -52,6 +52,55 @@ describe("PortfolioDashboardTable", () => {
     expect(screen.queryByRole("scrollbar")).not.toBeInTheDocument();
   });
 
+  // Mutation: restoring unconditional inline sticky positioning or dropping the approved 1024px CSS breakpoint.
+  it("keeps all four Project context columns sticky only from the desktop breakpoint", () => {
+    render(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
+    const stickyKeys = ["projectStatus", "year", "name", "qciProjectName"];
+
+    for (const key of stickyKeys) {
+      const header = screen.getByRole("columnheader", { name: new RegExp(`^${key === "projectStatus" ? "Status" : key === "year" ? "Year" : key === "name" ? "STN Project Name" : "QCI Model Name"}`) });
+      const cell = leaf(key);
+      expect(header).toHaveClass("lg:sticky");
+      expect(cell).toHaveClass("lg:sticky");
+      expect(header).toHaveClass("lg:left-[var(--portfolio-sticky-left)]", "lg:z-30");
+      expect(cell).toHaveClass("lg:left-[var(--portfolio-sticky-left)]", "lg:z-10");
+      expect(header.classList.contains("sticky")).toBe(false);
+      expect(cell.classList.contains("sticky")).toBe(false);
+      expect(header.style.position).toBe("");
+      expect(cell.style.position).toBe("");
+    }
+  });
+
+  // Mutation: leaving narrow viewports covered by fixed Project cells so native scrolling cannot reveal later domains.
+  it("leaves the native scroll path unobstructed below 1024px", () => {
+    const previousWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    render(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
+    const scrollOwner = screen.getByTestId("portfolio-table-scroll");
+    fireEvent.scroll(scrollOwner, { target: { scrollLeft: 1490 } });
+
+    expect(scrollOwner).toHaveProperty("scrollLeft", 1490);
+    for (const key of ["projectStatus", "year", "name", "qciProjectName"]) {
+      expect(leaf(key).style.position).not.toBe("sticky");
+    }
+    expect(leaf("schedule:c2-stage:c-g-o")).toBeInTheDocument();
+    expect(leaf("team:qciPm")).toBeInTheDocument();
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: previousWidth });
+  });
+
+  // Mutation: forcing long leaf labels onto one overflowing line or removing the full-label tooltip/accessibility text.
+  it("contains long Schedule labels within two lines while preserving the full label", () => {
+    render(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
+    const header = screen.getByRole("columnheader", { name: "Thermal module for C" });
+    const label = within(header).getByText("Thermal module for C");
+
+    expect(header).not.toHaveClass("whitespace-nowrap");
+    expect(label).toHaveClass("line-clamp-2", "whitespace-normal", "break-words");
+    expect(label).not.toHaveClass("block");
+    expect(label).toHaveAttribute("title", "Thermal module for C");
+    expect(header).toHaveAccessibleName("Thermal module for C");
+  });
+
   // Mutation: collapsing unavailable, valid empty history, or zero milestones to one empty state.
   it.each([
     [{ kind: "unavailable", issues: [] }, "Schedule data unavailable", "unavailable"],
@@ -170,22 +219,22 @@ describe("PortfolioDashboardTable", () => {
   // Mutation: using initial widths for sticky offsets or leaking resize listeners after mouseup/unmount.
   it("resizes with live sticky offsets, minimums, keyboard support and cleanup", () => {
     const { unmount } = render(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
-    expect(leaf("projectStatus")).toHaveStyle({ position: "sticky", left: "0px" });
-    expect(leaf("year")).toHaveStyle({ position: "sticky", left: "100px" });
-    expect(leaf("name")).toHaveStyle({ position: "sticky", left: "176px" });
-    expect(leaf("qciProjectName")).toHaveStyle({ position: "sticky", left: "391px" });
+    expect(leaf("projectStatus").style.getPropertyValue("--portfolio-sticky-left")).toBe("0px");
+    expect(leaf("year").style.getPropertyValue("--portfolio-sticky-left")).toBe("100px");
+    expect(leaf("name").style.getPropertyValue("--portfolio-sticky-left")).toBe("176px");
+    expect(leaf("qciProjectName").style.getPropertyValue("--portfolio-sticky-left")).toBe("391px");
     const handle = screen.getByRole("button", { name: "Resize Status column" });
     fireEvent.mouseDown(handle, { clientX: 50 });
     fireEvent.mouseMove(window, { clientX: 80 });
-    expect(leaf("year")).toHaveStyle({ left: "130px" });
+    expect(leaf("year").style.getPropertyValue("--portfolio-sticky-left")).toBe("130px");
     fireEvent.mouseUp(window);
     fireEvent.mouseMove(window, { clientX: 180 });
-    expect(leaf("year")).toHaveStyle({ left: "130px" });
+    expect(leaf("year").style.getPropertyValue("--portfolio-sticky-left")).toBe("130px");
     fireEvent.keyDown(handle, { key: "ArrowLeft" });
-    expect(leaf("year")).toHaveStyle({ left: "120px" });
+    expect(leaf("year").style.getPropertyValue("--portfolio-sticky-left")).toBe("120px");
     fireEvent.mouseDown(handle, { clientX: 50 });
     fireEvent.mouseMove(window, { clientX: -100 });
-    expect(leaf("year")).toHaveStyle({ left: "92px" });
+    expect(leaf("year").style.getPropertyValue("--portfolio-sticky-left")).toBe("92px");
     const removeListener = vi.spyOn(window, "removeEventListener");
     unmount();
     expect(removeListener).toHaveBeenCalledWith("mousemove", expect.any(Function));

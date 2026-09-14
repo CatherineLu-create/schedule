@@ -70,9 +70,12 @@ export function PortfolioDashboardTable({ rows, onOpenProject }: PortfolioDashbo
   const offsets = new Map<PortfolioColumnKey, number>();
   let offset = 0;
   for (const key of portfolioStickyColumnKeys) { offsets.set(key, offset); offset += widths[key]; }
-  const stickyStyle = (column: PortfolioColumn, header = false): React.CSSProperties | undefined => offsets.has(column.key)
-    ? { position: "sticky", left: offsets.get(column.key), zIndex: header ? 30 : 10 }
+  const stickyStyle = (column: PortfolioColumn): React.CSSProperties | undefined => offsets.has(column.key)
+    ? { "--portfolio-sticky-left": `${offsets.get(column.key)}px` } as React.CSSProperties
     : undefined;
+  const stickyClassName = (column: PortfolioColumn, header = false) => offsets.has(column.key)
+    ? `lg:sticky lg:left-[var(--portfolio-sticky-left)] ${header ? "lg:z-30" : "lg:z-10"}`
+    : "";
   const totalWidth = portfolioColumns.reduce((total, column) => total + widths[column.key], 0);
 
   return <div aria-label="Projects table scroll area" role="region" tabIndex={0} data-testid="portfolio-table-scroll" className="max-w-full overflow-x-auto border-y border-slate-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600">
@@ -83,9 +86,9 @@ export function PortfolioDashboardTable({ rows, onOpenProject }: PortfolioDashbo
           className={`h-9 border-b border-r border-slate-300 px-4 py-2 text-center text-xs font-bold tracking-[0.14em] ${group.key === "project" ? "bg-slate-200 text-slate-800" : group.key === "schedule" ? "bg-sky-100 text-sky-900" : "bg-violet-100 text-violet-900"}`}>{group.label}</th>)}</tr>
         <tr>{portfolioSubgroups.map((group) => <th key={group.key} scope="colgroup" colSpan={group.colSpan}
           className={`h-9 border-b border-r border-slate-200 px-3 py-2 text-center text-[11px] font-bold ${group.domain === "project" ? "bg-slate-100 text-slate-700" : group.domain === "schedule" ? "bg-sky-50 text-sky-800" : "bg-violet-50 text-violet-800"}`}>{group.label}</th>)}</tr>
-        <tr>{portfolioColumns.map((column, index) => <th key={column.key} scope="col" data-column-key={column.key} style={stickyStyle(column, true)}
-          className={`relative h-11 whitespace-nowrap border-b border-slate-300 px-4 py-3 ${offsets.has(column.key) ? "bg-slate-100 shadow-[2px_0_0_0_rgb(203_213_225)]" : "bg-white"} ${index > 0 && portfolioColumns[index - 1].domain !== column.domain ? "border-l-4 border-l-slate-300" : ""}`}>
-          <span>{column.label}</span>
+        <tr>{portfolioColumns.map((column, index) => <th key={column.key} scope="col" data-column-key={column.key} style={stickyStyle(column)}
+          className={`relative h-11 border-b border-slate-300 px-4 py-3 ${stickyClassName(column, true)} ${offsets.has(column.key) ? "bg-slate-100 shadow-[2px_0_0_0_rgb(203_213_225)]" : "bg-white"} ${index > 0 && portfolioColumns[index - 1].domain !== column.domain ? "border-l-4 border-l-slate-300" : ""}`}>
+          <span className="line-clamp-2 whitespace-normal break-words leading-tight" title={column.label}>{column.label}</span>
           <button type="button" aria-label={`Resize ${column.label} column`} title="Drag or use Left/Right arrow keys to resize"
             className="absolute right-0 top-0 h-full w-2 cursor-col-resize border-r border-slate-200 transition hover:bg-slate-200 focus-visible:bg-sky-200 focus-visible:outline-2 focus-visible:outline-sky-600"
             onClick={(event) => event.stopPropagation()}
@@ -106,7 +109,7 @@ export function PortfolioDashboardTable({ rows, onOpenProject }: PortfolioDashbo
             const value = column.domain === "project" ? projectValues[column.key as PortfolioProjectInfoColumnKey](row) : "—";
             return <td key={column.key} data-column-key={column.key} data-domain={column.domain} data-schedule-state={schedule?.state}
               title={schedule?.title ?? (column.domain === "team" ? "Migration pending" : undefined)} style={stickyStyle(column)}
-              className={`px-4 py-3.5 align-middle ${column.domain === "schedule" ? schedule?.tone : "whitespace-nowrap"} ${column.domain === "team" ? "text-slate-400" : ""} ${offsets.has(column.key) ? "bg-white shadow-[1px_0_0_0_rgb(241_245_249)] group-hover:bg-slate-50 group-focus-within:bg-sky-50" : ""} ${index > 0 && portfolioColumns[index - 1].domain !== column.domain ? "border-l-4 border-l-slate-200" : ""}`}>
+              className={`px-4 py-3.5 align-middle ${stickyClassName(column)} ${column.domain === "schedule" ? schedule?.tone : "whitespace-nowrap"} ${column.domain === "team" ? "text-slate-400" : ""} ${offsets.has(column.key) ? "bg-white shadow-[1px_0_0_0_rgb(241_245_249)] group-hover:bg-slate-50 group-focus-within:bg-sky-50" : ""} ${index > 0 && portfolioColumns[index - 1].domain !== column.domain ? "border-l-4 border-l-slate-200" : ""}`}>
               {mapping ? <ScheduleValue read={row.schedule} mapping={mapping} /> : column.key === "name"
                 ? <button type="button" aria-label={`Open Project ${display(value)}`} onClick={(event) => { event.stopPropagation(); onOpenProject(row.projectId); }} className="max-w-full truncate rounded text-left font-semibold text-slate-900 hover:text-sky-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600">{display(value)}</button>
                 : column.key === "projectStatus" ? <ProjectStatus value={value} />
