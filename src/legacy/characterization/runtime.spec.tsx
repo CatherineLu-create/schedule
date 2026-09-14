@@ -49,7 +49,13 @@ function dashboardTable(): HTMLTableElement {
 }
 
 function dashboardRows(): HTMLElement[] {
-  return within(dashboardTable()).getAllByRole("row").slice(1);
+  return Array.from(dashboardTable().querySelectorAll<HTMLElement>("tbody [data-project-id]"));
+}
+
+function dashboardRow(projectId: string): HTMLElement {
+  const row = dashboardRows().find((candidate) => candidate.dataset.projectId === projectId);
+  if (row === undefined) throw new Error(`Missing canonical Dashboard row for ${projectId}`);
+  return row;
 }
 
 function openProjectByQci(qciModelName: string): void {
@@ -138,19 +144,87 @@ function MalformedScheduleWorkspaceHarness() {
   );
 }
 
-describe("Task 2.2 canonical Project/Master and Schedule runtime", () => {
-  it("renders exactly five canonical Dashboard rows with preserved columns, search, and filters", () => {
+describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
+  it("integrates the canonical Portfolio shell, Current Published grouped table, search, and seven filters", () => {
     render(<App />);
 
-    expect(within(dashboardTable()).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
-      "Year", "Customer", "Product Line", "Project Name", "QCI Model Name", "Panel Size",
-      "CPU", "GPU", "Project Status", "Current Stage", "MDRR",
+    // Detects the obsolete inline Dashboard and invented attention calculations.
+    expect(screen.getByRole("heading", { name: "Project Information", level: 1 })).toBeInTheDocument();
+    expect(screen.getByText("Portfolio overview")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create Project" })).toHaveTextContent("+ Create Project");
+    expect(screen.getByRole("button", { name: "Export to Excel" })).toBeVisible();
+    const attention = screen.getByRole("region", { name: "Needs Attention" });
+    for (const [title, supporting] of [
+      ["Blocking Issues", "Calculation not active"],
+      ["Milestone Due", "Next 14 days · calculation not active"],
+      ["Overdue", "Past due · calculation not active"],
+    ]) {
+      const card = within(attention).getByRole("group", { name: title });
+      expect(within(card).getByText("—")).toBeVisible();
+      expect(within(card).getByText(supporting)).toBeVisible();
+      expect(within(card).queryByText(/^\d+$/)).not.toBeInTheDocument();
+    }
+    expect(screen.queryByText("No items requiring attention.")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Projects", level: 2 })).toBeInTheDocument();
+    expect(screen.getByText("Showing 5 of 5 projects")).toBeInTheDocument();
+
+    // Detects flat headers, wrong 11/35/7 structure, or a diagnostic status leaf.
+    const headerRows = dashboardTable().querySelectorAll("thead tr");
+    expect(headerRows).toHaveLength(3);
+    expect(Array.from(headerRows[0]!.querySelectorAll("th"), (header) => [header.textContent, header.colSpan])).toEqual([
+      ["PROJECT INFORMATION", 11], ["SCHEDULE", 35], ["TEAM", 7],
     ]);
+    expect(Array.from(headerRows[1]!.querySelectorAll("th"), (header) => header.textContent)).toEqual([
+      "Core fields", "Design", "ME Portion", "Thermal", "A1-stage", "A/A2-stage", "C1-stage", "C2-stage", "RAMP-stage", "MDRR", "Project Roles", "Standard Function Owners",
+    ]);
+    const leaves = Array.from(headerRows[2]!.querySelectorAll("th"));
+    expect(leaves.slice(0, 11).map((header) => header.querySelector("span")?.textContent)).toEqual([
+      "Status", "Year", "STN Project Name", "QCI Model Name", "Customer", "Category", "Product Line", "Panel Size", "CPU", "GPU", "PCB#",
+    ]);
+    expect(leaves.filter((header) => header.dataset.columnKey?.startsWith("schedule:"))).toHaveLength(35);
+    expect(leaves.filter((header) => header.dataset.columnKey?.startsWith("team:")).map((header) => header.querySelector("span")?.textContent)).toEqual([
+      "QCI PM", "QCI PjM", "Acer PM", "ME Owner", "EE Owner", "Thermal Owner", "BIOS Owner",
+    ]);
+    expect(leaves).toHaveLength(53);
+    expect(within(dashboardTable()).queryByRole("columnheader", { name: /Current Published|Schedule Status|Diagnostic/ })).not.toBeInTheDocument();
     expect(dashboardRows()).toHaveLength(5);
+    expect(dashboardRows().map((row) => row.dataset.projectId)).toEqual([
+      "dev-project-001", "dev-project-002", "dev-project-003", "dev-project-004", "dev-project-005",
+    ]);
     for (const name of ["DEV Empty Project", "DEV Project Alpha", "DEV Draft Review Project", "Signal_A"]) {
       expect(within(dashboardTable()).getAllByText(name).length).toBeGreaterThan(0);
     }
 
+    // Detects last-array v1 reads, collapsed empty states, and Team fixture leakage.
+    const c1Cell = dashboardRow("dev-project-003").querySelector('[data-column-key="schedule:c1-stage:c-g-o"]')!;
+    expect(c1Cell).toHaveAttribute("title", "Published v03 · C G/O");
+    expect(c1Cell).toHaveTextContent("P: 2026/10/05");
+    expect(c1Cell).not.toHaveTextContent("2026/09/30");
+    for (const [id, title] of [["dev-project-001", "No published schedule"], ["dev-project-004", "Published v01 · No milestones"]]) {
+      const cells = dashboardRow(id).querySelectorAll('[data-domain="schedule"]');
+      expect(cells).toHaveLength(35);
+      for (const cell of cells) { expect(cell).toHaveAttribute("title", title); expect(cell).toHaveTextContent(/^—$/); }
+    }
+    for (const row of dashboardRows()) {
+      const cells = row.querySelectorAll('[data-domain="team"]');
+      expect(cells).toHaveLength(7);
+      for (const cell of cells) { expect(cell).toHaveTextContent(/^—$/); expect(cell).toHaveAttribute("title", "Migration pending"); }
+    }
+    expect(screen.queryByText("DEV Project 003 QCI PM")).not.toBeInTheDocument();
+
+    // Detects missing canonical predicates or accidentally enabled unsupported fields.
+    const filterPanel = screen.getByRole("region", { name: "Search / Filters" });
+    const labels = ["Year", "Customer", "Status", "Category", "Product Line", "Panel Size", "CPU", "GPU", "QCI PM"];
+    const controls = within(filterPanel).getAllByRole("combobox");
+    expect(controls).toHaveLength(9);
+    labels.forEach((label, index) => {
+      expect(controls[index]).toHaveAccessibleName(label);
+      if (label === "Category" || label === "QCI PM") {
+        expect(controls[index]).toBeDisabled();
+        expect(controls[index]).toHaveAccessibleDescription(/Not available in V2.2|Migration pending/);
+        expect(within(controls[index]).getAllByRole("option")).toHaveLength(1);
+      } else expect(controls[index]).toBeEnabled();
+    });
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "DEV-QCI-DRAFT-04" } });
     expect(dashboardRows()).toHaveLength(1);
     expect(within(dashboardTable()).getByText("DEV Draft Review Project")).toBeInTheDocument();
@@ -164,6 +238,21 @@ describe("Task 2.2 canonical Project/Master and Schedule runtime", () => {
     expect(dashboardRows()).toHaveLength(2);
     expect(within(dashboardTable()).getByText("DEV-QCI-ALPHA-01")).toBeInTheDocument();
     expect(within(dashboardTable()).getByText("DEV-QCI-ALPHA-02")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Status"), { target: { value: "Pending" } });
+    expect(dashboardRows().map((row) => row.dataset.projectId)).toEqual(["dev-project-003"]);
+    fireEvent.change(screen.getByLabelText("Status"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("GPU"), { target: { value: "DEV GPU Alpha" } });
+    expect(dashboardRows().map((row) => row.dataset.projectId)).toEqual(["dev-project-002"]);
+    fireEvent.change(screen.getByLabelText("Customer"), { target: { value: "DEV Customer B" } });
+    expect(dashboardRows()).toHaveLength(0);
+    expect(screen.getByText("Showing 0 of 5 projects")).toBeInTheDocument();
+    expect(screen.getByText("No projects match the current search and filters")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
+    expect(dashboardRows()).toHaveLength(5);
+    // Detects name-based selection of the other identically named Project.
+    fireEvent.click(within(dashboardRow("dev-project-003")).getByRole("button", { name: "Open Project DEV Project Alpha" }));
+    expect(projectHeader()).toHaveAttribute("data-project-id", "dev-project-003");
+    expect(screen.getByRole("button", { name: "Open Project Master" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("opens canonical Current Published Schedule by ProjectId while keeping Team gated", () => {
@@ -246,7 +335,7 @@ describe("Task 2.2 canonical Project/Master and Schedule runtime", () => {
 
   it("shows canonical-safe attention and exports all canonical rows despite active filters", () => {
     render(<App />);
-    expect(screen.getByText("No items requiring attention.")).toBeInTheDocument();
+    expect(screen.queryByText("No items requiring attention.")).not.toBeInTheDocument();
     for (const legacyName of [
       "Valour_ARX", "Macan S_ARX", "Mufasa_FRX", "Sportswagon_PNH", "GLS_Ni", "Sorento_PTZ",
     ]) {
@@ -263,6 +352,10 @@ describe("Task 2.2 canonical Project/Master and Schedule runtime", () => {
       "DEV Empty Project", "DEV Project Alpha", "DEV Project Alpha", "DEV Draft Review Project", "Signal_A",
     ]);
     expect(exportedRows.every((row) => row["Current Stage"] === "-" && row.MDRR === "-")).toBe(true);
+    // Detects widening the export to Schedule/Team or dropping reviewed Master fields.
+    for (const row of exportedRows) expect(Object.keys(row)).toEqual([
+      "Year", "Customer", "Product Line", "Project Name", "QCI Model Name", "Acer Model Name", "Acer Marketing Name", "Panel Size", "CPU", "GPU", "SSID", "RMN", "Project Status", "Current Stage", "MDRR",
+    ]);
   });
 
   it("rejects missing Create fields without adding a Project", () => {

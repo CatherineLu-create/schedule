@@ -1,13 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import * as XLSX from "xlsx";
-import {
-  defaultProjectListColumnWidths,
-  projectListColumns,
-  resizeColumnWidth,
-  type ColumnWidths,
-  type ProjectListColumnKey,
-} from "./dashboardColumns";
+import { PortfolioDashboardView } from "./portfolioDashboardView";
+import { selectPortfolioDashboardRows } from "./application/selectors/portfolioDashboardRows";
 import {
   createProject,
   updateProjectMaster,
@@ -70,10 +65,6 @@ import "./styles.css";
 type Page = "dashboard" | "workspace";
 
 export type WorkspaceResource = "projectMaster" | "schedule";
-
-type FilterKey = "year" | "productLine" | "size" | "cpu" | "customer";
-
-type DashboardFilters = Record<FilterKey, string>;
 
 interface PendingDuplicateCreate {
   readonly input: CreateProjectInput;
@@ -144,6 +135,7 @@ export function App() {
   const selectedCanonicalProject =
     selectedProjectId === null ? null : getProjectById(state, selectedProjectId);
   const dashboardRows = selectDashboardProjectRows(state);
+  const portfolioDashboardRows = selectPortfolioDashboardRows(state);
   const selectedDashboardRow =
     selectedProjectId === null ? null : selectDashboardProjectRow(state, selectedProjectId);
   const selectedScheduleRead =
@@ -299,10 +291,11 @@ export function App() {
   return (
     <main className="min-h-screen overflow-x-hidden bg-slate-100 text-slate-950">
       {!renderWorkspace && (
-        <Dashboard
+        <PortfolioDashboardView
           onCreateProject={openCreate}
+          onExport={() => exportDashboardProjectListToExcel(dashboardRows)}
           onOpenProject={openProject}
-          projects={dashboardRows}
+          rows={portfolioDashboardRows}
         />
       )}
       {renderWorkspace && (
@@ -371,322 +364,6 @@ export function App() {
   );
 }
 
-function projectListCellValue(project: DashboardProjectRow, key: ProjectListColumnKey) {
-  const values: Record<ProjectListColumnKey, React.ReactNode> = {
-    year: project.year,
-    customer: project.customer,
-    productLine: project.productLine,
-    name: <span className="font-medium">{project.projectName}</span>,
-    qciProjectName: project.qciModelName,
-    size: project.panelSize,
-    cpu: project.cpu,
-    gpu: project.gpu,
-    projectStatus: <StatusBadge status={project.projectStatus} />,
-    currentStage: project.currentStage,
-    mdrr: project.mdrr,
-  };
-
-  return values[key];
-}
-
-function Dashboard({
-  onCreateProject,
-  onOpenProject,
-  projects,
-}: {
-  onCreateProject: () => void;
-  onOpenProject: (projectId: ProjectId) => void;
-  projects: readonly DashboardProjectRow[];
-}) {
-  const [searchTerm, setSearchTerm] = React.useState("");
-  const [filters, setFilters] = React.useState<DashboardFilters>({
-    year: "",
-    productLine: "",
-    size: "",
-    cpu: "",
-    customer: "",
-  });
-  const [columnWidths, setColumnWidths] = React.useState<ColumnWidths>(defaultProjectListColumnWidths);
-  const [resizingColumn, setResizingColumn] = React.useState<{
-    key: ProjectListColumnKey;
-    minWidth: number;
-    startX: number;
-    startWidth: number;
-  } | null>(null);
-  const normalizedSearch = searchTerm.trim().toLowerCase();
-  const filteredProjects = projects.filter(
-    (item) => {
-      const matchesSearch =
-        !normalizedSearch ||
-        [
-          item.projectName,
-          item.qciModelName,
-          item.productLine,
-          item.customer,
-          item.cpu,
-          item.gpu,
-        ].some((value) => value.toLowerCase().includes(normalizedSearch));
-
-      return matchesSearch &&
-      (!filters.year || item.year === filters.year) &&
-      (!filters.productLine || item.productLine === filters.productLine) &&
-      (!filters.size || item.panelSize === filters.size) &&
-      (!filters.cpu || item.cpu === filters.cpu) &&
-      (!filters.customer || item.customer === filters.customer);
-    },
-  );
-  const filterOptions = {
-    year: Array.from(new Set(projects.map((item) => item.year).filter(Boolean))),
-    productLine: Array.from(new Set(projects.map((item) => item.productLine).filter(Boolean))),
-    size: Array.from(new Set(projects.map((item) => item.panelSize).filter(Boolean))),
-    cpu: Array.from(new Set(projects.map((item) => item.cpu).filter(Boolean))),
-    customer: Array.from(new Set(projects.map((item) => item.customer).filter(Boolean))),
-  };
-  const activeFilters = [
-    { key: "year", label: filters.year },
-    { key: "productLine", label: filters.productLine },
-    { key: "size", label: filters.size },
-    { key: "cpu", label: filters.cpu },
-    { key: "customer", label: filters.customer },
-  ].filter((item): item is { key: FilterKey; label: string } => Boolean(item.label));
-
-  const updateFilter = (key: FilterKey, value: string) => {
-    setFilters((current) => ({
-      ...current,
-      [key]: value,
-    }));
-  };
-  const clearFilter = (key: FilterKey) => {
-    updateFilter(key, "");
-  };
-  const clearAllFilters = () => {
-    setFilters({
-      year: "",
-      productLine: "",
-      size: "",
-      cpu: "",
-      customer: "",
-    });
-  };
-  const totalTableWidth = projectListColumns.reduce((total, column) => total + columnWidths[column.key], 0);
-
-  React.useEffect(() => {
-    if (!resizingColumn) {
-      return undefined;
-    }
-
-    const handleMouseMove = (event: MouseEvent) => {
-      const deltaX = event.clientX - resizingColumn.startX;
-
-      setColumnWidths((current) => ({
-        ...current,
-        [resizingColumn.key]: resizeColumnWidth(
-          resizingColumn.startWidth,
-          deltaX,
-          resizingColumn.minWidth,
-        ),
-      }));
-    };
-    const handleMouseUp = () => {
-      setResizingColumn(null);
-    };
-
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
-
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [resizingColumn]);
-
-  return (
-    <div className="mx-auto flex w-full max-w-none flex-col gap-5 px-6 py-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Project Information</h1>
-          <div className="mt-1 text-sm font-normal text-slate-500">Dashboard</div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm"
-            onClick={() => exportDashboardProjectListToExcel(projects)}
-          >
-            Export to Excel
-          </button>
-          <button
-            className="rounded-md border border-slate-900 bg-slate-900 px-4 py-2 text-sm text-white"
-            onClick={onCreateProject}
-          >
-            Create Project
-          </button>
-        </div>
-      </header>
-
-      <section className="rounded-md border border-amber-200 bg-amber-50 p-4">
-        <h2 className="text-lg font-semibold">Needs Attention</h2>
-        <div className="mt-3 text-sm text-slate-600">No items requiring attention.</div>
-      </section>
-
-      <section className="rounded-md border border-slate-200 bg-white p-4">
-        <h2 className="text-lg font-semibold">Search Project</h2>
-        <input
-          className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          placeholder="Search by project name or customer"
-          type="search"
-          onChange={(event) => setSearchTerm(event.target.value)}
-          value={searchTerm}
-        />
-      </section>
-
-      <section className="rounded-md border border-slate-200 bg-white p-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-lg font-semibold">Filters</h2>
-          {activeFilters.map((item) => (
-            <button
-              className="rounded-full bg-slate-200 px-3 py-1 text-sm"
-              key={item.key}
-              onClick={() => clearFilter(item.key)}
-            >
-              {item.label}
-            </button>
-          ))}
-          {activeFilters.length > 0 && (
-            <button className="rounded-full border border-slate-300 px-3 py-1 text-sm" onClick={clearAllFilters}>
-              Clear All
-            </button>
-          )}
-        </div>
-        <div className="mt-3 grid gap-3 md:grid-cols-5">
-          <label className="text-sm font-medium">
-            Year
-            <select
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 font-normal"
-              onChange={(event) => updateFilter("year", event.target.value)}
-              value={filters.year}
-            >
-              <option value="">All Years</option>
-              {filterOptions.year.map((year) => (
-                <option key={year}>{year}</option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm font-medium">
-            Product Line
-            <select
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 font-normal"
-              onChange={(event) => updateFilter("productLine", event.target.value)}
-              value={filters.productLine}
-            >
-              <option value="">All Product Lines</option>
-              {filterOptions.productLine.map((productLine) => (
-                <option key={productLine}>{productLine}</option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm font-medium">
-            Panel Size
-            <select
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 font-normal"
-              onChange={(event) => updateFilter("size", event.target.value)}
-              value={filters.size}
-            >
-              <option value="">All Panel Sizes</option>
-              {filterOptions.size.map((size) => (
-                <option key={size}>{size}</option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm font-medium">
-            CPU
-            <select
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 font-normal"
-              onChange={(event) => updateFilter("cpu", event.target.value)}
-              value={filters.cpu}
-            >
-              <option value="">All CPUs</option>
-              {filterOptions.cpu.map((cpu) => (
-                <option key={cpu}>{cpu}</option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm font-medium">
-            Customer
-            <select
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 font-normal"
-              onChange={(event) => updateFilter("customer", event.target.value)}
-              value={filters.customer}
-            >
-              <option value="">All Customers</option>
-              {filterOptions.customer.map((customer) => (
-                <option key={customer}>{customer}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </section>
-
-      <section className="overflow-hidden rounded-md border border-slate-200 bg-white">
-        <div className="p-4">
-          <h2 className="text-lg font-semibold">Project List</h2>
-        </div>
-        <div className="max-w-full overflow-x-auto">
-          <table
-            className="border-t border-slate-200 text-left text-sm"
-            style={{ tableLayout: "fixed", width: `${totalTableWidth}px` }}
-          >
-            <colgroup>
-              {projectListColumns.map((column) => (
-                <col key={column.key} style={{ width: `${columnWidths[column.key]}px` }} />
-              ))}
-            </colgroup>
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                {projectListColumns.map((column) => (
-                  <th className="relative px-4 py-3 font-semibold" key={column.key}>
-                    <span>{column.label}</span>
-                    <button
-                      aria-label={`Resize ${column.label} column`}
-                      className="absolute right-0 top-0 h-full w-2 cursor-col-resize border-r border-slate-300 hover:bg-slate-200"
-                      onClick={(event) => event.stopPropagation()}
-                      onMouseDown={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        setResizingColumn({
-                          key: column.key,
-                          minWidth: column.minWidth,
-                          startX: event.clientX,
-                          startWidth: columnWidths[column.key],
-                        });
-                      }}
-                      type="button"
-                    />
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredProjects.map((item) => (
-                <tr
-                  className="cursor-pointer border-t border-slate-200 hover:bg-slate-50"
-                  key={item.projectId}
-                  onClick={() => onOpenProject(item.projectId)}
-                >
-                  {projectListColumns.map((column) => (
-                    <td className="px-4 py-3 align-top" key={`${item.projectId}-${column.key}`}>
-                      {projectListCellValue(item, column.key)}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-    </div>
-  );
-}
 
 function ProjectDialog({
   fieldErrors,
