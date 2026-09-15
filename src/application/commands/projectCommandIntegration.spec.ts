@@ -103,7 +103,7 @@ describe("canonical Project command integration", () => {
   it("leaves both collections unchanged for duplicate review-required Create", () => {
     const result = createProject(
       {
-        ...createInput("integration-duplicate", "DEV Project Alpha"),
+        ...createInput("integration-duplicate", "Nautilus"),
         master: {
           ...devProject002.master,
           basicInformation: {
@@ -124,7 +124,7 @@ describe("canonical Project command integration", () => {
       ...devProject001.master,
       basicInformation: {
         ...devProject001.master.basicInformation,
-        stnProjectName: "DEV Empty Project Renamed",
+        stnProjectName: "Manta Renamed",
       },
     };
     const updated = updateProjectMaster(devProject001, {
@@ -144,15 +144,29 @@ describe("canonical Project command integration", () => {
     );
   });
 
-  it("keeps duplicate business names separated by immutable ProjectId", () => {
+  it("keeps locally duplicated business names separated by immutable ProjectId", () => {
+    const duplicateNameProject = {
+      ...devProject003,
+      master: {
+        ...devProject003.master,
+        basicInformation: {
+          ...devProject003.master.basicInformation,
+          stnProjectName: devProject002.master.basicInformation.stnProjectName,
+        },
+      },
+    };
+    const localState = {
+      projects: [devProject002, duplicateNameProject],
+      schedules: canonicalScheduleFixtures.slice(1, 3),
+    };
     expect(devProject002.id).not.toBe(devProject003.id);
     expect(devProject002.master.basicInformation.stnProjectName).toBe(
-      devProject003.master.basicInformation.stnProjectName,
+      duplicateNameProject.master.basicInformation.stnProjectName,
     );
-    expect(selectOfficialProjectSources(canonicalState, devProject002.id)?.projectId).toBe(
+    expect(selectOfficialProjectSources(localState, devProject002.id)?.projectId).toBe(
       devProject002.id,
     );
-    expect(selectOfficialProjectSources(canonicalState, devProject003.id)?.projectId).toBe(
+    expect(selectOfficialProjectSources(localState, devProject003.id)?.projectId).toBe(
       devProject003.id,
     );
   });

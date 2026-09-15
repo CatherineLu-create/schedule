@@ -29,27 +29,71 @@ function leaf(key: string) { return renderedRow().querySelector<HTMLTableCellEle
 
 describe("PortfolioDashboardTable", () => {
   // Mutation: rendering the rejected flat Project-only table or a diagnostic column.
-  it("renders three semantic header levels and all 53 ordered leaves inside one scroll region", () => {
+  it("renders the data-driven grouped schema without unused A2 or legacy Team terminology", () => {
     render(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
     const table = screen.getByRole("table", { name: "Projects" });
     const headerRows = table.querySelectorAll("thead tr");
     expect(headerRows).toHaveLength(3);
     expect([...headerRows[0].children].map((header) => [header.textContent, header.getAttribute("colspan")])).toEqual([
-      ["PROJECT INFORMATION", "11"], ["SCHEDULE", "35"], ["TEAM", "7"],
+      ["PROJECT INFORMATION", "11"], ["SCHEDULE", "31"], ["TEAM MEMBER", "7"],
     ]);
     expect([...headerRows[1].children].map((header) => header.textContent)).toEqual([
-      "Core fields", "Design", "ME Portion", "Thermal", "A1-stage", "A/A2-stage", "C1-stage", "C2-stage", "RAMP-stage", "MDRR", "Project Roles", "Standard Function Owners",
+      "Core fields", "Design", "ME Portion", "Thermal", "A", "C1-stage", "C2-stage", "RAMP-stage", "MDRR", "Project Roles", "Standard Function Owners",
     ]);
     const headers = [...headerRows[2].querySelectorAll("th")];
-    expect(headers).toHaveLength(53);
+    expect(headers).toHaveLength(49);
     expect(headers.slice(0, 11).map((header) => header.textContent)).toEqual(["Status", "Year", "STN Project Name", "QCI Model Name", "Customer", "Category", "Product Line", "Panel Size", "CPU", "GPU", "PCB#"]);
-    expect(headers.filter((header) => header.dataset.columnKey?.startsWith("schedule:"))).toHaveLength(35);
+    expect(headers.filter((header) => header.dataset.columnKey?.startsWith("schedule:"))).toHaveLength(31);
+    expect(headers.some((header) => header.dataset.columnKey?.startsWith("schedule:a-a2-stage:"))).toBe(false);
+    expect(screen.queryByRole("columnheader", { name: "A1-stage" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "A/A2-stage" })).not.toBeInTheDocument();
     expect(headers.slice(-7).map((header) => header.textContent)).toEqual(["QCI PM", "QCI PjM", "Acer PM", "ME Owner", "EE Owner", "Thermal Owner", "BIOS Owner"]);
     expect([...table.querySelectorAll("thead th")].every((header) => ["colgroup", "col"].includes(header.getAttribute("scope") ?? ""))).toBe(true);
     expect(screen.queryByText(/Current Published|Schedule Status|Diagnostic/)).not.toBeInTheDocument();
     expect(screen.getAllByTestId("portfolio-table-scroll")).toHaveLength(1);
     expect(screen.getByRole("region", { name: "Projects table scroll area" })).toContainElement(table);
     expect(screen.queryByRole("scrollbar")).not.toBeInTheDocument();
+  });
+
+  // Mutation: showing A2 permanently, hiding an applicable A2 with null dates, or matching by display text.
+  it("shows the stable-ID A2 group only when a Current Published A2 occurrence is applicable", () => {
+    const a2DefinitionId = toMilestoneDefinitionId("milestone-a-a2-a-g-o");
+    const applicable: PortfolioCurrentPublishedRead = {
+      kind: "published",
+      versionLabel: "Published v01",
+      milestoneCount: 1,
+      cells: [{
+        milestoneDefinitionId: a2DefinitionId,
+        occurrences: [{
+          milestoneId: toMilestoneId("applicable-a2-with-null-dates"),
+          applicability: "applicable",
+          plan: "-",
+          actual: "-",
+        }],
+      }],
+    };
+    const notApplicable: PortfolioCurrentPublishedRead = {
+      ...applicable,
+      cells: [{
+        milestoneDefinitionId: a2DefinitionId,
+        occurrences: [{
+          milestoneId: toMilestoneId("not-applicable-a2"),
+          applicability: "notApplicable",
+          plan: "2027/01/01",
+          actual: "2027/01/02",
+        }],
+      }],
+    };
+    const { rerender } = render(<PortfolioDashboardTable rows={[rowWith(notApplicable)]} onOpenProject={() => {}} />);
+
+    expect(screen.queryByRole("columnheader", { name: "A2" })).not.toBeInTheDocument();
+    expect(scheduleCells()).toHaveLength(31);
+
+    rerender(<PortfolioDashboardTable rows={[rowWith(applicable)]} onOpenProject={() => {}} />);
+    expect(screen.getByRole("columnheader", { name: "A2" })).toHaveAttribute("colspan", "4");
+    expect(scheduleCells()).toHaveLength(35);
+    expect(leaf("schedule:a-a2-stage:a-g-o")).toHaveTextContent("Applicable");
+    expect(leaf("schedule:a-a2-stage:a-g-o")).toHaveTextContent("P: —");
   });
 
   // Mutation: restoring unconditional inline sticky positioning or dropping the approved 1024px CSS breakpoint.
@@ -108,7 +152,7 @@ describe("PortfolioDashboardTable", () => {
     [{ kind: "published", versionLabel: "Published v03", milestoneCount: 0, cells: [] }, "Published v03 · No milestones", "publishedEmpty"],
   ] as const)("preserves existing-cell accessibility for %s", (schedule, description, state) => {
     render(<PortfolioDashboardTable rows={[rowWith(schedule)]} onOpenProject={() => {}} />);
-    expect(scheduleCells()).toHaveLength(35);
+    expect(scheduleCells()).toHaveLength(31);
     for (const cell of scheduleCells()) {
       expect(cell).toHaveTextContent(/^—$/);
       expect(cell).toHaveAccessibleDescription(description);
@@ -129,7 +173,7 @@ describe("PortfolioDashboardTable", () => {
       rerender(<PortfolioDashboardTable rows={[rowWith(read)]} onOpenProject={() => {}} />);
       // Compare only the applied color treatment, without prescribing a particular palette or all layout classes.
       const cellTones = scheduleCells().map((cell) => [...cell.classList].filter((token) => /^(bg|text)-/.test(token)).sort().join(" "));
-      expect(cellTones).toHaveLength(35);
+      expect(cellTones).toHaveLength(31);
       expect(new Set(cellTones).size).toBe(1);
       expect(cellTones[0]).not.toBe("");
       return cellTones[0];
@@ -195,7 +239,8 @@ describe("PortfolioDashboardTable", () => {
     const teamCells = [...renderedRow().querySelectorAll('td[data-domain="team"]')];
     expect(teamCells).toHaveLength(7);
     for (const cell of teamCells) expect(cell).toHaveTextContent(/^—$/);
-    expect(screen.getByRole("columnheader", { name: "TEAM" })).toHaveAccessibleDescription("Migration pending");
+    expect(screen.getByRole("columnheader", { name: "TEAM MEMBER" })).toHaveAccessibleDescription("Migration pending");
+    expect(screen.queryByRole("button", { name: /Import Team Member/ })).not.toBeInTheDocument();
   });
 
   // Mutation: passing a display name/whole object, or letting the button bubble a duplicate open.
@@ -243,8 +288,8 @@ describe("PortfolioDashboardTable", () => {
   });
 
   // Mutation: removing the table schema or showing a misleading blank when filters return no rows.
-  it("renders an explicit empty result across all 53 columns", () => {
+  it("renders an explicit empty result across the currently visible 49 columns", () => {
     render(<PortfolioDashboardTable rows={[]} onOpenProject={() => {}} />);
-    expect(screen.getByText("No projects match the current search and filters")).toHaveAttribute("colspan", "53");
+    expect(screen.getByText("No projects match the current search and filters")).toHaveAttribute("colspan", "49");
   });
 });

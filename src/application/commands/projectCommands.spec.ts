@@ -393,7 +393,7 @@ describe("Create Project command", () => {
 						year: devProject003.master.basicInformation.year,
 						productLine:
 							devProject003.master.basicInformation.productLine,
-						stnProjectName: "  dev   PROJECT alpha ",
+						stnProjectName: "  NAUTILUS ",
 					},
 				},
 			}),
@@ -416,6 +416,18 @@ describe("Create Project command", () => {
 	});
 
 	it("returns every ProjectId matching a duplicate business identity", () => {
+		const duplicateProject003 = {
+			...devProject003,
+			master: {
+				...devProject003.master,
+				basicInformation: {
+					...devProject003.master.basicInformation,
+					year: devProject002.master.basicInformation.year,
+					productLine: devProject002.master.basicInformation.productLine,
+					stnProjectName: devProject002.master.basicInformation.stnProjectName,
+				},
+			},
+		};
 		const result = createProject(
 			validInput({
 				projectId: toProjectId("create-project-multiple-business-matches"),
@@ -433,7 +445,7 @@ describe("Create Project command", () => {
 			}),
 			{
 				...context,
-				existingProjects: [devProject002, devProject003],
+				existingProjects: [devProject002, duplicateProject003],
 			},
 		);
 
@@ -472,7 +484,7 @@ describe("Create Project command", () => {
 						productLine:
 							devProject003.master.basicInformation.productLine,
 						stnProjectName:
-							devProject003.master.basicInformation.stnProjectName,
+							devProject002.master.basicInformation.stnProjectName,
 					},
 				},
 			}),
@@ -496,7 +508,17 @@ describe("Create Project command", () => {
 	});
 
 	it("keeps underscore, dash, and punctuation significant for duplicate matching", () => {
-		const base = devProject005.master.basicInformation;
+		const punctuationProject = {
+			...devProject005,
+			master: {
+				...devProject005.master,
+				basicInformation: {
+					...devProject005.master.basicInformation,
+					stnProjectName: "Signal_A",
+				},
+			},
+		};
+		const base = punctuationProject.master.basicInformation;
 		const nonDuplicate = createProject(
 			validInput({
 				projectId: toProjectId("create-project-signal-dash"),
@@ -510,7 +532,7 @@ describe("Create Project command", () => {
 					},
 				},
 			}),
-			{ ...context, existingProjects: [devProject005] },
+			{ ...context, existingProjects: [punctuationProject] },
 		);
 		const normalizedDuplicate = createProject(
 			validInput({
@@ -525,12 +547,12 @@ describe("Create Project command", () => {
 					},
 				},
 			}),
-			{ ...context, existingProjects: [devProject005] },
+			{ ...context, existingProjects: [punctuationProject] },
 		);
 
 		expect(nonDuplicate.status).toBe("created");
 		expect(normalizedDuplicate.status).toBe("reviewRequired");
-		expect(devProject005.master.basicInformation.stnProjectName).toBe(
+		expect(punctuationProject.master.basicInformation.stnProjectName).toBe(
 			"Signal_A",
 		);
 	});
@@ -557,8 +579,8 @@ describe("Project Master update command", () => {
 		expect(result.project.identityAliases).toEqual([
 			{
 				kind: "stnProjectName",
-				originalValue: "DEV Project Alpha",
-				normalizedValue: "dev project alpha",
+				originalValue: "Nautilus",
+				normalizedValue: "nautilus",
 			},
 			{
 				kind: "qciModelName",
@@ -575,7 +597,7 @@ describe("Project Master update command", () => {
 			...devProject002.master,
 			basicInformation: {
 				...devProject002.master.basicInformation,
-				stnProjectName: "  dev   PROJECT alpha ",
+				stnProjectName: "  NAUTILUS ",
 			},
 		};
 
@@ -586,20 +608,30 @@ describe("Project Master update command", () => {
 
 		expect(result.project.identityAliases).toEqual([]);
 		expect(result.project.master.basicInformation.stnProjectName).toBe(
-			"  dev   PROJECT alpha ",
+			"  NAUTILUS ",
 		);
 	});
 
 	it("captures underscore-to-dash rename because punctuation remains significant", () => {
+		const punctuationProject = {
+			...devProject005,
+			master: {
+				...devProject005.master,
+				basicInformation: {
+					...devProject005.master.basicInformation,
+					stnProjectName: "Signal_A",
+				},
+			},
+		};
 		const nextMaster = {
-			...devProject005.master,
+			...punctuationProject.master,
 			basicInformation: {
-				...devProject005.master.basicInformation,
+				...punctuationProject.master.basicInformation,
 				stnProjectName: "Signal-A",
 			},
 		};
 
-		const result = updateProjectMaster(devProject005, {
+		const result = updateProjectMaster(punctuationProject, {
 			master: nextMaster,
 			completenessFields: [],
 		});

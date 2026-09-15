@@ -104,7 +104,7 @@ export const devProject001: Project = {
 				panelSizeReferenceFixtures,
 				"dev-panel-size-16",
 			),
-			stnProjectName: "DEV Empty Project",
+			stnProjectName: "Manta",
 			qciModelName: null,
 		},
 		platformHardware: {
@@ -147,7 +147,7 @@ export const devProject002: Project = {
 				panelSizeReferenceFixtures,
 				"dev-panel-size-16",
 			),
-			stnProjectName: "DEV Project Alpha",
+			stnProjectName: "Nautilus",
 			qciModelName: "DEV-QCI-ALPHA-01",
 		},
 		platformHardware: {
@@ -253,7 +253,7 @@ export const devProject003: Project = {
 				panelSizeReferenceFixtures,
 				"dev-panel-size-18",
 			),
-			stnProjectName: "DEV Project Alpha",
+			stnProjectName: "Orca",
 			qciModelName: "DEV-QCI-ALPHA-02",
 		},
 		platformHardware: {
@@ -390,7 +390,7 @@ export const devProject004: Project = {
 				panelSizeReferenceFixtures,
 				"dev-panel-size-18",
 			),
-			stnProjectName: "DEV Draft Review Project",
+			stnProjectName: "Beluga",
 			qciModelName: "DEV-QCI-DRAFT-04",
 		},
 		platformHardware: {
@@ -539,7 +539,7 @@ export const devProject005: Project = {
 				panelSizeReferenceFixtures,
 				"dev-panel-size-16",
 			),
-			stnProjectName: "Signal_A",
+			stnProjectName: "Marlin",
 			qciModelName: "DEV-QCI-SIGNAL-A",
 		},
 		platformHardware: {

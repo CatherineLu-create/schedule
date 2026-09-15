@@ -111,7 +111,7 @@ function exportDashboardProjectListToExcel(projects: readonly DashboardProjectRo
   const workbook = XLSX.utils.book_new();
 
   XLSX.utils.book_append_sheet(workbook, worksheet, "Project List");
-  XLSX.writeFile(workbook, "PIP_Dashboard_Project_List.xlsx");
+  XLSX.writeFile(workbook, "Project_Portfolio_Summary.xlsx");
 }
 
 export function App() {
@@ -572,7 +572,7 @@ export function ProjectWorkspace({
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5 px-6 py-6">
       <button className="w-fit text-sm text-slate-600 underline" onClick={onBack}>
-        Back to Dashboard
+        ← Portfolio overview
       </button>
 
       <section
@@ -660,14 +660,14 @@ export function ProjectWorkspace({
             </button>
           </div>
           <div className="rounded-md border border-slate-300 p-4">
-            <div className="font-semibold">Team</div>
+            <div className="font-semibold">Team Member</div>
             <div className="mt-2 text-sm text-slate-600">Migration pending</div>
             <button
               className="mt-3 rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
               disabled
               type="button"
             >
-              Open Team
+              Open Team Member
             </button>
           </div>
         </div>

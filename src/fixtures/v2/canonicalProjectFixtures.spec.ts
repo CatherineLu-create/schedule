@@ -48,26 +48,19 @@ describe("canonical V2 Project fixtures", () => {
       expect(Object.hasOwn(project, "schedule")).toBe(false);
     }
 
-    expect(devProject001.master.basicInformation.stnProjectName).toBe(
-      "DEV Empty Project",
-    );
+    expect(
+      canonicalProjectFixtures.map(
+        (project) => project.master.basicInformation.stnProjectName,
+      ),
+    ).toEqual(["Manta", "Nautilus", "Orca", "Beluga", "Marlin"]);
+    expect(devProject001.master.basicInformation.stnProjectName).toBe("Manta");
     expect(devProject001.team).toBeNull();
     expect(devProject002.team).toBe(validSavedTeamFixture);
   });
 
-  it("keeps Projects 002 and 003 business-identical but ID-distinct", () => {
-    const project002Identity = devProject002.master.basicInformation;
-    const project003Identity = devProject003.master.basicInformation;
-
-    expect({
-      year: project002Identity.year,
-      productLine: project002Identity.productLine,
-      stnProjectName: project002Identity.stnProjectName,
-    }).toEqual({
-      year: project003Identity.year,
-      productLine: project003Identity.productLine,
-      stnProjectName: project003Identity.stnProjectName,
-    });
+  it("keeps marine display names separate from immutable Project identity", () => {
+    expect(devProject002.master.basicInformation.stnProjectName).toBe("Nautilus");
+    expect(devProject003.master.basicInformation.stnProjectName).toBe("Orca");
     expect(devProject002.id).not.toBe(devProject003.id);
   });
 
@@ -104,10 +97,8 @@ describe("canonical V2 Project fixtures", () => {
     );
   });
 
-  it("preserves Project 005 punctuation and advisory Team data", () => {
-    expect(devProject005.master.basicInformation.stnProjectName).toBe(
-      "Signal_A",
-    );
+  it("preserves Project 005 marine name and advisory Team data", () => {
+    expect(devProject005.master.basicInformation.stnProjectName).toBe("Marlin");
     expect(devProject005.team?.appliedTemplate).toEqual({
       templateId: devTeamTemplateV2.id,
       versionNumber: devTeamTemplateV2.versionNumber,

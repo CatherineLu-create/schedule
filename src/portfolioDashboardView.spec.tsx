@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { selectPortfolioDashboardRows } from "./application/selectors/portfolioDashboardRows";
 import { canonicalProjectFixtures } from "./fixtures/v2/canonicalProjectFixtures";
 import { canonicalScheduleFixtures } from "./fixtures/v2/canonicalScheduleFixtures";
+import { toMilestoneDefinitionId, toMilestoneId } from "./domain/shared/ids";
 import { PortfolioDashboardView } from "./portfolioDashboardView";
 
 afterEach(cleanup);
@@ -59,6 +60,7 @@ describe("Portfolio Dashboard shell", () => {
     expect(screen.queryByText("No items requiring attention.")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Working Draft|Publish|warning|Edit Team|Import Team/ })).not.toBeInTheDocument();
     expect(screen.queryByText("DEV Project 003 QCI PM")).not.toBeInTheDocument();
+    expect(screen.getByText("Scroll horizontally to view Schedule and Team Member")).toBeInTheDocument();
   });
 
   it("exposes only seven canonical filters in visual order and explains both disabled controls", () => {
@@ -126,6 +128,52 @@ describe("Portfolio Dashboard shell", () => {
     expect(screen.getByRole("heading", { name: "Projects" })).toBeVisible();
   });
 
+  it("keeps A2 visible while filtering hides the Project that makes A2 applicable", () => {
+    const source = rows[0]!;
+    expect(source.schedule.kind).toBe("published");
+    if (source.schedule.kind !== "published") {
+      throw new Error("Expected Manta to have a Current Published Schedule");
+    }
+    const a2Row = {
+      ...source,
+      schedule: {
+        ...source.schedule,
+        cells: [
+          ...source.schedule.cells,
+          {
+            milestoneDefinitionId: toMilestoneDefinitionId(
+              "milestone-a-a2-a-g-o",
+            ),
+            occurrences: [
+              {
+                milestoneId: toMilestoneId("view-applicable-a2"),
+                applicability: "applicable" as const,
+                plan: "-",
+                actual: "-",
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    render(
+      <PortfolioDashboardView
+        rows={[a2Row, rows[1]!]}
+        onCreateProject={() => {}}
+        onExport={() => {}}
+        onOpenProject={() => {}}
+      />,
+    );
+    expect(screen.getByRole("columnheader", { name: "A2" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "Nautilus" },
+    });
+    expect(visibleIds()).toEqual(["dev-project-002"]);
+    expect(screen.getByRole("columnheader", { name: "A2" })).toBeInTheDocument();
+  });
+
   it("exports through the owner callback without filtered rows and preserves Create and exact-ID opens", () => {
     const callbacks = setup();
     select("Status", "Pending");
@@ -133,7 +181,7 @@ describe("Portfolio Dashboard shell", () => {
     expect(callbacks.onExport.mock.calls).toEqual([[]]);
     fireEvent.click(screen.getByRole("button", { name: "Create Project" }));
     expect(callbacks.onCreateProject.mock.calls).toEqual([[]]);
-    fireEvent.click(screen.getByRole("button", { name: "Open Project DEV Project Alpha" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Project Orca" }));
     fireEvent.click(screen.getByRole("table").querySelector('[data-project-id="dev-project-003"]')!);
     expect(callbacks.onOpenProject.mock.calls).toEqual([["dev-project-003"], ["dev-project-003"]]);
   });

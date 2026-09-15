@@ -126,7 +126,7 @@ describe("canonical Portfolio Dashboard filters", () => {
 	});
 
 	it.each([
-		["STN Project Name", "project alpha", (row: PortfolioDashboardRow) => row.project.projectName],
+		["STN Project Name", "manta", (row: PortfolioDashboardRow) => row.project.projectName],
 		["QCI Model Name", "qci-alpha-01", (row: PortfolioDashboardRow) => row.project.qciModelName],
 		["Product Line", "line alpha", (row: PortfolioDashboardRow) => row.project.productLine],
 		["Customer", "customer b", (row: PortfolioDashboardRow) => row.project.customer],
@@ -207,13 +207,13 @@ describe("canonical Portfolio Dashboard filters", () => {
 
 	it("does not search a unique marker that appears only in a published Schedule occurrence", () => {
 		const marker = "ONLY-IN-SCHEDULE-OCCURRENCE-7D3A";
-		const published = rows[1]!.schedule;
+		const published = rows[0]!.schedule;
 		expect(published.kind).toBe("published");
 		if (published.kind !== "published") throw new Error("Expected canonical fixture to have a published Schedule");
 		const firstCell = published.cells[0]!;
 		const firstOccurrence = firstCell.occurrences[0]!;
 		const scheduleOnlyMarkerRow: PortfolioDashboardRow = {
-			...rows[1]!,
+			...rows[0]!,
 			schedule: {
 				...published,
 				cells: published.cells.map((cell, index) => index === 0

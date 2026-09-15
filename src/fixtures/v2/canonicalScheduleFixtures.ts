@@ -35,98 +35,62 @@ function requireMilestoneDefinitionId(idValue: string): MilestoneDefinitionId {
   return definition.id;
 }
 
-export const devSchedule001 = createEmptyCanonicalProjectSchedule(
-  toProjectId("dev-project-001"),
-);
-
-export const devSchedule002: CanonicalProjectSchedule = {
-  projectId: toProjectId("dev-project-002"),
+export const devSchedule001: CanonicalProjectSchedule = {
+  projectId: toProjectId("dev-project-001"),
   publishedVersions: [
     {
       versionNumber: toScheduleVersionNumber(1),
-      versionNote: "DEV initial official Schedule",
-      publishedAt: "2026-08-20T00:00:00Z",
+      versionNote: "Manta demo official Schedule",
+      publishedAt: "2026-09-14T00:00:00Z",
       milestones: [
         {
           milestoneId: toMilestoneId(
-            "dev-project-002-milestone-design-kickoff",
+            "dev-project-001-milestone-design-kickoff",
           ),
           milestoneDefinitionId: requireMilestoneDefinitionId(
             "milestone-design-kickoff",
           ),
           applicability: "applicable",
-          plan: fixtureDate("2026-08-15"),
-          actual: fixtureDate("2026-08-18"),
+          plan: fixtureDate("2026-09-18"),
+          actual: fixtureDate("2026-09-19"),
         },
-      ],
-    },
-  ],
-};
-
-const devProject003ContinuingMilestoneId = toMilestoneId(
-  "dev-project-003-milestone-c1-go",
-);
-
-export const devSchedule003: CanonicalProjectSchedule = {
-  projectId: toProjectId("dev-project-003"),
-  publishedVersions: [
-    {
-      versionNumber: toScheduleVersionNumber(3),
-      versionNote: "DEV current official Schedule",
-      publishedAt: "2026-09-10T00:00:00Z",
-      milestones: [
         {
-          milestoneId: devProject003ContinuingMilestoneId,
-          milestoneDefinitionId: requireMilestoneDefinitionId(
-            "milestone-c1-c-g-o",
-          ),
+          milestoneId: toMilestoneId("dev-project-001-milestone-design-id-fix"),
+          milestoneDefinitionId: requireMilestoneDefinitionId("milestone-design-id-fix"),
           applicability: "applicable",
-          plan: fixtureDate("2026-10-05"),
+          plan: fixtureDate("2026-09-25"),
           actual: null,
         },
         {
-          milestoneId: toMilestoneId(
-            "dev-project-003-milestone-c1-smt",
-          ),
-          milestoneDefinitionId: requireMilestoneDefinitionId(
-            "milestone-c1-c-smt",
-          ),
+          milestoneId: toMilestoneId("dev-project-001-milestone-me-drawing"),
+          milestoneDefinitionId: requireMilestoneDefinitionId("milestone-me-portion-me-drawing"),
+          applicability: "applicable",
+          plan: fixtureDate("2026-10-02"),
+          actual: null,
+        },
+        {
+          milestoneId: toMilestoneId("dev-project-001-milestone-a-go"),
+          milestoneDefinitionId: requireMilestoneDefinitionId("milestone-a1-a-g-o"),
           applicability: "applicable",
           plan: fixtureDate("2026-10-15"),
           actual: null,
         },
       ],
     },
-    {
-      versionNumber: toScheduleVersionNumber(1),
-      versionNote: "DEV initial official Schedule",
-      publishedAt: "2026-08-25T00:00:00Z",
-      milestones: [
-        {
-          milestoneId: devProject003ContinuingMilestoneId,
-          milestoneDefinitionId: requireMilestoneDefinitionId(
-            "milestone-c1-c-g-o",
-          ),
-          applicability: "applicable",
-          plan: fixtureDate("2026-09-30"),
-          actual: null,
-        },
-      ],
-    },
   ],
 };
 
-export const devSchedule004: CanonicalProjectSchedule = {
-  projectId: toProjectId("dev-project-004"),
-  publishedVersions: [
-    {
-      versionNumber: toScheduleVersionNumber(1),
-      versionNote: "DEV Published Schedule with no milestones",
-      publishedAt: "2026-09-05T00:00:00Z",
-      milestones: [],
-    },
-  ],
-};
+export const devSchedule002 = createEmptyCanonicalProjectSchedule(
+  toProjectId("dev-project-002"),
+);
+
+export const devSchedule003 = createEmptyCanonicalProjectSchedule(
+  toProjectId("dev-project-003"),
+);
+
+export const devSchedule004 = createEmptyCanonicalProjectSchedule(
+  toProjectId("dev-project-004"),
+);
 
 export const devSchedule005 = createEmptyCanonicalProjectSchedule(
   toProjectId("dev-project-005"),

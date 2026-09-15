@@ -278,6 +278,19 @@ describe("ActionDisposition", () => {
 		});
 
 		it("interprets duplicate business identity as an explicit decision", () => {
+			const duplicateProject002 = {
+				...devProject002,
+				master: {
+					...devProject002.master,
+					basicInformation: {
+						...devProject002.master.basicInformation,
+						year: devProject003.master.basicInformation.year,
+						productLine: devProject003.master.basicInformation.productLine,
+						stnProjectName:
+							devProject003.master.basicInformation.stnProjectName,
+					},
+				},
+			};
 			const result = createProject(
 				{
 					...createInput,
@@ -294,7 +307,7 @@ describe("ActionDisposition", () => {
 						},
 					},
 				},
-				{ ...createContext, existingProjects: [devProject002] },
+				{ ...createContext, existingProjects: [duplicateProject002] },
 			);
 			const interpretation = interpretCreateProjectResult(result);
 
@@ -302,7 +315,9 @@ describe("ActionDisposition", () => {
 			if (result.status !== "reviewRequired") return;
 			expect(interpretation.kind).toBe("duplicateProject");
 			if (interpretation.kind !== "duplicateProject") return;
-			expect(interpretation.matchingProjectIds).toEqual([devProject002.id]);
+			expect(interpretation.matchingProjectIds).toEqual([
+				duplicateProject002.id,
+			]);
 			expect(interpretation.issues).toBe(result.issues);
 		});
 	});

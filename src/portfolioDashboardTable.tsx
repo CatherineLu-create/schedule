@@ -2,14 +2,15 @@ import * as React from "react";
 import type { PortfolioCurrentPublishedRead, PortfolioDashboardRow } from "./application/selectors/portfolioDashboardRows";
 import type { ProjectId } from "./domain/shared/ids";
 import {
-  defaultPortfolioColumnWidths, portfolioColumns, portfolioDomainGroups, portfolioScheduleColumnMappings,
-  portfolioStickyColumnKeys, portfolioSubgroups, resizePortfolioColumnWidth,
+  defaultPortfolioColumnWidths, getPortfolioVisibleSchema,
+  portfolioStickyColumnKeys, resizePortfolioColumnWidth,
   type PortfolioColumn, type PortfolioColumnKey, type PortfolioColumnWidths, type PortfolioProjectInfoColumnKey,
   type PortfolioScheduleColumnMapping,
 } from "./portfolioDashboardColumns";
 
 export interface PortfolioDashboardTableProps {
   readonly rows: readonly PortfolioDashboardRow[];
+  readonly schemaRows?: readonly PortfolioDashboardRow[];
   readonly onOpenProject: (projectId: ProjectId) => void;
 }
 const display = (value: string) => value === "-" ? "—" : value;
@@ -52,7 +53,8 @@ function ProjectStatus({ value }: { value: string }) {
   return <span className="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{value}</span>;
 }
 
-export function PortfolioDashboardTable({ rows, onOpenProject }: PortfolioDashboardTableProps): React.ReactElement {
+export function PortfolioDashboardTable({ rows, schemaRows = rows, onOpenProject }: PortfolioDashboardTableProps): React.ReactElement {
+  const schema = getPortfolioVisibleSchema(schemaRows);
   const [widths, setWidths] = React.useState<PortfolioColumnWidths>(defaultPortfolioColumnWidths);
   const [resizing, setResizing] = React.useState<{ key: PortfolioColumnKey; minWidth: number; startX: number; startWidth: number } | null>(null);
   React.useEffect(() => {
@@ -76,18 +78,18 @@ export function PortfolioDashboardTable({ rows, onOpenProject }: PortfolioDashbo
   const stickyClassName = (column: PortfolioColumn, header = false) => offsets.has(column.key)
     ? `lg:sticky lg:left-[var(--portfolio-sticky-left)] ${header ? "lg:z-30" : "lg:z-10"}`
     : "";
-  const totalWidth = portfolioColumns.reduce((total, column) => total + widths[column.key], 0);
+  const totalWidth = schema.columns.reduce((total, column) => total + widths[column.key], 0);
 
   return <div aria-label="Projects table scroll area" role="region" tabIndex={0} data-testid="portfolio-table-scroll" className="max-w-full overflow-x-auto border-y border-slate-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600">
     <table aria-label="Projects" className="text-left text-sm" style={{ tableLayout: "fixed", width: totalWidth }}>
-      <colgroup>{portfolioColumns.map((column) => <col key={column.key} style={{ width: widths[column.key] }} />)}</colgroup>
+      <colgroup>{schema.columns.map((column) => <col key={column.key} style={{ width: widths[column.key] }} />)}</colgroup>
       <thead className="text-xs font-semibold text-slate-500">
-        <tr>{portfolioDomainGroups.map((group) => <th key={group.key} scope="colgroup" colSpan={group.colSpan} title={group.key === "team" ? "Migration pending" : undefined}
+        <tr>{schema.domainGroups.map((group) => <th key={group.key} scope="colgroup" colSpan={group.colSpan} title={group.key === "team" ? "Migration pending" : undefined}
           className={`h-9 border-b border-r border-slate-300 px-4 py-2 text-center text-xs font-bold tracking-[0.14em] ${group.key === "project" ? "bg-slate-200 text-slate-800" : group.key === "schedule" ? "bg-sky-100 text-sky-900" : "bg-violet-100 text-violet-900"}`}>{group.label}</th>)}</tr>
-        <tr>{portfolioSubgroups.map((group) => <th key={group.key} scope="colgroup" colSpan={group.colSpan}
+        <tr>{schema.subgroups.map((group) => <th key={group.key} scope="colgroup" colSpan={group.colSpan}
           className={`h-9 border-b border-r border-slate-200 px-3 py-2 text-center text-[11px] font-bold ${group.domain === "project" ? "bg-slate-100 text-slate-700" : group.domain === "schedule" ? "bg-sky-50 text-sky-800" : "bg-violet-50 text-violet-800"}`}>{group.label}</th>)}</tr>
-        <tr>{portfolioColumns.map((column, index) => <th key={column.key} scope="col" data-column-key={column.key} style={stickyStyle(column)}
-          className={`relative h-11 border-b border-slate-300 px-4 py-3 ${stickyClassName(column, true)} ${offsets.has(column.key) ? "bg-slate-100 shadow-[2px_0_0_0_rgb(203_213_225)]" : "bg-white"} ${index > 0 && portfolioColumns[index - 1].domain !== column.domain ? "border-l-4 border-l-slate-300" : ""}`}>
+        <tr>{schema.columns.map((column, index) => <th key={column.key} scope="col" data-column-key={column.key} style={stickyStyle(column)}
+          className={`relative h-11 border-b border-slate-300 px-4 py-3 ${stickyClassName(column, true)} ${offsets.has(column.key) ? "bg-slate-100 shadow-[2px_0_0_0_rgb(203_213_225)]" : "bg-white"} ${index > 0 && schema.columns[index - 1].domain !== column.domain ? "border-l-4 border-l-slate-300" : ""}`}>
           <span className="line-clamp-2 whitespace-normal break-words leading-tight" title={column.label}>{column.label}</span>
           <button type="button" aria-label={`Resize ${column.label} column`} title="Drag or use Left/Right arrow keys to resize"
             className="absolute right-0 top-0 h-full w-2 cursor-col-resize border-r border-slate-200 transition hover:bg-slate-200 focus-visible:bg-sky-200 focus-visible:outline-2 focus-visible:outline-sky-600"
@@ -103,13 +105,13 @@ export function PortfolioDashboardTable({ rows, onOpenProject }: PortfolioDashbo
       </thead>
       <tbody>
         {rows.map((row) => <tr key={row.projectId} data-project-id={row.projectId} onClick={() => onOpenProject(row.projectId)} className="group cursor-pointer border-t border-slate-100 text-slate-700 transition hover:bg-slate-50 focus-within:bg-sky-50/50">
-          {portfolioColumns.map((column, index) => {
-            const mapping = column.domain === "schedule" ? portfolioScheduleColumnMappings.find((entry) => entry.key === column.key) : undefined;
+          {schema.columns.map((column, index) => {
+            const mapping = column.domain === "schedule" ? schema.scheduleMappings.find((entry) => entry.key === column.key) : undefined;
             const schedule = mapping ? schedulePresentation(row.schedule, column.label) : undefined;
             const value = column.domain === "project" ? projectValues[column.key as PortfolioProjectInfoColumnKey](row) : "—";
             return <td key={column.key} data-column-key={column.key} data-domain={column.domain} data-schedule-state={schedule?.state}
               title={schedule?.title ?? (column.domain === "team" ? "Migration pending" : undefined)} style={stickyStyle(column)}
-              className={`px-4 py-3.5 align-middle ${stickyClassName(column)} ${column.domain === "schedule" ? schedule?.tone : "whitespace-nowrap"} ${column.domain === "team" ? "text-slate-400" : ""} ${offsets.has(column.key) ? "bg-white shadow-[1px_0_0_0_rgb(241_245_249)] group-hover:bg-slate-50 group-focus-within:bg-sky-50" : ""} ${index > 0 && portfolioColumns[index - 1].domain !== column.domain ? "border-l-4 border-l-slate-200" : ""}`}>
+              className={`px-4 py-3.5 align-middle ${stickyClassName(column)} ${column.domain === "schedule" ? schedule?.tone : "whitespace-nowrap"} ${column.domain === "team" ? "text-slate-400" : ""} ${offsets.has(column.key) ? "bg-white shadow-[1px_0_0_0_rgb(241_245_249)] group-hover:bg-slate-50 group-focus-within:bg-sky-50" : ""} ${index > 0 && schema.columns[index - 1].domain !== column.domain ? "border-l-4 border-l-slate-200" : ""}`}>
               {mapping ? <ScheduleValue read={row.schedule} mapping={mapping} /> : column.key === "name"
                 ? <button type="button" aria-label={`Open Project ${display(value)}`} onClick={(event) => { event.stopPropagation(); onOpenProject(row.projectId); }} className="max-w-full truncate rounded text-left font-semibold text-slate-900 hover:text-sky-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600">{display(value)}</button>
                 : column.key === "projectStatus" ? <ProjectStatus value={value} />
@@ -117,7 +119,7 @@ export function PortfolioDashboardTable({ rows, onOpenProject }: PortfolioDashbo
             </td>;
           })}
         </tr>)}
-        {rows.length === 0 && <tr><td colSpan={portfolioColumns.length} className="px-4 py-10 text-slate-500">No projects match the current search and filters</td></tr>}
+        {rows.length === 0 && <tr><td colSpan={schema.columns.length} className="px-4 py-10 text-slate-500">No projects match the current search and filters</td></tr>}
       </tbody>
     </table>
   </div>;

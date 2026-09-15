@@ -6,7 +6,7 @@ import { toScheduleVersionNumber, type ScheduleVersionNumber } from "../../domai
 import { parseDateOnly, type DateOnly } from "../../domain/shared/dateOnly";
 import { toMilestoneDefinitionId, toMilestoneId } from "../../domain/shared/ids";
 import { canonicalProjectFixtures, devProject002, devProject003 } from "../../fixtures/v2/canonicalProjectFixtures";
-import { canonicalScheduleFixtures, devSchedule003 } from "../../fixtures/v2/canonicalScheduleFixtures";
+import { canonicalScheduleFixtures } from "../../fixtures/v2/canonicalScheduleFixtures";
 import type { PrototypeState } from "../state/prototypeState";
 import { selectPortfolioDashboardRows } from "./portfolioDashboardRows";
 
@@ -70,8 +70,23 @@ describe("canonical Portfolio Dashboard read projection", () => {
     expect(rows[2]).toMatchObject({ category: "DEV Creator", pcbNumber: "DEV-PCB-003" });
   });
 
-  it("uses maximum Published version rather than final array entry for devSchedule003", () => {
-    const row = selectedRow(fixtureState(), devSchedule003.projectId);
+  it("uses maximum Published version rather than final array entry in a local edge-case schedule", () => {
+    const currentMilestone = {
+      milestoneId: toMilestoneId("local-current-c1-go"),
+      milestoneDefinitionId: toMilestoneDefinitionId("milestone-c1-c-g-o"),
+      applicability: "applicable" as const,
+      plan: dateOnly("2026-10-05"),
+      actual: null,
+    };
+    const outOfOrder: CanonicalProjectSchedule = {
+      projectId: devProject003.id,
+      publishedVersions: [
+        { versionNumber: toScheduleVersionNumber(3), versionNote: null, publishedAt: "2026-09-10T00:00:00Z", milestones: [currentMilestone] },
+        { versionNumber: toScheduleVersionNumber(1), versionNote: null, publishedAt: "2026-08-25T00:00:00Z", milestones: [{ ...currentMilestone, plan: dateOnly("2026-09-30") }] },
+      ],
+    };
+    const localState = fixtureState([devProject003], [outOfOrder]);
+    const row = selectedRow(localState, devProject003.id);
 
     expect(row.schedule.kind).toBe("published");
     if (row.schedule.kind !== "published") return;
@@ -80,26 +95,31 @@ describe("canonical Portfolio Dashboard read projection", () => {
   });
 
   it("preserves no-Published, zero-milestone Published, and unavailable Schedule reads without hiding rows", () => {
-    const base = fixtureState();
-    expect(selectedRow(base, "dev-project-001").schedule).toEqual({ kind: "noPublishedSchedule" });
-    expect(selectedRow(base, "dev-project-004").schedule).toMatchObject({ kind: "published", milestoneCount: 0 });
-    const zero = selectedRow(base, "dev-project-004").schedule;
+    const noPublished: CanonicalProjectSchedule = { projectId: devProject002.id, publishedVersions: [] };
+    const zeroMilestone: CanonicalProjectSchedule = {
+      projectId: devProject003.id,
+      publishedVersions: [{ versionNumber: toScheduleVersionNumber(1), versionNote: null, publishedAt: "2026-09-12T00:00:00Z", milestones: [] }],
+    };
+    const base = fixtureState([devProject002, devProject003], [noPublished, zeroMilestone]);
+    expect(selectedRow(base, devProject002.id).schedule).toEqual({ kind: "noPublishedSchedule" });
+    expect(selectedRow(base, devProject003.id).schedule).toMatchObject({ kind: "published", milestoneCount: 0 });
+    const zero = selectedRow(base, devProject003.id).schedule;
     if (zero.kind === "published") expect(zero.cells.every((cell) => cell.occurrences.length === 0)).toBe(true);
 
     const invalid: CanonicalProjectSchedule = {
-      ...canonicalScheduleFixtures[1]!,
+      ...noPublished,
       publishedVersions: [{
-        ...canonicalScheduleFixtures[1]!.publishedVersions[0]!,
         versionNumber: 0 as ScheduleVersionNumber,
+        versionNote: null,
+        publishedAt: "2026-09-12T00:00:00Z",
+        milestones: [],
       }],
     };
-    const state = fixtureState(canonicalProjectFixtures, [
-      canonicalScheduleFixtures[0]!, invalid, canonicalScheduleFixtures[2]!, canonicalScheduleFixtures[3]!, canonicalScheduleFixtures[4]!,
-    ]);
+    const state = fixtureState([devProject002, devProject003], [invalid, zeroMilestone]);
     const rows = selectPortfolioDashboardRows(state);
-    expect(rows).toHaveLength(5);
-    expect(selectedRow(state, "dev-project-002").schedule.kind).toBe("unavailable");
-    expect(selectedRow(state, "dev-project-003").schedule.kind).toBe("published");
+    expect(rows).toHaveLength(2);
+    expect(selectedRow(state, devProject002.id).schedule.kind).toBe("unavailable");
+    expect(selectedRow(state, devProject003.id).schedule.kind).toBe("published");
   });
 
   it("preserves repeated same-definition snapshot occurrences in order and retains notApplicable dated values", () => {

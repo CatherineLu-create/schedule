@@ -25,7 +25,7 @@ import {
 } from "../../fixtures/v2/canonicalProjectFixtures";
 import {
   canonicalScheduleFixtures,
-  devSchedule003,
+  devSchedule001,
 } from "../../fixtures/v2/canonicalScheduleFixtures";
 import type { PrototypeState } from "../state/prototypeState";
 import {
@@ -242,11 +242,11 @@ describe("selected canonical Schedule ownership", () => {
 
   it("keeps Schedule ownership stable when the Project is renamed", () => {
     const renamedProject: Project = {
-      ...devProject001,
+      ...canonicalProjectFixtures[1]!,
       master: {
-        ...devProject001.master,
+        ...canonicalProjectFixtures[1]!.master,
         basicInformation: {
-          ...devProject001.master.basicInformation,
+          ...canonicalProjectFixtures[1]!.master.basicInformation,
           stnProjectName: "Renamed without changing identity",
         },
       },
@@ -254,7 +254,7 @@ describe("selected canonical Schedule ownership", () => {
 
     expect(
       selectCurrentPublishedSchedule(
-        state([renamedProject], [canonicalScheduleFixtures[0]!]),
+        state([renamedProject], [canonicalScheduleFixtures[1]!]),
         renamedProject.id,
       ),
     ).toEqual({ kind: "noPublishedSchedule" });
@@ -543,17 +543,17 @@ describe("Current Published milestone projection", () => {
     expect(snapshot).toEqual([laterDefinition, earlierDefinition]);
   });
 
-  it("projects the committed out-of-order fixture through maximum-version semantics", () => {
+  it("projects the single Published Manta demo fixture without replacing its snapshot", () => {
     const read = selectCurrentPublishedSchedule(
-      state([canonicalProjectFixtures[2]!], [devSchedule003]),
-      devSchedule003.projectId,
+      state([canonicalProjectFixtures[0]!], [devSchedule001]),
+      devSchedule001.projectId,
     );
 
     expect(read.kind).toBe("published");
     if (read.kind === "published") {
-      expect(read.version).toBe(devSchedule003.publishedVersions[0]);
-      expect(read.version.versionNumber).toBe(3);
-      expect(read.versionLabel).toBe("Published v03");
+      expect(read.version).toBe(devSchedule001.publishedVersions[0]);
+      expect(read.version.versionNumber).toBe(1);
+      expect(read.versionLabel).toBe("Published v01");
     }
   });
 });

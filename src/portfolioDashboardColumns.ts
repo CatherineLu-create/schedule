@@ -1,4 +1,5 @@
 import { toMilestoneDefinitionId, type MilestoneDefinitionId } from "./domain/shared/ids";
+import type { PortfolioDashboardRow } from "./application/selectors/portfolioDashboardRows";
 
 export type PortfolioColumnDomain = "project" | "schedule" | "team";
 export interface PortfolioScheduleColumnMapping {
@@ -24,13 +25,13 @@ export const portfolioScheduleColumnMappings = [
   scheduleMapping("schedule:me-portion:tooling-start-t1", "me-portion", "ME Portion", "Tooling start + T1", "milestone-me-portion-tooling-start-t1"),
   scheduleMapping("schedule:me-portion:me-material-c", "me-portion", "ME Portion", "ME material for C", "milestone-me-portion-me-material-c"),
   scheduleMapping("schedule:thermal:thermal-module-c", "thermal", "Thermal", "Thermal module for C", "milestone-thermal-module-c"),
-  scheduleMapping("schedule:a1-stage:a-g-o", "a1-stage", "A1-stage", "A G/O", "milestone-a1-a-g-o"),
-  scheduleMapping("schedule:a1-stage:a-smt", "a1-stage", "A1-stage", "A-SMT", "milestone-a1-a-smt"),
-  scheduleMapping("schedule:a1-stage:a-test", "a1-stage", "A1-stage", "A-Test", "milestone-a1-a-test"),
-  scheduleMapping("schedule:a-a2-stage:a-g-o", "a-a2-stage", "A/A2-stage", "A G/O", "milestone-a-a2-a-g-o"),
-  scheduleMapping("schedule:a-a2-stage:a-smt", "a-a2-stage", "A/A2-stage", "A-SMT", "milestone-a-a2-a-smt"),
-  scheduleMapping("schedule:a-a2-stage:a-test", "a-a2-stage", "A/A2-stage", "A-Test", "milestone-a-a2-a-test"),
-  scheduleMapping("schedule:a-a2-stage:a-close", "a-a2-stage", "A/A2-stage", "A-Close", "milestone-a-a2-a-close"),
+  scheduleMapping("schedule:a1-stage:a-g-o", "a1-stage", "A", "A G/O", "milestone-a1-a-g-o"),
+  scheduleMapping("schedule:a1-stage:a-smt", "a1-stage", "A", "A-SMT", "milestone-a1-a-smt"),
+  scheduleMapping("schedule:a1-stage:a-test", "a1-stage", "A", "A-Test", "milestone-a1-a-test"),
+  scheduleMapping("schedule:a-a2-stage:a-g-o", "a2-stage", "A2", "A G/O", "milestone-a-a2-a-g-o"),
+  scheduleMapping("schedule:a-a2-stage:a-smt", "a2-stage", "A2", "A-SMT", "milestone-a-a2-a-smt"),
+  scheduleMapping("schedule:a-a2-stage:a-test", "a2-stage", "A2", "A-Test", "milestone-a-a2-a-test"),
+  scheduleMapping("schedule:a-a2-stage:a-close", "a2-stage", "A2", "A-Close", "milestone-a-a2-a-close"),
   scheduleMapping("schedule:c1-stage:c-g-o", "c1-stage", "C1-stage", "C G/O", "milestone-c1-c-g-o"),
   scheduleMapping("schedule:c1-stage:c-smt", "c1-stage", "C1-stage", "C-SMT", "milestone-c1-c-smt"),
   scheduleMapping("schedule:c1-stage:c-pre-build", "c1-stage", "C1-stage", "C Pre-build", "milestone-c1-c-pre-build"),
@@ -78,10 +79,13 @@ export const portfolioProjectInfoColumns: readonly PortfolioColumn[] = [
   key: key as PortfolioProjectInfoColumnKey, label: String(label), defaultWidth: Number(defaultWidth), minWidth: Number(minWidth), domain: "project", subgroup: "core-fields",
 }));
 
-export const portfolioScheduleColumnGroups: readonly PortfolioColumnGroup[] = [...new Set(portfolioScheduleColumnMappings.map((entry) => entry.groupKey))].map((groupKey) => {
-  const mappings = portfolioScheduleColumnMappings.filter((entry) => entry.groupKey === groupKey);
-  return { key: groupKey, label: mappings[0].groupLabel, columns: mappings.map((entry) => ({ key: entry.key, label: entry.label, defaultWidth: 118, minWidth: 105, domain: "schedule", subgroup: groupKey })) };
-});
+function scheduleColumnGroups(mappings: readonly PortfolioScheduleColumnMapping[]): readonly PortfolioColumnGroup[] {
+  return [...new Set(mappings.map((entry) => entry.groupKey))].map((groupKey) => {
+    const groupedMappings = mappings.filter((entry) => entry.groupKey === groupKey);
+    return { key: groupKey, label: groupedMappings[0].groupLabel, columns: groupedMappings.map((entry) => ({ key: entry.key as PortfolioScheduleColumnKey, label: entry.label, defaultWidth: 118, minWidth: 105, domain: "schedule", subgroup: groupKey })) };
+  });
+}
+export const portfolioScheduleColumnGroups: readonly PortfolioColumnGroup[] = scheduleColumnGroups(portfolioScheduleColumnMappings);
 
 const teamGroups = [
   { key: "project-roles", label: "Project Roles", columns: [["team:qciPm", "QCI PM"], ["team:qciPjm", "QCI PjM"], ["team:acerPm", "Acer PM"]] },
@@ -94,7 +98,7 @@ export const portfolioColumns: readonly PortfolioColumn[] = [...portfolioProject
 export const portfolioDomainGroups: readonly { key: PortfolioColumnDomain; label: string; colSpan: number }[] = [
   { key: "project", label: "PROJECT INFORMATION", colSpan: portfolioProjectInfoColumns.length },
   { key: "schedule", label: "SCHEDULE", colSpan: portfolioScheduleColumnMappings.length },
-  { key: "team", label: "TEAM", colSpan: portfolioTeamColumnGroups.reduce((count, group) => count + group.columns.length, 0) },
+  { key: "team", label: "TEAM MEMBER", colSpan: portfolioTeamColumnGroups.reduce((count, group) => count + group.columns.length, 0) },
 ];
 export const portfolioSubgroups: readonly { key: string; label: string; domain: PortfolioColumnDomain; colSpan: number }[] = [
   { key: "core-fields", label: "Core fields", domain: "project", colSpan: portfolioProjectInfoColumns.length },
@@ -104,6 +108,56 @@ export const portfolioSubgroups: readonly { key: string; label: string; domain: 
 export const portfolioStickyColumnKeys: readonly PortfolioProjectInfoColumnKey[] = ["projectStatus", "year", "name", "qciProjectName"];
 export type PortfolioColumnWidths = Record<PortfolioColumnKey, number>;
 export const defaultPortfolioColumnWidths = Object.fromEntries(portfolioColumns.map((column) => [column.key, column.defaultWidth])) as PortfolioColumnWidths;
+
+export interface PortfolioVisibleSchema {
+  readonly columns: readonly PortfolioColumn[];
+  readonly domainGroups: readonly { key: PortfolioColumnDomain; label: string; colSpan: number }[];
+  readonly scheduleMappings: readonly PortfolioScheduleColumnMapping[];
+  readonly subgroups: readonly { key: string; label: string; domain: PortfolioColumnDomain; colSpan: number }[];
+}
+
+const a2DefinitionIds = new Set(
+  portfolioScheduleColumnMappings
+    .filter((mapping) => mapping.groupKey === "a2-stage")
+    .map((mapping) => mapping.milestoneDefinitionId),
+);
+
+function hasApplicableA2(rows: readonly PortfolioDashboardRow[]): boolean {
+  return rows.some((row) => row.schedule.kind === "published" && row.schedule.cells.some(
+    (cell) => a2DefinitionIds.has(cell.milestoneDefinitionId) &&
+      cell.occurrences.some((occurrence) => occurrence.applicability === "applicable"),
+  ));
+}
+
+export function getPortfolioVisibleSchema(
+  rows: readonly PortfolioDashboardRow[],
+): PortfolioVisibleSchema {
+  const scheduleMappings = hasApplicableA2(rows)
+    ? portfolioScheduleColumnMappings
+    : portfolioScheduleColumnMappings.filter((mapping) => mapping.groupKey !== "a2-stage");
+  const scheduleGroups = scheduleColumnGroups(scheduleMappings);
+  const teamColumnCount = portfolioTeamColumnGroups.reduce((count, group) => count + group.columns.length, 0);
+  const columns = [
+    ...portfolioProjectInfoColumns,
+    ...scheduleGroups.flatMap((group) => group.columns),
+    ...portfolioTeamColumnGroups.flatMap((group) => group.columns),
+  ];
+
+  return {
+    columns,
+    domainGroups: [
+      { key: "project", label: "PROJECT INFORMATION", colSpan: portfolioProjectInfoColumns.length },
+      { key: "schedule", label: "SCHEDULE", colSpan: scheduleMappings.length },
+      { key: "team", label: "TEAM MEMBER", colSpan: teamColumnCount },
+    ],
+    scheduleMappings,
+    subgroups: [
+      { key: "core-fields", label: "Core fields", domain: "project", colSpan: portfolioProjectInfoColumns.length },
+      ...scheduleGroups.map((group) => ({ key: group.key, label: group.label, domain: "schedule" as const, colSpan: group.columns.length })),
+      ...portfolioTeamColumnGroups.map((group) => ({ key: group.key, label: group.label, domain: "team" as const, colSpan: group.columns.length })),
+    ],
+  };
+}
 export function resizePortfolioColumnWidth(currentWidth: number, deltaX: number, minWidth: number): number {
   return Math.max(minWidth, currentWidth + deltaX);
 }

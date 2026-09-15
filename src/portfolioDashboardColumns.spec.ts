@@ -50,10 +50,10 @@ describe("Portfolio visual schema", () => {
     expect(portfolioDomainGroups).toEqual([
       { key: "project", label: "PROJECT INFORMATION", colSpan: 11 },
       { key: "schedule", label: "SCHEDULE", colSpan: 35 },
-      { key: "team", label: "TEAM", colSpan: 7 },
+      { key: "team", label: "TEAM MEMBER", colSpan: 7 },
     ]);
     expect(portfolioSubgroups.map(({ label, colSpan }) => [label, colSpan])).toEqual([
-      ["Core fields", 11], ["Design", 2], ["ME Portion", 4], ["Thermal", 1], ["A1-stage", 3], ["A/A2-stage", 4], ["C1-stage", 6], ["C2-stage", 8], ["RAMP-stage", 6], ["MDRR", 1], ["Project Roles", 3], ["Standard Function Owners", 4],
+      ["Core fields", 11], ["Design", 2], ["ME Portion", 4], ["Thermal", 1], ["A", 3], ["A2", 4], ["C1-stage", 6], ["C2-stage", 8], ["RAMP-stage", 6], ["MDRR", 1], ["Project Roles", 3], ["Standard Function Owners", 4],
     ]);
     expect(portfolioColumns.some(({ key, label }) => /Current Published|Official|Schedule Status|Diagnostic/i.test(`${key} ${label}`))).toBe(false);
   });

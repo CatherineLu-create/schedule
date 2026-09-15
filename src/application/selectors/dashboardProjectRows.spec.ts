@@ -5,12 +5,11 @@ import {
 	canonicalProjectFixtures,
 	devProject001,
 	devProject002,
-	devProject004,
 } from "../../fixtures/v2/canonicalProjectFixtures";
 import {
 	canonicalScheduleFixtures,
 	devSchedule001,
-	devSchedule004,
+	devSchedule002,
 } from "../../fixtures/v2/canonicalScheduleFixtures";
 import type { PrototypeState } from "../state/prototypeState";
 import {
@@ -62,7 +61,7 @@ describe("Dashboard Project row projection", () => {
 			year: "2027",
 			customer: "Acer",
 			productLine: "DEV Line Alpha",
-			projectName: "DEV Project Alpha",
+			projectName: "Nautilus",
 			qciModelName: "DEV-QCI-ALPHA-01",
 			acerModelName: "Acer Display Model",
 			acerMarketingName: "Acer Display Marketing",
@@ -133,35 +132,35 @@ describe("Dashboard Project row projection", () => {
 
 	it("keeps Current Stage and MDRR unsupported when no Published Schedule exists", () => {
 		const state: PrototypeState = {
-			projects: [devProject001],
-			schedules: [devSchedule001],
+			projects: [devProject002],
+			schedules: [devSchedule002],
 		};
 
-		const row = selectDashboardProjectRow(state, devProject001.id);
+		const row = selectDashboardProjectRow(state, devProject002.id);
 
-		expect(devSchedule001.publishedVersions).toHaveLength(0);
+		expect(devSchedule002.publishedVersions).toHaveLength(0);
 		expect(row?.currentStage).toBe("-");
 		expect(row?.mdrr).toBe("-");
 	});
 
 	it("does not infer Portfolio values from canonical Published Schedule changes", () => {
 		const originalState: PrototypeState = {
-			projects: [devProject004],
-			schedules: [devSchedule004],
+			projects: [devProject001],
+			schedules: [devSchedule001],
 		};
 		const originalRow = selectDashboardProjectRow(
 			originalState,
-			devProject004.id,
+			devProject001.id,
 		);
-		expect(devSchedule004.publishedVersions).toHaveLength(1);
+		expect(devSchedule001.publishedVersions).toHaveLength(1);
 
 		const changedScheduleState: PrototypeState = {
-			projects: [devProject004],
-			schedules: [{ ...devSchedule004, publishedVersions: [] }],
+			projects: [devProject001],
+			schedules: [{ ...devSchedule001, publishedVersions: [] }],
 		};
 
 		expect(
-			selectDashboardProjectRow(changedScheduleState, devProject004.id),
+			selectDashboardProjectRow(changedScheduleState, devProject001.id),
 		).toEqual(originalRow);
 		expect(originalRow?.currentStage).toBe("-");
 		expect(originalRow?.mdrr).toBe("-");
