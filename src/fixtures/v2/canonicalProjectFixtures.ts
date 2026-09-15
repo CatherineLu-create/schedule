@@ -94,11 +94,11 @@ export const devProject001: Project = {
 			),
 			category: requireCatalogItemId(
 				categoryReferenceFixtures,
-				"dev-category-notebook",
+				"demo-category-aspire",
 			),
 			productLine: requireCatalogItemId(
 				productLineReferenceFixtures,
-				"dev-product-line-beta",
+				"demo-product-line-aspire-refresh-id",
 			),
 			panelSize: requireCatalogItemId(
 				panelSizeReferenceFixtures,
@@ -108,8 +108,8 @@ export const devProject001: Project = {
 			qciModelName: null,
 		},
 		platformHardware: {
-			cpu: requireCatalogItemId(cpuReferenceFixtures, "dev-cpu-alpha"),
-			gpu: requireCatalogItemId(gpuReferenceFixtures, "dev-gpu-alpha"),
+			cpu: requireCatalogItemId(cpuReferenceFixtures, "demo-cpu-intel-novalake-hx"),
+			gpu: requireCatalogItemId(gpuReferenceFixtures, "demo-gpu-gn22-x2-x4"),
 			pcbNumber: null,
 			housingNumber: null,
 		},
@@ -137,11 +137,11 @@ export const devProject002: Project = {
 			),
 			category: requireCatalogItemId(
 				categoryReferenceFixtures,
-				"dev-category-notebook",
+				"demo-category-gamepad",
 			),
 			productLine: requireCatalogItemId(
 				productLineReferenceFixtures,
-				"dev-product-line-alpha",
+				"demo-product-line-game-pad",
 			),
 			panelSize: requireCatalogItemId(
 				panelSizeReferenceFixtures,
@@ -151,8 +151,8 @@ export const devProject002: Project = {
 			qciModelName: "DEV-QCI-ALPHA-01",
 		},
 		platformHardware: {
-			cpu: requireCatalogItemId(cpuReferenceFixtures, "dev-cpu-alpha"),
-			gpu: requireCatalogItemId(gpuReferenceFixtures, "dev-gpu-alpha"),
+			cpu: requireCatalogItemId(cpuReferenceFixtures, "demo-cpu-amd-hawkpoint-1-fp8"),
+			gpu: requireCatalogItemId(gpuReferenceFixtures, "demo-gpu-gn20-x6"),
 			pcbNumber: "DEV-PCB-002",
 			housingNumber: null,
 		},
@@ -243,11 +243,11 @@ export const devProject003: Project = {
 			),
 			category: requireCatalogItemId(
 				categoryReferenceFixtures,
-				"dev-category-creator",
+				"demo-category-gaming",
 			),
 			productLine: requireCatalogItemId(
 				productLineReferenceFixtures,
-				"dev-product-line-alpha",
+				"demo-product-line-helios-neo",
 			),
 			panelSize: requireCatalogItemId(
 				panelSizeReferenceFixtures,
@@ -257,8 +257,8 @@ export const devProject003: Project = {
 			qciModelName: "DEV-QCI-ALPHA-02",
 		},
 		platformHardware: {
-			cpu: requireCatalogItemId(cpuReferenceFixtures, "dev-cpu-beta"),
-			gpu: requireCatalogItemId(gpuReferenceFixtures, "dev-gpu-beta"),
+			cpu: requireCatalogItemId(cpuReferenceFixtures, "demo-cpu-intel-novalake-hx"),
+			gpu: requireCatalogItemId(gpuReferenceFixtures, "demo-gpu-gn22-x7-x9"),
 			pcbNumber: "DEV-PCB-003",
 			housingNumber: "DEV-HOUSING-003",
 		},
@@ -380,11 +380,11 @@ export const devProject004: Project = {
 			),
 			category: requireCatalogItemId(
 				categoryReferenceFixtures,
-				"dev-category-creator",
+				"demo-category-gaming",
 			),
 			productLine: requireCatalogItemId(
 				productLineReferenceFixtures,
-				"dev-product-line-beta",
+				"demo-product-line-nitro-edge",
 			),
 			panelSize: requireCatalogItemId(
 				panelSizeReferenceFixtures,
@@ -394,8 +394,8 @@ export const devProject004: Project = {
 			qciModelName: "DEV-QCI-DRAFT-04",
 		},
 		platformHardware: {
-			cpu: requireCatalogItemId(cpuReferenceFixtures, "dev-cpu-beta"),
-			gpu: requireCatalogItemId(gpuReferenceFixtures, "dev-gpu-alpha"),
+			cpu: requireCatalogItemId(cpuReferenceFixtures, "demo-cpu-amd-hawkpoint-1-fp8"),
+			gpu: requireCatalogItemId(gpuReferenceFixtures, "demo-gpu-gn22-x7-x9"),
 			pcbNumber: "DEV-PCB-004",
 			housingNumber: null,
 		},
@@ -529,11 +529,11 @@ export const devProject005: Project = {
 			),
 			category: requireCatalogItemId(
 				categoryReferenceFixtures,
-				"dev-category-notebook",
+				"demo-category-woa",
 			),
 			productLine: requireCatalogItemId(
 				productLineReferenceFixtures,
-				"dev-product-line-beta",
+				"demo-product-line-aspire-refresh-id",
 			),
 			panelSize: requireCatalogItemId(
 				panelSizeReferenceFixtures,
@@ -543,8 +543,8 @@ export const devProject005: Project = {
 			qciModelName: "DEV-QCI-SIGNAL-A",
 		},
 		platformHardware: {
-			cpu: requireCatalogItemId(cpuReferenceFixtures, "dev-cpu-alpha"),
-			gpu: requireCatalogItemId(gpuReferenceFixtures, "dev-gpu-beta"),
+			cpu: requireCatalogItemId(cpuReferenceFixtures, "demo-cpu-nvidia-n1"),
+			gpu: requireCatalogItemId(gpuReferenceFixtures, "demo-gpu-gn22-x2-x4"),
 			pcbNumber: "DEV-PCB-005",
 			housingNumber: "DEV-HOUSING-005",
 		},

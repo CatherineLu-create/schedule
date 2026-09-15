@@ -9,11 +9,11 @@ export function OfficialScheduleView({
 }: OfficialScheduleViewProps): React.ReactElement {
   return (
     <section
-      aria-label="Schedule"
+      aria-label="Current Schedule"
       className="overflow-hidden rounded-md border border-slate-200 bg-white"
     >
       <div className="p-4">
-        <h2 className="text-lg font-semibold">Schedule</h2>
+        <h2 className="text-lg font-semibold">Current Schedule</h2>
         {read.kind === "unavailable" && (
           <p className="mt-3 text-sm text-slate-600">
             Schedule data unavailable
@@ -21,7 +21,7 @@ export function OfficialScheduleView({
         )}
         {read.kind === "noPublishedSchedule" && (
           <p className="mt-3 text-sm text-slate-600">
-            No published schedule
+            -
           </p>
         )}
         {read.kind === "published" && (

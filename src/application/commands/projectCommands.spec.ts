@@ -382,7 +382,7 @@ describe("Create Project command", () => {
 		});
 	});
 
-	it("returns a reviewable Advisory for the Project 002/003 business duplicate key", () => {
+	it("returns a reviewable Advisory for a local business duplicate key", () => {
 		const result = createProject(
 			validInput({
 				projectId: devProject003.id,
@@ -390,9 +390,9 @@ describe("Create Project command", () => {
 					...fullMasterInput,
 					basicInformation: {
 						...fullMasterInput.basicInformation,
-						year: devProject003.master.basicInformation.year,
+						year: devProject002.master.basicInformation.year,
 						productLine:
-							devProject003.master.basicInformation.productLine,
+							devProject002.master.basicInformation.productLine,
 						stnProjectName: "  NAUTILUS ",
 					},
 				},
@@ -480,9 +480,9 @@ describe("Create Project command", () => {
 					...fullMasterInput,
 					basicInformation: {
 						...fullMasterInput.basicInformation,
-						year: devProject003.master.basicInformation.year,
+						year: devProject002.master.basicInformation.year,
 						productLine:
-							devProject003.master.basicInformation.productLine,
+							devProject002.master.basicInformation.productLine,
 						stnProjectName:
 							devProject002.master.basicInformation.stnProjectName,
 					},

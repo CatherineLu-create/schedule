@@ -19,13 +19,13 @@ const expectedGroups = [
 	},
 	{
 		items: categoryReferenceFixtures,
-		ids: ["dev-category-notebook", "dev-category-creator"],
-		names: ["DEV Notebook", "DEV Creator"],
+		ids: ["dev-category-notebook", "dev-category-creator", "demo-category-aspire", "demo-category-gamepad", "demo-category-gaming", "demo-category-woa"],
+		names: ["DEV Notebook", "DEV Creator", "Aspire", "Gamepad", "Gaming", "WOA"],
 	},
 	{
 		items: productLineReferenceFixtures,
-		ids: ["dev-product-line-alpha", "dev-product-line-beta"],
-		names: ["DEV Line Alpha", "DEV Line Beta"],
+		ids: ["dev-product-line-alpha", "dev-product-line-beta", "demo-product-line-aspire-refresh-id", "demo-product-line-game-pad", "demo-product-line-helios-neo", "demo-product-line-nitro-edge"],
+		names: ["DEV Line Alpha", "DEV Line Beta", "Aspire (Refresh ID)", "Game pad", "Helios Neo", "Nitro Edge"],
 	},
 	{
 		items: panelSizeReferenceFixtures,
@@ -34,13 +34,13 @@ const expectedGroups = [
 	},
 	{
 		items: cpuReferenceFixtures,
-		ids: ["dev-cpu-alpha", "dev-cpu-beta"],
-		names: ["DEV CPU Alpha", "DEV CPU Beta"],
+		ids: ["dev-cpu-alpha", "dev-cpu-beta", "demo-cpu-intel-novalake-hx", "demo-cpu-amd-hawkpoint-1-fp8", "demo-cpu-nvidia-n1"],
+		names: ["DEV CPU Alpha", "DEV CPU Beta", "Intel Novalake HX 28C/24C", "AMD HawkPoint 1 FP8 (New PCBA)-two DIMM", "nVIDIA N1"],
 	},
 	{
 		items: gpuReferenceFixtures,
-		ids: ["dev-gpu-alpha", "dev-gpu-beta"],
-		names: ["DEV GPU Alpha", "DEV GPU Beta"],
+		ids: ["dev-gpu-alpha", "dev-gpu-beta", "demo-gpu-gn22-x2-x4", "demo-gpu-gn20-x6", "demo-gpu-gn22-x7-x9"],
+		names: ["DEV GPU Alpha", "DEV GPU Beta", "GN22-X2/X4", "GN20-X6", "GN22-X7/X9"],
 	},
 ] as const;
 

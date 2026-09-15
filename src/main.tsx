@@ -572,7 +572,7 @@ export function ProjectWorkspace({
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5 px-6 py-6">
       <button className="w-fit text-sm text-slate-600 underline" onClick={onBack}>
-        ← Portfolio overview
+        ← Dashboard
       </button>
 
       <section
@@ -632,23 +632,11 @@ export function ProjectWorkspace({
         </div>
       </section>
 
-      <section className="rounded-md border border-slate-200 bg-white p-4">
+      <section aria-label="Resources" className="rounded-md border border-slate-200 bg-white p-4">
         <h2 className="text-lg font-semibold">Resources</h2>
-        <div className="mt-3 grid gap-3 md:grid-cols-3">
-          <div className={`rounded-md border p-4 ${activeResource === "projectMaster" ? "border-slate-900" : "border-slate-300"}`}>
-            <div className="font-semibold">Project Master</div>
-            <div className="mt-2 text-sm text-slate-600">Enabled</div>
-            <button
-              aria-pressed={activeResource === "projectMaster"}
-              className="mt-3 rounded-md border border-slate-300 px-3 py-1.5 text-sm"
-              onClick={() => onOpenResource("projectMaster")}
-              type="button"
-            >
-              Open Project Master
-            </button>
-          </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div className={`rounded-md border p-4 ${activeResource === "schedule" ? "border-slate-900" : "border-slate-300"}`}>
-            <div className="font-semibold">Schedule</div>
+            <h3 className="font-semibold">Schedule</h3>
             <div className="mt-2 text-sm text-slate-600">Official read-only</div>
             <button
               aria-pressed={activeResource === "schedule"}
@@ -660,7 +648,7 @@ export function ProjectWorkspace({
             </button>
           </div>
           <div className="rounded-md border border-slate-300 p-4">
-            <div className="font-semibold">Team Member</div>
+            <h3 className="font-semibold">Team Member</h3>
             <div className="mt-2 text-sm text-slate-600">Migration pending</div>
             <button
               className="mt-3 rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
@@ -668,6 +656,28 @@ export function ProjectWorkspace({
               type="button"
             >
               Open Team Member
+            </button>
+          </div>
+          <div className="rounded-md border border-slate-300 p-4">
+            <h3 className="font-semibold">Weekly Report</h3>
+            <div className="mt-2 text-sm text-slate-600">Migration pending</div>
+            <button
+              className="mt-3 rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+              disabled
+              type="button"
+            >
+              Open Weekly Report
+            </button>
+          </div>
+          <div className="rounded-md border border-slate-300 p-4">
+            <h3 className="font-semibold">AVL</h3>
+            <div className="mt-2 text-sm text-slate-600">Migration pending</div>
+            <button
+              className="mt-3 rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+              disabled
+              type="button"
+            >
+              Open AVL
             </button>
           </div>
         </div>

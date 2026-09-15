@@ -128,10 +128,10 @@ describe("canonical Portfolio Dashboard filters", () => {
 	it.each([
 		["STN Project Name", "manta", (row: PortfolioDashboardRow) => row.project.projectName],
 		["QCI Model Name", "qci-alpha-01", (row: PortfolioDashboardRow) => row.project.qciModelName],
-		["Product Line", "line alpha", (row: PortfolioDashboardRow) => row.project.productLine],
+		["Product Line", "helios neo", (row: PortfolioDashboardRow) => row.project.productLine],
 		["Customer", "customer b", (row: PortfolioDashboardRow) => row.project.customer],
-		["CPU", "cpu beta", (row: PortfolioDashboardRow) => row.project.cpu],
-		["GPU", "gpu beta", (row: PortfolioDashboardRow) => row.project.gpu],
+		["CPU", "novalake", (row: PortfolioDashboardRow) => row.project.cpu],
+		["GPU", "gn22-x7", (row: PortfolioDashboardRow) => row.project.gpu],
 	] as const)("searches case-insensitively across approved field %s", (_field, term, getter) => {
 		const expectedIds = rows.filter((row) => getter(row).toLowerCase().includes(term)).map((row) => row.projectId);
 		expect(expectedIds.length).toBeGreaterThan(0);
@@ -155,17 +155,17 @@ describe("canonical Portfolio Dashboard filters", () => {
 	});
 
 	it("clearing one cloned filter removes only that predicate and chip", () => {
-		const active = filtersWith({ productLine: "DEV Line Alpha", gpu: "DEV GPU Alpha" });
+		const active = filtersWith({ customer: "Acer", gpu: "GN22-X7/X9" });
 		const cleared = { ...active, gpu: "" };
 		const before = filterPortfolioDashboardRows(rows, "", active);
 		const after = filterPortfolioDashboardRows(rows, "", cleared);
 
-		expect(rowIds(before)).toEqual([rows[1]!.projectId]);
-		expect(rowIds(after)).toEqual(rows.filter((row) => row.project.productLine === "DEV Line Alpha").map((row) => row.projectId));
+		expect(rowIds(before)).toEqual([rows[3]!.projectId]);
+		expect(rowIds(after)).toEqual(rows.filter((row) => row.project.customer === "Acer").map((row) => row.projectId));
 		expect(portfolioDashboardFilterChips(cleared)).toEqual([
-			{ key: "productLine", field: "Product Line", value: "DEV Line Alpha", label: "Product Line: DEV Line Alpha" },
+			{ key: "customer", field: "Customer", value: "Acer", label: "Customer: Acer" },
 		]);
-		expect(active.gpu).toBe("DEV GPU Alpha");
+		expect(active.gpu).toBe("GN22-X7/X9");
 	});
 
 	it("ignores runtime Category and QCI PM values instead of treating them as filters", () => {
@@ -232,7 +232,7 @@ describe("canonical Portfolio Dashboard filters", () => {
 			projects: canonicalProjectFixtures.map((project) => project.id === devProject003.id ? { ...project, team: null } : project),
 			schedules: canonicalScheduleFixtures,
 		});
-		const filters = filtersWith({ status: "Pending", gpu: "DEV GPU Beta" });
+		const filters = filtersWith({ status: "Pending", gpu: "GN22-X7/X9" });
 
 		expect(rowIds(filterPortfolioDashboardRows(withoutTeamRows, "", filters))).toEqual(rowIds(filterPortfolioDashboardRows(originalRows, "", filters)));
 	});

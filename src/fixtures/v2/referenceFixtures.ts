@@ -34,6 +34,18 @@ export const categoryReferenceFixtures: readonly CatalogItem<CatalogItemId>[] = 
 		active: true,
 		reviewStatus: "reviewed",
 	},
+	...[
+		["demo-category-aspire", "Aspire"],
+		["demo-category-gamepad", "Gamepad"],
+		["demo-category-gaming", "Gaming"],
+		["demo-category-woa", "WOA"],
+	].map(([id, displayName]) => ({
+		id: toCatalogItemId(id),
+		displayName,
+		aliases: [],
+		active: true,
+		reviewStatus: "reviewed" as const,
+	})),
 ];
 
 export const productLineReferenceFixtures: readonly CatalogItem<CatalogItemId>[] = [
@@ -51,6 +63,18 @@ export const productLineReferenceFixtures: readonly CatalogItem<CatalogItemId>[]
 		active: true,
 		reviewStatus: "reviewed",
 	},
+	...[
+		["demo-product-line-aspire-refresh-id", "Aspire (Refresh ID)"],
+		["demo-product-line-game-pad", "Game pad"],
+		["demo-product-line-helios-neo", "Helios Neo"],
+		["demo-product-line-nitro-edge", "Nitro Edge"],
+	].map(([id, displayName]) => ({
+		id: toCatalogItemId(id),
+		displayName,
+		aliases: [],
+		active: true,
+		reviewStatus: "reviewed" as const,
+	})),
 ];
 
 export const panelSizeReferenceFixtures: readonly CatalogItem<CatalogItemId>[] = [
@@ -85,6 +109,17 @@ export const cpuReferenceFixtures: readonly CatalogItem<CatalogItemId>[] = [
 		active: true,
 		reviewStatus: "reviewed",
 	},
+	...[
+		["demo-cpu-intel-novalake-hx", "Intel Novalake HX 28C/24C"],
+		["demo-cpu-amd-hawkpoint-1-fp8", "AMD HawkPoint 1 FP8 (New PCBA)-two DIMM"],
+		["demo-cpu-nvidia-n1", "nVIDIA N1"],
+	].map(([id, displayName]) => ({
+		id: toCatalogItemId(id),
+		displayName,
+		aliases: [],
+		active: true,
+		reviewStatus: "reviewed" as const,
+	})),
 ];
 
 export const gpuReferenceFixtures: readonly CatalogItem<CatalogItemId>[] = [
@@ -102,4 +137,15 @@ export const gpuReferenceFixtures: readonly CatalogItem<CatalogItemId>[] = [
 		active: true,
 		reviewStatus: "reviewed",
 	},
+	...[
+		["demo-gpu-gn22-x2-x4", "GN22-X2/X4"],
+		["demo-gpu-gn20-x6", "GN20-X6"],
+		["demo-gpu-gn22-x7-x9", "GN22-X7/X9"],
+	].map(([id, displayName]) => ({
+		id: toCatalogItemId(id),
+		displayName,
+		aliases: [],
+		active: true,
+		reviewStatus: "reviewed" as const,
+	})),
 ];

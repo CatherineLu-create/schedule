@@ -50,7 +50,7 @@ export function PortfolioDashboardView({ rows, onCreateProject, onExport, onOpen
     <header className="flex flex-wrap items-center justify-between gap-4">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Project Information</h1>
-        <p className="mt-1 text-sm text-slate-500">Portfolio overview</p>
+        <p className="mt-1 text-sm text-slate-500">Dashboard</p>
       </div>
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => onExport()} className={`rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 ${focus}`}>Export to Excel</button>

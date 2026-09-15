@@ -49,7 +49,10 @@ describe("OfficialScheduleView", () => {
       <OfficialScheduleView read={{ kind: "noPublishedSchedule" }} />,
     );
 
-    expect(screen.getByText("No published schedule")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Current Schedule" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Current Schedule" })).toBeInTheDocument();
+    expect(screen.getByText("-")).toBeInTheDocument();
+    expect(screen.queryByText("No published schedule")).not.toBeInTheDocument();
     expect(screen.queryByText(/^Published v/)).not.toBeInTheDocument();
     expect(screen.queryByText("Schedule data unavailable")).not.toBeInTheDocument();
   });

@@ -66,8 +66,22 @@ describe("canonical Portfolio Dashboard read projection", () => {
 
     expect(rows).toHaveLength(5);
     expect(rows.map((row) => row.projectId)).toEqual(canonicalProjectFixtures.map((project) => project.id));
-    expect(rows[1]).toMatchObject({ category: "DEV Notebook", pcbNumber: "DEV-PCB-002" });
-    expect(rows[2]).toMatchObject({ category: "DEV Creator", pcbNumber: "DEV-PCB-003" });
+    expect(rows.map((row) => ({
+      projectId: row.projectId,
+      name: row.project.projectName,
+      category: row.category,
+      productLine: row.project.productLine,
+      cpu: row.project.cpu,
+      gpu: row.project.gpu,
+    }))).toEqual([
+      { projectId: "dev-project-001", name: "Manta", category: "Aspire", productLine: "Aspire (Refresh ID)", cpu: "Intel Novalake HX 28C/24C", gpu: "GN22-X2/X4" },
+      { projectId: "dev-project-002", name: "Nautilus", category: "Gamepad", productLine: "Game pad", cpu: "AMD HawkPoint 1 FP8 (New PCBA)-two DIMM", gpu: "GN20-X6" },
+      { projectId: "dev-project-003", name: "Orca", category: "Gaming", productLine: "Helios Neo", cpu: "Intel Novalake HX 28C/24C", gpu: "GN22-X7/X9" },
+      { projectId: "dev-project-004", name: "Beluga", category: "Gaming", productLine: "Nitro Edge", cpu: "AMD HawkPoint 1 FP8 (New PCBA)-two DIMM", gpu: "GN22-X7/X9" },
+      { projectId: "dev-project-005", name: "Marlin", category: "WOA", productLine: "Aspire (Refresh ID)", cpu: "nVIDIA N1", gpu: "GN22-X2/X4" },
+    ]);
+    expect(rows[1]).toMatchObject({ pcbNumber: "DEV-PCB-002" });
+    expect(rows[2]).toMatchObject({ pcbNumber: "DEV-PCB-003" });
   });
 
   it("uses maximum Published version rather than final array entry in a local edge-case schedule", () => {

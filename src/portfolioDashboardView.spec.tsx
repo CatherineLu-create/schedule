@@ -35,7 +35,8 @@ describe("Portfolio Dashboard shell", () => {
   it("keeps approved heading/actions and three truthful attention cards instead of fake counts", () => {
     setup();
     expect(screen.getByRole("heading", { name: "Project Information", level: 1 })).toBeInTheDocument();
-    expect(screen.getByText("Portfolio overview")).toBeInTheDocument();
+    expect(screen.getByText("Dashboard")).toBeInTheDocument();
+    expect(screen.queryByText("Portfolio overview")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Export to Excel" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Create Project" })).toHaveTextContent("+ Create Project");
     const attention = screen.getByRole("region", { name: "Needs Attention" });
@@ -81,7 +82,7 @@ describe("Portfolio Dashboard shell", () => {
       } else expect(controls[index]).toBeEnabled();
     });
     expect(within(screen.getByRole("combobox", { name: "Status" })).getAllByRole("option").map((option) => option.textContent)).toEqual(["All", "RFQ", "On Going", "Pending", "Kick off", "MP"]);
-    expect(within(screen.getByRole("combobox", { name: "GPU" })).getAllByRole("option").map((option) => option.textContent)).toEqual(["All", "DEV GPU Alpha", "DEV GPU Beta"]);
+    expect(within(screen.getByRole("combobox", { name: "GPU" })).getAllByRole("option").map((option) => option.textContent)).toEqual(["All", "GN22-X2/X4", "GN20-X6", "GN22-X7/X9"]);
   });
 
   it("wires canonical Status and GPU predicates to the real table and result count", () => {
@@ -92,23 +93,23 @@ describe("Portfolio Dashboard shell", () => {
     expect(visibleIds()).toEqual(["dev-project-003"]);
     expect(screen.getByText("Showing 1 of 5 projects")).toBeInTheDocument();
     select("Status", "");
-    select("GPU", "DEV GPU Beta");
-    expect(visibleIds()).toEqual(["dev-project-003", "dev-project-005"]);
+    select("GPU", "GN22-X7/X9");
+    expect(visibleIds()).toEqual(["dev-project-003", "dev-project-004"]);
     expect(screen.getByText("Showing 2 of 5 projects")).toBeInTheDocument();
   });
 
   it("combines Customer and GPU with AND, removes only the chosen chip, and clears all filters", () => {
     setup();
-    select("Customer", "Acer");
-    select("GPU", "DEV GPU Beta");
+    select("Customer", "DEV Customer B");
+    select("GPU", "GN20-X6");
     expect(visibleIds()).toEqual([]);
     expect(screen.getByText("Showing 0 of 5 projects")).toBeInTheDocument();
     expect(screen.getByText("No projects match the current search and filters")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Remove Customer: Acer" })).toHaveTextContent("Customer: Acer ×");
-    expect(screen.getByRole("button", { name: "Remove GPU: DEV GPU Beta" })).toHaveTextContent("GPU: DEV GPU Beta ×");
-    fireEvent.click(screen.getByRole("button", { name: "Remove Customer: Acer" }));
-    expect(screen.getByRole("combobox", { name: "GPU" })).toHaveValue("DEV GPU Beta");
-    expect(visibleIds()).toEqual(["dev-project-003", "dev-project-005"]);
+    expect(screen.getByRole("button", { name: "Remove Customer: DEV Customer B" })).toHaveTextContent("Customer: DEV Customer B ×");
+    expect(screen.getByRole("button", { name: "Remove GPU: GN20-X6" })).toHaveTextContent("GPU: GN20-X6 ×");
+    fireEvent.click(screen.getByRole("button", { name: "Remove Customer: DEV Customer B" }));
+    expect(screen.getByRole("combobox", { name: "GPU" })).toHaveValue("GN20-X6");
+    expect(visibleIds()).toEqual(["dev-project-002"]);
     fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
     expect(visibleIds()).toEqual(["dev-project-001", "dev-project-002", "dev-project-003", "dev-project-004", "dev-project-005"]);
     expect(screen.queryByRole("button", { name: /^Remove / })).not.toBeInTheDocument();
@@ -116,7 +117,7 @@ describe("Portfolio Dashboard shell", () => {
 
   it("combines search with filters and retains the complete shell for zero search results", () => {
     setup();
-    select("GPU", "DEV GPU Beta");
+		select("GPU", "GN22-X7/X9");
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "  qci-alpha-02  " } });
     expect(visibleIds()).toEqual(["dev-project-003"]);
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "not-a-project" } });
