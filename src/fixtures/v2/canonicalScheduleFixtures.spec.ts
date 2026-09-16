@@ -15,6 +15,13 @@ import {
 } from "./canonicalScheduleFixtures";
 
 describe("canonical Schedule fixtures", () => {
+  it("seeds no canonical Working Draft", () => {
+    for (const value of canonicalScheduleFixtures) {
+      expect(Object.hasOwn(value, "workingDraft")).toBe(true);
+      expect(Reflect.get(value, "workingDraft")).toBeNull();
+    }
+  });
+
   it("owns exactly one Schedule for every canonical Project in Project order", () => {
     const projectIds = canonicalProjectFixtures.map((project) => project.id);
     const scheduleIds = canonicalScheduleFixtures.map(

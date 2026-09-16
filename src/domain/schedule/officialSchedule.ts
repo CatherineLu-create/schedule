@@ -6,6 +6,7 @@ import type {
 } from "../shared/ids";
 import type { ValidationIssue } from "../validation/validationIssue";
 import type { MilestoneDefinition } from "./milestoneCatalog";
+import type { CanonicalScheduleWorkingDraft } from "./canonicalScheduleWorkingDraft";
 import type {
   MilestoneApplicability,
   ScheduleVersionNumber,
@@ -29,6 +30,7 @@ export interface CanonicalPublishedScheduleVersion {
 export interface CanonicalProjectSchedule {
   readonly projectId: ProjectId;
   readonly publishedVersions: readonly CanonicalPublishedScheduleVersion[];
+  readonly workingDraft: CanonicalScheduleWorkingDraft | null;
 }
 
 export function createEmptyCanonicalProjectSchedule(
@@ -37,6 +39,7 @@ export function createEmptyCanonicalProjectSchedule(
   return {
     projectId,
     publishedVersions: [],
+    workingDraft: null,
   };
 }
 

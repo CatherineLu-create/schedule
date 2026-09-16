@@ -78,6 +78,7 @@ export const devSchedule001: CanonicalProjectSchedule = {
       ],
     },
   ],
+  workingDraft: null,
 };
 
 export const devSchedule002 = createEmptyCanonicalProjectSchedule(

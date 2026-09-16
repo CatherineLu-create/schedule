@@ -42,6 +42,9 @@ export function prototypeReducer(
 		if (action.schedule.publishedVersions.length > 0) {
 			throw new Error("New Project Schedule must have no Published versions");
 		}
+		if (action.schedule.workingDraft !== null) {
+			throw new Error("New Project Schedule must not have a Working Draft");
+		}
 
 		return {
 			...state,

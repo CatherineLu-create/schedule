@@ -142,6 +142,7 @@ const zeroMilestoneSchedule: CanonicalProjectSchedule = {
     publishedAt: "2026-09-12T00:00:00Z",
     milestones: [],
   }],
+  workingDraft: null,
 };
 
 const malformedSchedule: CanonicalProjectSchedule = {
@@ -160,7 +161,7 @@ const currentScheduleWithIgnoredDraft = {
     { ...zeroMilestoneSchedule.publishedVersions[0]!, versionNumber: 2 as ScheduleVersionNumber },
   ],
   workingDraft: { sentinel: "must not become Current Schedule" },
-};
+} as unknown as CanonicalProjectSchedule;
 
 describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
   it("integrates the canonical Portfolio shell, Current Published grouped table, search, and seven filters", () => {
@@ -331,12 +332,16 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
   });
 
   it("renders the maximum Published version as Current Schedule and ignores Draft-like data", () => {
+    expect(Object.hasOwn(zeroMilestoneSchedule, "workingDraft")).toBe(true);
+    expect(Reflect.get(zeroMilestoneSchedule, "workingDraft")).toBeNull();
     render(<LocalScheduleWorkspaceHarness schedule={currentScheduleWithIgnoredDraft} />);
     fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
 
     const currentSchedule = screen.getByRole("region", { name: "Current Schedule" });
     expect(within(currentSchedule).getByText("Published v04")).toBeInTheDocument();
     expect(within(currentSchedule).queryByText(/must not become Current Schedule/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Working Draft" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Start Draft|Edit Draft|Publish|Cancel Draft/ })).not.toBeInTheDocument();
   });
 
   it("shows a Published version with zero milestones distinctly", () => {

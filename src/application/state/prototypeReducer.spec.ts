@@ -40,6 +40,7 @@ function nonEmptySchedule(projectId: ProjectId): CanonicalProjectSchedule {
         milestones: [],
       },
     ],
+    workingDraft: null,
   };
 }
 
@@ -134,6 +135,21 @@ describe("prototypeReducer projectAdded", () => {
       type: "projectAdded",
       project: added,
       schedule: nonEmptySchedule(added.id),
+    });
+  });
+
+  it("rejects a non-null Draft on Project creation atomically", () => {
+    const project = makeProject("new-project", "New Project");
+    const state = makeState([], []);
+    const contaminated = {
+      ...createEmptyCanonicalProjectSchedule(project.id),
+      workingDraft: { milestones: [] },
+    } as unknown as CanonicalProjectSchedule;
+
+    expectAtomicRejection(state, {
+      type: "projectAdded",
+      project,
+      schedule: contaminated,
     });
   });
 

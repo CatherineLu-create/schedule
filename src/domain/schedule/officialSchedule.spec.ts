@@ -12,6 +12,7 @@ import {
   type ProjectId,
 } from "../shared/ids";
 import type { MilestoneDefinition } from "./milestoneCatalog";
+import type { CanonicalScheduleWorkingDraft } from "./canonicalScheduleWorkingDraft";
 import {
   createEmptyCanonicalProjectSchedule,
   getCurrentPublishedVersion,
@@ -94,6 +95,7 @@ function schedule(
   return {
     projectId: toProjectId(projectId),
     publishedVersions,
+    workingDraft: null,
   };
 }
 
@@ -114,8 +116,13 @@ describe("canonical official Schedule model", () => {
     expect(empty).toEqual({
       projectId: "project-empty",
       publishedVersions: [],
+      workingDraft: null,
     });
-    expect(Object.keys(empty)).toEqual(["projectId", "publishedVersions"]);
+    expect(Object.keys(empty)).toEqual([
+      "projectId",
+      "publishedVersions",
+      "workingDraft",
+    ]);
     expect(Object.keys(published)).toEqual([
       "versionNumber",
       "versionNote",
@@ -129,9 +136,6 @@ describe("canonical official Schedule model", () => {
       "plan",
       "actual",
     ]);
-    expectTypeOf<keyof CanonicalProjectSchedule>().toEqualTypeOf<
-      "projectId" | "publishedVersions"
-    >();
     expectTypeOf<keyof CanonicalPublishedScheduleVersion>().toEqualTypeOf<
       "versionNumber" | "versionNote" | "publishedAt" | "milestones"
     >();
@@ -142,8 +146,46 @@ describe("canonical official Schedule model", () => {
       | "plan"
       | "actual"
     >();
+    expectTypeOf<keyof CanonicalProjectSchedule>().toEqualTypeOf<
+      "projectId" | "publishedVersions" | "workingDraft"
+    >();
+    expectTypeOf<CanonicalProjectSchedule["workingDraft"]>()
+      .toEqualTypeOf<CanonicalScheduleWorkingDraft | null>();
     expectTypeOf(empty.projectId).toEqualTypeOf<ProjectId>();
     expectTypeOf(row.milestoneId).toEqualTypeOf<MilestoneId>();
+  });
+
+  it("initializes one explicit null Working Draft", () => {
+    const value = createEmptyCanonicalProjectSchedule(
+      toProjectId("project-empty-draft"),
+    );
+
+    expect(Object.keys(value)).toEqual([
+      "projectId",
+      "publishedVersions",
+      "workingDraft",
+    ]);
+    expect(Reflect.get(value, "workingDraft")).toBeNull();
+  });
+
+  it("keeps Published validation healthy beside a malformed Draft", () => {
+    const healthy = schedule("project-draft-isolation", [
+      version(1, [milestone("published-row")]),
+    ]);
+    const malformed = {
+      ...healthy,
+      workingDraft: {
+        milestones: [{
+          ...healthy.publishedVersions[0]!.milestones[0]!,
+          milestoneDefinitionId: toMilestoneDefinitionId("missing"),
+        }],
+      },
+    } as unknown as CanonicalProjectSchedule;
+
+    expect(validateCanonicalProjectSchedule(malformed, definitions)).toEqual([]);
+    expect(getCurrentPublishedVersion(malformed)).toBe(
+      healthy.publishedVersions[0],
+    );
   });
 
   it("selects Current Published by maximum version number without mutation", () => {

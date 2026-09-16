@@ -72,6 +72,7 @@ describe("canonical Project command integration", () => {
     expect(next.schedules.at(-1)).toEqual({
       projectId: created.project.id,
       publishedVersions: [],
+      workingDraft: null,
     });
     expect(
       selectOfficialProjectSources(next, created.project.id)?.master,

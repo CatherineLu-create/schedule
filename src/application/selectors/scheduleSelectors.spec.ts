@@ -90,6 +90,7 @@ function schedule(
   return {
     projectId: owner,
     publishedVersions,
+    workingDraft: null,
   };
 }
 
@@ -320,6 +321,43 @@ describe("selected Schedule isolation from unrelated defects", () => {
 });
 
 describe("Current Published selection", () => {
+  it.each(["valid", "malformed"] as const)(
+    "keeps healthy Current Published unchanged beside a %s Draft",
+    (draftKind) => {
+      const owner = project(`official-${draftKind}`);
+      const current = version(3, [milestone("official-row")]);
+      const base = schedule(owner.id, [current]);
+      const baseline = selectCurrentPublishedSchedule(
+        state([owner], [base]),
+        owner.id,
+      );
+      expect(baseline.kind).toBe("published");
+      if (baseline.kind !== "published") throw new Error("Expected baseline");
+
+      const workingDraft = draftKind === "valid"
+        ? { milestones: [{ ...current.milestones[0]! }] }
+        : {
+            milestones: [{
+              ...current.milestones[0]!,
+              milestoneDefinitionId: toMilestoneDefinitionId("missing"),
+            }],
+          };
+      const scheduleWithDraft = {
+        ...base,
+        workingDraft,
+      } as unknown as CanonicalProjectSchedule;
+      const read = selectCurrentPublishedSchedule(
+        state([owner], [scheduleWithDraft]),
+        owner.id,
+      );
+
+      expect(read.kind).toBe("published");
+      if (read.kind !== "published") throw new Error("Expected Published read");
+      expect(read.version).toBe(current);
+      expect(read.milestoneRows).toEqual(baseline.milestoneRows);
+    },
+  );
+
   it("distinguishes a valid empty Published history from unavailable data", () => {
     const owner = project("project-no-published");
 

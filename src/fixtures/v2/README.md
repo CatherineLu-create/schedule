@@ -55,6 +55,13 @@ or legacy Schedule data. Published versions use positive version numbers and
 canonical milestone lineage IDs. A Schedule with no Published versions is an
 existing empty Schedule, not a missing resource or fake v0.
 
+Every canonical Schedule fixture carries an explicit `workingDraft: null`.
+Task 2.3 seeds no production Working Draft scenario: Manta alone retains its
+accepted Published demo Schedule, while Nautilus, Orca, Beluga, and Marlin
+remain existing Schedule containers with no Published versions. Working Draft
+validation scenarios stay in local test builders, and predecessor candidate
+fixtures remain disconnected from canonical runtime authority.
+
 ## Disconnected predecessor Schedule fixtures
 
 `ScheduleWorkingDraft.basePublishedVersionId` is
