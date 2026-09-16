@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import type { Project } from "../../domain/project/project";
 import type { ProjectMaster } from "../../domain/project/projectMaster";
+import type { CanonicalScheduleWorkingDraftMilestone } from "../../domain/schedule/canonicalScheduleWorkingDraft";
 import type {
   CanonicalProjectSchedule,
   CanonicalPublishedScheduleMilestone,
@@ -16,6 +17,7 @@ import {
   toMilestoneDefinitionId,
   toMilestoneId,
   toProjectId,
+  type MilestoneDefinitionId,
   type MilestoneId,
   type ProjectId,
 } from "../../domain/shared/ids";
@@ -31,9 +33,12 @@ import type { PrototypeState } from "../state/prototypeState";
 import {
   resolveCanonicalScheduleOwner,
   selectCurrentPublishedSchedule,
+  selectScheduleWorkingDraft,
   validateCanonicalScheduleState,
   type CurrentPublishedScheduleRead,
   type PublishedScheduleMilestoneRow,
+  type ScheduleWorkingDraftMilestoneRow,
+  type ScheduleWorkingDraftRead,
 } from "./scheduleSelectors";
 
 function dateOnly(value: string): DateOnly {
@@ -95,6 +100,22 @@ function schedule(
   };
 }
 
+function draftMilestone(
+  id: string,
+  milestoneDefinitionId: MilestoneDefinitionId =
+    toMilestoneDefinitionId("milestone-design-kickoff"),
+  overrides: Partial<CanonicalScheduleWorkingDraftMilestone> = {},
+): CanonicalScheduleWorkingDraftMilestone {
+  return {
+    milestoneId: toMilestoneId(id),
+    milestoneDefinitionId,
+    applicability: "applicable",
+    plan: null,
+    actual: null,
+    ...overrides,
+  };
+}
+
 function state(
   projects: readonly Project[],
   schedules: readonly CanonicalProjectSchedule[],
@@ -124,6 +145,17 @@ function expectUnavailableCode(
     throw new Error(`Expected unavailable, received ${read.kind}`);
   }
 
+  expect(read.issues.map((issue) => issue.code)).toContain(code);
+}
+
+function expectDraftUnavailable(
+  read: ScheduleWorkingDraftRead,
+  code: string,
+  workingDraftExists: boolean,
+): void {
+  expect(read.kind).toBe("unavailable");
+  if (read.kind !== "unavailable") throw new Error("Expected unavailable Draft");
+  expect(read.workingDraftExists).toBe(workingDraftExists);
   expect(read.issues.map((issue) => issue.code)).toContain(code);
 }
 
@@ -647,5 +679,200 @@ describe("Current Published milestone projection", () => {
       expect(read.version.versionNumber).toBe(1);
       expect(read.versionLabel).toBe("Published v01");
     }
+  });
+});
+
+describe("canonical Working Draft read", () => {
+  it.each([
+    {
+      name: "absent Project",
+      stateValue: state([], []),
+      projectId: toProjectId("absent"),
+      code: "schedule.integrity.project-not-found",
+    },
+    {
+      name: "missing Schedule",
+      stateValue: state([project("missing")], []),
+      projectId: toProjectId("missing"),
+      code: "schedule.integrity.missing-schedule",
+    },
+    {
+      name: "duplicate Schedule",
+      stateValue: state(
+        [project("duplicate")],
+        [schedule(toProjectId("duplicate")), schedule(toProjectId("duplicate"))],
+      ),
+      projectId: toProjectId("duplicate"),
+      code: "schedule.integrity.duplicate-schedule",
+    },
+  ] as const)("reports $name as owner unavailable", ({ stateValue, projectId, code }) => {
+    expectDraftUnavailable(selectScheduleWorkingDraft(stateValue, projectId), code, false);
+  });
+
+  it("distinguishes no Draft, malformed Draft, and a valid Draft", () => {
+    const owner = project("draft-owner");
+    expect(selectScheduleWorkingDraft(state([owner], [schedule(owner.id)]), owner.id))
+      .toEqual({ kind: "noWorkingDraft" });
+
+    const malformed = {
+      ...schedule(owner.id),
+      workingDraft: {
+        milestones: [draftMilestone("bad", toMilestoneDefinitionId("missing"))],
+      },
+    };
+    expectDraftUnavailable(
+      selectScheduleWorkingDraft(state([owner], [malformed]), owner.id),
+      "schedule.draft.integrity.unresolved-milestone-definition",
+      true,
+    );
+    expect(malformed.workingDraft.milestones).toHaveLength(1);
+
+    const draft = Object.freeze({ milestones: Object.freeze([draftMilestone("valid")]) });
+    const read = selectScheduleWorkingDraft(
+      state([owner], [{ ...schedule(owner.id), workingDraft: draft }]), owner.id,
+    );
+    expect(read.kind).toBe("workingDraft");
+    if (read.kind !== "workingDraft") throw new Error("Expected Draft");
+    expect(read.draft).toBe(draft);
+    expect(read.milestoneRows[0]).toEqual(expect.objectContaining({
+      milestoneId: toMilestoneId("valid"), phase: "-", plan: null, actual: null,
+    }));
+  });
+
+  it("reports duplicate Draft milestone identity without normalizing rows", () => {
+    const owner = project("duplicate-draft-row");
+    const draft = Object.freeze({ milestones: Object.freeze([
+      draftMilestone("same"), draftMilestone("same"),
+    ]) });
+    const read = selectScheduleWorkingDraft(
+      state([owner], [{ ...schedule(owner.id), workingDraft: draft }]), owner.id,
+    );
+    expectDraftUnavailable(read, "schedule.draft.integrity.duplicate-milestone-id", true);
+    expect(draft.milestones).toHaveLength(2);
+  });
+
+  it("keeps a selected Draft readable despite unrelated ownership and content defects", () => {
+    const selected = project("selected", "Renamed selected Project");
+    const selectedDraft = Object.freeze({ milestones: Object.freeze([draftMilestone("selected-row")]) });
+    const malformedOwner = project("malformed");
+    const duplicateOwner = project("duplicate-unrelated");
+    const duplicate = schedule(duplicateOwner.id);
+    const read = selectScheduleWorkingDraft(state(
+      [selected, malformedOwner, duplicateOwner],
+      [
+        { ...schedule(selected.id), workingDraft: selectedDraft },
+        { ...withInvalidVersionNumber(malformedOwner.id, 0), workingDraft: {
+          milestones: [draftMilestone("bad", toMilestoneDefinitionId("missing"))],
+        } },
+        duplicate, { ...duplicate }, schedule(toProjectId("orphan")),
+      ],
+    ), selected.id);
+    expect(read.kind).toBe("workingDraft");
+    if (read.kind !== "workingDraft") throw new Error("Expected Draft");
+    expect(read.draft).toBe(selectedDraft);
+  });
+
+  it("scopes equal raw milestone IDs to the selected Project", () => {
+    const first = project("first");
+    const second = project("second");
+    const value = state([first, second], [
+      { ...schedule(first.id), workingDraft: { milestones: [
+        draftMilestone("same-raw-id", undefined, { plan: dateOnly("2030-01-01") }),
+      ] } },
+      { ...schedule(second.id), workingDraft: { milestones: [
+        draftMilestone("same-raw-id", undefined, { plan: dateOnly("2040-02-02") }),
+      ] } },
+    ]);
+    const firstRead = selectScheduleWorkingDraft(value, first.id);
+    const secondRead = selectScheduleWorkingDraft(value, second.id);
+    expect(firstRead.kind).toBe("workingDraft");
+    expect(secondRead.kind).toBe("workingDraft");
+    if (firstRead.kind !== "workingDraft" || secondRead.kind !== "workingDraft") {
+      throw new Error("Expected Project-scoped Drafts");
+    }
+    expect(firstRead.milestoneRows[0]?.plan).toBe(dateOnly("2030-01-01"));
+    expect(secondRead.milestoneRows[0]?.plan).toBe(dateOnly("2040-02-02"));
+  });
+
+  it("projects ordered canonical rows with raw editable dates and no mutation", () => {
+    expectTypeOf<ScheduleWorkingDraftMilestoneRow["plan"]>()
+      .toEqualTypeOf<DateOnly | null>();
+    expectTypeOf<ScheduleWorkingDraftMilestoneRow["actual"]>()
+      .toEqualTypeOf<DateOnly | null>();
+    const owner = project("projection-owner");
+    const later = Object.freeze(draftMilestone("later", toMilestoneDefinitionId("milestone-c1-c-smt"), {
+      plan: dateOnly("2026-10-15"), actual: null,
+    }));
+    const earlier = Object.freeze(draftMilestone("earlier", toMilestoneDefinitionId("milestone-design-kickoff"), {
+      applicability: "notApplicable", plan: null, actual: dateOnly("2026-09-11"),
+    }));
+    const draft = Object.freeze({ milestones: Object.freeze([later, earlier]) });
+    const read = selectScheduleWorkingDraft(
+      state([owner], [{ ...schedule(owner.id), workingDraft: draft }]), owner.id,
+    );
+    expect(read.kind).toBe("workingDraft");
+    if (read.kind !== "workingDraft") throw new Error("Expected Draft");
+    expect(read.draft).toBe(draft);
+    expect(read.milestoneRows).toEqual([
+      { milestoneId: earlier.milestoneId, phase: "-", stage: "Design", milestone: "Kickoff",
+        applicability: "notApplicable", plan: null, actual: dateOnly("2026-09-11") },
+      { milestoneId: later.milestoneId, phase: "-", stage: "C1-stage", milestone: "C-SMT",
+        applicability: "applicable", plan: dateOnly("2026-10-15"), actual: null },
+    ]);
+    expect(draft.milestones).toEqual([later, earlier]);
+  });
+
+  it("keeps valid Draft independent from malformed Published history", () => {
+    const owner = project("bad-published");
+    const draft = { milestones: [draftMilestone("valid-draft-row")] };
+    const current = state([owner], [{ ...withInvalidVersionNumber(owner.id, 0), workingDraft: draft }]);
+    const read = selectScheduleWorkingDraft(current, owner.id);
+    expect(read.kind).toBe("workingDraft");
+    if (read.kind !== "workingDraft") throw new Error("Expected Draft");
+    expect(read.draft).toBe(draft);
+    expectUnavailableCode(selectCurrentPublishedSchedule(current, owner.id),
+      "schedule.integrity.invalid-version-number");
+  });
+});
+
+describe("Draft diagnostics and Official isolation", () => {
+  it("does not add diagnostics for a valid Draft", () => {
+    const owner = project("healthy-draft");
+    expect(validateCanonicalScheduleState(state([owner], [
+      { ...schedule(owner.id), workingDraft: { milestones: [draftMilestone("valid")] } },
+    ]))).toEqual([]);
+  });
+
+  it("accumulates ownership, Published, and Draft defects globally", () => {
+    const missing = project("missing");
+    const duplicateOwner = project("duplicate");
+    const duplicate = schedule(duplicateOwner.id);
+    const malformedOwner = project("malformed");
+    const malformed = { ...withInvalidVersionNumber(malformedOwner.id, 0), workingDraft: {
+      milestones: [draftMilestone("same"), draftMilestone("same", toMilestoneDefinitionId("missing"))],
+    } };
+    const current = state(
+      [missing, duplicateOwner, malformedOwner],
+      [duplicate, { ...duplicate }, malformed, schedule(toProjectId("orphan"))],
+    );
+    expect(validateCanonicalScheduleState(current).map(({ code }) => code))
+      .toEqual(expect.arrayContaining([
+        "schedule.integrity.missing-schedule",
+        "schedule.integrity.duplicate-schedule",
+        "schedule.integrity.orphan-schedule",
+        "schedule.integrity.invalid-version-number",
+        "schedule.draft.integrity.duplicate-milestone-id",
+        "schedule.draft.integrity.unresolved-milestone-definition",
+      ]));
+    expect(malformed.workingDraft.milestones).toHaveLength(2);
+  });
+
+  it("keeps no-Published Official truth healthy beside a malformed Draft", () => {
+    const owner = project("no-published");
+    const malformed = { ...schedule(owner.id), workingDraft: {
+      milestones: [draftMilestone("bad", toMilestoneDefinitionId("missing"))],
+    } };
+    expect(selectCurrentPublishedSchedule(state([owner], [malformed]), owner.id))
+      .toEqual({ kind: "noPublishedSchedule" });
   });
 });

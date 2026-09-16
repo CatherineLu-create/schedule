@@ -3,6 +3,11 @@ import {
   stageGroupCatalog,
 } from "../../config/v2/referenceData";
 import {
+  orderScheduleWorkingDraftMilestonesByDefinition,
+  validateScheduleWorkingDraft,
+  type CanonicalScheduleWorkingDraft,
+} from "../../domain/schedule/canonicalScheduleWorkingDraft";
+import {
   getCurrentPublishedVersion,
   orderPublishedMilestonesByDefinition,
   validateCanonicalProjectSchedule,
@@ -38,6 +43,34 @@ export type CurrentPublishedScheduleRead =
       readonly version: CanonicalPublishedScheduleVersion;
       readonly versionLabel: string;
       readonly milestoneRows: readonly PublishedScheduleMilestoneRow[];
+    };
+
+export interface ScheduleWorkingDraftMilestoneRow {
+  readonly milestoneId: MilestoneId;
+  readonly phase: string;
+  readonly stage: string;
+  readonly milestone: string;
+  readonly applicability: MilestoneApplicability;
+  readonly plan: DateOnly | null;
+  readonly actual: DateOnly | null;
+}
+
+export type ScheduleWorkingDraftRead =
+  | {
+      readonly kind: "unavailable";
+      readonly workingDraftExists: false;
+      readonly issues: readonly ValidationIssue[];
+    }
+  | {
+      readonly kind: "unavailable";
+      readonly workingDraftExists: true;
+      readonly issues: readonly ValidationIssue[];
+    }
+  | { readonly kind: "noWorkingDraft" }
+  | {
+      readonly kind: "workingDraft";
+      readonly draft: CanonicalScheduleWorkingDraft;
+      readonly milestoneRows: readonly ScheduleWorkingDraftMilestoneRow[];
     };
 
 export type CanonicalScheduleOwnerResolution =
@@ -171,6 +204,11 @@ export function validateCanonicalScheduleState(
     issues.push(
       ...validateCanonicalProjectSchedule(schedule, milestoneDefinitions),
     );
+    if (schedule.workingDraft !== null) {
+      issues.push(
+        ...validateScheduleWorkingDraft(schedule.workingDraft, milestoneDefinitions),
+      );
+    }
   }
 
   return issues;
@@ -241,4 +279,45 @@ export function selectCurrentPublishedSchedule(
     versionLabel: `Published v${String(version.versionNumber).padStart(2, "0")}`,
     milestoneRows,
   };
+}
+
+export function selectScheduleWorkingDraft(
+  state: PrototypeState,
+  projectId: ProjectId,
+): ScheduleWorkingDraftRead {
+  const owner = resolveCanonicalScheduleOwner(state, projectId);
+  if (owner.kind === "unavailable") {
+    return { ...owner, workingDraftExists: false };
+  }
+
+  const draft = owner.schedule.workingDraft;
+  if (draft === null) return { kind: "noWorkingDraft" };
+
+  const issues = validateScheduleWorkingDraft(draft, milestoneDefinitions);
+  if (issues.length > 0) {
+    return { kind: "unavailable", workingDraftExists: true, issues };
+  }
+
+  const milestoneRows = orderScheduleWorkingDraftMilestonesByDefinition(
+    draft.milestones,
+    milestoneDefinitions,
+  ).map((draftMilestone): ScheduleWorkingDraftMilestoneRow => {
+    const definition = milestoneDefinitions.find(
+      ({ id }) => id === draftMilestone.milestoneDefinitionId,
+    )!;
+    const stage = stageGroupCatalog.find(
+      ({ id }) => id === definition.stageGroupId,
+    );
+    return {
+      milestoneId: draftMilestone.milestoneId,
+      phase: "-",
+      stage: stage?.displayName ?? "-",
+      milestone: definition.name,
+      applicability: draftMilestone.applicability,
+      plan: draftMilestone.plan,
+      actual: draftMilestone.actual,
+    };
+  });
+
+  return { kind: "workingDraft", draft, milestoneRows };
 }
