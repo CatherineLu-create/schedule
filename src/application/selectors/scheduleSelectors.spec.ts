@@ -29,6 +29,7 @@ import {
 } from "../../fixtures/v2/canonicalScheduleFixtures";
 import type { PrototypeState } from "../state/prototypeState";
 import {
+  resolveCanonicalScheduleOwner,
   selectCurrentPublishedSchedule,
   validateCanonicalScheduleState,
   type CurrentPublishedScheduleRead,
@@ -207,6 +208,59 @@ describe("canonical Schedule state validation", () => {
 });
 
 describe("selected canonical Schedule ownership", () => {
+  it.each([
+    {
+      name: "absent Project",
+      projects: [] as readonly Project[],
+      schedules: [schedule(toProjectId("selected-owner"))],
+      code: "schedule.integrity.project-not-found",
+    },
+    {
+      name: "missing Schedule",
+      projects: [project("selected-owner")],
+      schedules: [] as readonly CanonicalProjectSchedule[],
+      code: "schedule.integrity.missing-schedule",
+    },
+    {
+      name: "duplicate Schedule",
+      projects: [project("selected-owner")],
+      schedules: [
+        schedule(toProjectId("selected-owner")),
+        schedule(toProjectId("selected-owner")),
+      ],
+      code: "schedule.integrity.duplicate-schedule",
+    },
+  ])("resolves $name as unavailable", ({ projects, schedules, code }) => {
+    const result = resolveCanonicalScheduleOwner(
+      state(projects, schedules),
+      toProjectId("selected-owner"),
+    );
+
+    expect(result.kind).toBe("unavailable");
+    if (result.kind !== "unavailable") throw new Error("Expected unavailable");
+    expect(result.issues.map((issue) => issue.code)).toEqual([code]);
+  });
+
+  it("returns the exact renamed Project owner despite unrelated defects", () => {
+    const selected = project("selected-owner", "Renamed Project");
+    const selectedSchedule = schedule(selected.id);
+    const unrelated = project("unrelated-owner");
+    const malformed = withInvalidVersionNumber(unrelated.id, 0);
+    const duplicate = schedule(toProjectId("duplicate-owner"));
+    const result = resolveCanonicalScheduleOwner(
+      state(
+        [selected, unrelated, project("duplicate-owner")],
+        [selectedSchedule, malformed, duplicate, { ...duplicate }],
+      ),
+      selected.id,
+    );
+
+    expect(result).toEqual({ kind: "available", schedule: selectedSchedule });
+    if (result.kind === "available") {
+      expect(result.schedule).toBe(selectedSchedule);
+    }
+  });
+
   it("returns project-not-found when the selected ProjectId is absent", () => {
     const absentId = toProjectId("project-absent");
 

@@ -221,3 +221,76 @@ describe("prototypeReducer projectReplaced", () => {
     });
   });
 });
+
+describe("prototypeReducer scheduleReplaced", () => {
+  const project = (id: string): Project => makeProject(id, id);
+  const schedule = (id: string): CanonicalProjectSchedule =>
+    createEmptyCanonicalProjectSchedule(toProjectId(id));
+
+  it("replaces exactly one same-ID Schedule and preserves Projects", () => {
+    const first = schedule("project-first");
+    const replacement = { ...first, workingDraft: { milestones: [] } };
+    const second = schedule("project-second");
+    const current = makeState(
+      [project("project-first"), project("project-second")],
+      [first, second],
+    );
+    const next = prototypeReducer(current, {
+      type: "scheduleReplaced",
+      projectId: first.projectId,
+      schedule: replacement,
+    });
+
+    expect(next).not.toBe(current);
+    expect(next.projects).toBe(current.projects);
+    expect(next.schedules).toEqual([replacement, second]);
+    expect(next.schedules).not.toBe(current.schedules);
+    expect(next.schedules[1]).toBe(second);
+    expect(current.schedules).toEqual([first, second]);
+  });
+
+  const owner = project("owner");
+  const owned = schedule("owner");
+  const replacement = { ...owned, workingDraft: { milestones: [] } };
+
+  it.each([
+    {
+      name: "Project is absent",
+      state: makeState([], [owned]),
+      action: {
+        type: "scheduleReplaced" as const,
+        projectId: owner.id,
+        schedule: replacement,
+      },
+    },
+    {
+      name: "Schedule owner is missing",
+      state: makeState([owner], []),
+      action: {
+        type: "scheduleReplaced" as const,
+        projectId: owner.id,
+        schedule: replacement,
+      },
+    },
+    {
+      name: "Schedule owner is duplicated",
+      state: makeState([owner], [owned, { ...owned }]),
+      action: {
+        type: "scheduleReplaced" as const,
+        projectId: owner.id,
+        schedule: replacement,
+      },
+    },
+    {
+      name: "action and replacement ProjectIds differ",
+      state: makeState([owner], [owned]),
+      action: {
+        type: "scheduleReplaced" as const,
+        projectId: owner.id,
+        schedule: schedule("different-owner"),
+      },
+    },
+  ])("rejects $name without mutating root collections", ({ state, action }) => {
+    expectAtomicRejection(state, action);
+  });
+});

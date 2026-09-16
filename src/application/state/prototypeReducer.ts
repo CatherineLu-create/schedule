@@ -1,5 +1,6 @@
 import type { Project } from "../../domain/project/project";
 import type { CanonicalProjectSchedule } from "../../domain/schedule/officialSchedule";
+import type { ProjectId } from "../../domain/shared/ids";
 import type { PrototypeState } from "./prototypeState";
 
 export type PrototypeAction =
@@ -11,12 +12,43 @@ export type PrototypeAction =
 	| {
 			readonly type: "projectReplaced";
 			readonly project: Project;
+	  }
+	| {
+			readonly type: "scheduleReplaced";
+			readonly projectId: ProjectId;
+			readonly schedule: CanonicalProjectSchedule;
 	  };
 
 export function prototypeReducer(
 	state: PrototypeState,
 	action: PrototypeAction,
 ): PrototypeState {
+	if (action.type === "scheduleReplaced") {
+		if (action.projectId !== action.schedule.projectId) {
+			throw new Error(
+				"Replacement Schedule ProjectId must match the action ProjectId",
+			);
+		}
+		if (!state.projects.some((project) => project.id === action.projectId)) {
+			throw new Error(`Schedule Project ID not found: ${action.projectId}`);
+		}
+		const ownedCount = state.schedules.filter(
+			(schedule) => schedule.projectId === action.projectId,
+		).length;
+		if (ownedCount !== 1) {
+			throw new Error(
+				`Schedule replacement requires exactly one owner: ${action.projectId}`,
+			);
+		}
+		return {
+			...state,
+			projects: state.projects,
+			schedules: state.schedules.map((schedule) =>
+				schedule.projectId === action.projectId ? action.schedule : schedule,
+			),
+		};
+	}
+
 	if (Object.hasOwn(action.project, "schedule")) {
 		throw new Error("Project payload must not contain embedded Schedule state");
 	}

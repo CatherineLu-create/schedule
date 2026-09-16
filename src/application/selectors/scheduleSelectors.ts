@@ -6,6 +6,7 @@ import {
   getCurrentPublishedVersion,
   orderPublishedMilestonesByDefinition,
   validateCanonicalProjectSchedule,
+  type CanonicalProjectSchedule,
   type CanonicalPublishedScheduleVersion,
 } from "../../domain/schedule/officialSchedule";
 import type { MilestoneApplicability } from "../../domain/schedule/schedule";
@@ -39,6 +40,16 @@ export type CurrentPublishedScheduleRead =
       readonly milestoneRows: readonly PublishedScheduleMilestoneRow[];
     };
 
+export type CanonicalScheduleOwnerResolution =
+  | {
+      readonly kind: "unavailable";
+      readonly issues: readonly ValidationIssue[];
+    }
+  | {
+      readonly kind: "available";
+      readonly schedule: CanonicalProjectSchedule;
+    };
+
 type ScheduleOwnershipIssueCode =
   | "schedule.integrity.project-not-found"
   | "schedule.integrity.missing-schedule"
@@ -66,6 +77,46 @@ function scheduleOwnershipIssue(
 
 function displayDate(value: DateOnly | null): string {
   return value === null ? "-" : formatDateOnly(value);
+}
+
+export function resolveCanonicalScheduleOwner(
+  state: PrototypeState,
+  projectId: ProjectId,
+): CanonicalScheduleOwnerResolution {
+  if (!state.projects.some((project) => project.id === projectId)) {
+    return {
+      kind: "unavailable",
+      issues: [scheduleOwnershipIssue(
+        "schedule.integrity.project-not-found",
+        "Selected Project does not exist.",
+        projectId,
+      )],
+    };
+  }
+  const matches = state.schedules.filter(
+    (schedule) => schedule.projectId === projectId,
+  );
+  if (matches.length === 0) {
+    return {
+      kind: "unavailable",
+      issues: [scheduleOwnershipIssue(
+        "schedule.integrity.missing-schedule",
+        "Selected Project has no canonical Schedule.",
+        projectId,
+      )],
+    };
+  }
+  if (matches.length > 1) {
+    return {
+      kind: "unavailable",
+      issues: [scheduleOwnershipIssue(
+        "schedule.integrity.duplicate-schedule",
+        "Selected Project has duplicate canonical Schedules.",
+        projectId,
+      )],
+    };
+  }
+  return { kind: "available", schedule: matches[0]! };
 }
 
 export function validateCanonicalScheduleState(
@@ -129,50 +180,9 @@ export function selectCurrentPublishedSchedule(
   state: PrototypeState,
   projectId: ProjectId,
 ): CurrentPublishedScheduleRead {
-  if (!state.projects.some((project) => project.id === projectId)) {
-    return {
-      kind: "unavailable",
-      issues: [
-        scheduleOwnershipIssue(
-          "schedule.integrity.project-not-found",
-          "Selected Project does not exist.",
-          projectId,
-        ),
-      ],
-    };
-  }
-
-  const matchingSchedules = state.schedules.filter(
-    (schedule) => schedule.projectId === projectId,
-  );
-
-  if (matchingSchedules.length === 0) {
-    return {
-      kind: "unavailable",
-      issues: [
-        scheduleOwnershipIssue(
-          "schedule.integrity.missing-schedule",
-          "Selected Project has no canonical Schedule.",
-          projectId,
-        ),
-      ],
-    };
-  }
-
-  if (matchingSchedules.length > 1) {
-    return {
-      kind: "unavailable",
-      issues: [
-        scheduleOwnershipIssue(
-          "schedule.integrity.duplicate-schedule",
-          "Selected Project has duplicate canonical Schedules.",
-          projectId,
-        ),
-      ],
-    };
-  }
-
-  const selectedSchedule = matchingSchedules[0]!;
+  const owner = resolveCanonicalScheduleOwner(state, projectId);
+  if (owner.kind === "unavailable") return owner;
+  const selectedSchedule = owner.schedule;
   const localIssues = validateCanonicalProjectSchedule(
     selectedSchedule,
     milestoneDefinitions,
