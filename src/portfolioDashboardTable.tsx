@@ -41,9 +41,15 @@ function ScheduleValue({ read, mapping }: { read: PortfolioCurrentPublishedRead;
   if (occurrences.length === 0) return <>—</>;
   return <div className="space-y-2 whitespace-normal text-xs leading-5">
     {occurrences.map((occurrence) => <div key={occurrence.milestoneId} data-milestone-id={occurrence.milestoneId} className="border-b border-slate-100 pb-1 last:border-0 last:pb-0">
-      <div className="text-[10px] font-medium text-slate-500">{occurrence.applicability === "notApplicable" ? "Not applicable" : "Applicable"}</div>
-      <div>P: {display(occurrence.plan)}</div>
-      <div>A: {display(occurrence.actual)}</div>
+      {occurrence.applicability === "notApplicable" ? (
+        <div>N/A</div>
+      ) : (
+        <>
+          <div className="text-[10px] font-medium text-slate-500">Applicable</div>
+          <div>P: {display(occurrence.plan)}</div>
+          <div>A: {display(occurrence.actual)}</div>
+        </>
+      )}
     </div>)}
   </div>;
 }

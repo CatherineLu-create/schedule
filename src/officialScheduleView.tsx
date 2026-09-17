@@ -58,7 +58,7 @@ export function OfficialScheduleView({
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
                         {row.applicability === "applicable"
                           ? "Applicable"
-                          : "Not applicable"}
+                          : "Not Applicable"}
                       </span>
                     </td>
                     <td className="px-4 py-3">{row.plan}</td>

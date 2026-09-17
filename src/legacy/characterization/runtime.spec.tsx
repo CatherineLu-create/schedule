@@ -568,7 +568,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(screen.getByText("Published v02")).toBeInTheDocument();
     expect(screen.getByText("2033/03/04")).toBeInTheDocument();
     expect(screen.getByText("2033/03/05")).toBeInTheDocument();
-    expect(screen.getByText("Not applicable")).toBeInTheDocument();
+    expect(screen.getByText("Not Applicable")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Working Draft" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Publish" })).not.toBeInTheDocument();
   });
@@ -647,6 +647,89 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
       .querySelector('[data-column-key="schedule:design:kickoff"]'))
       .toHaveTextContent("P: 2034/04/05");
     expect(screen.queryByRole("columnheader", { name: "A2" })).not.toBeInTheDocument();
+  });
+
+  it("keeps ID fix's Published null Actual until its applicable Draft date is published", () => {
+    render(<App />);
+    const idFixCell = () => dashboardRow("dev-project-001")
+      .querySelector('[data-column-key="schedule:design:id-fix"]');
+    expect(idFixCell()).toHaveTextContent("Applicable");
+    expect(idFixCell()).toHaveTextContent("A: —");
+
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByLabelText("Actual for ID fix")).toHaveValue("");
+    fireEvent.change(screen.getByLabelText("Actual for ID fix"), {
+      target: { value: "2026-12-15" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    expect(idFixCell()).toHaveTextContent("A: —");
+    expect(idFixCell()).not.toHaveTextContent("2026/12/15");
+
+    openProjectByName("Manta");
+    expect(screen.getByLabelText("Actual for ID fix")).toHaveValue("2026-12-15");
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Publish Working Draft" }))
+      .getByRole("button", { name: "Publish" }));
+    expect(screen.getByText("Published v02")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    expect(idFixCell()).toHaveTextContent("Applicable");
+    expect(idFixCell()).toHaveTextContent("A: 2026/12/15");
+  });
+
+  it("keeps Draft-only applicable A2 out of Dashboard until Publish", () => {
+    render(<App />);
+    expect(screen.queryByRole("columnheader", { name: "A2" })).not.toBeInTheDocument();
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Milestone definition"), {
+      target: { value: "milestone-a-a2-a-g-o" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add Milestone" }));
+    const draft = lastReducedState().schedules.find((entry) => entry.projectId === devProject001.id)?.workingDraft;
+    expect(draft?.milestones.find((entry) => entry.milestoneDefinitionId === "milestone-a-a2-a-g-o"))
+      .toMatchObject({ applicability: "applicable", plan: null, actual: null });
+
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    expect(screen.queryByRole("columnheader", { name: "A2" })).not.toBeInTheDocument();
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Publish Working Draft" }))
+      .getByRole("button", { name: "Publish" }));
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    expect(screen.getByRole("columnheader", { name: "A2" })).toBeInTheDocument();
+    const a2Cell = dashboardRow("dev-project-001")
+      .querySelector('[data-column-key="schedule:a-a2-stage:a-g-o"]');
+    expect(a2Cell).toHaveTextContent("P: —");
+    expect(a2Cell).toHaveTextContent("A: —");
+  });
+
+  it("keeps a notApplicable Draft out of Dashboard until Publish advances Current Published", () => {
+    render(<App />);
+    const kickoffCell = () => dashboardRow("dev-project-001")
+      .querySelector('[data-column-key="schedule:design:kickoff"]');
+    const before = kickoffCell()?.textContent;
+    expect(before).toContain("P: 2026/09/18");
+    expect(kickoffCell()).not.toHaveTextContent("N/A");
+
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Applicability for Kickoff"), {
+      target: { value: "notApplicable" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    expect(kickoffCell()).toHaveTextContent(before!);
+    expect(kickoffCell()).not.toHaveTextContent("N/A");
+
+    openProjectByName("Manta");
+    expect(screen.getByLabelText("Applicability for Kickoff")).toHaveValue("notApplicable");
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Publish Working Draft" }))
+      .getByRole("button", { name: "Publish" }));
+    expect(screen.getByText("Published v02")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    expect(kickoffCell()?.querySelector('[data-milestone-id]')).toHaveTextContent(/^N\/A$/);
+    expect(kickoffCell()).not.toHaveTextContent("2026/09/18");
   });
 
   it("preserves an overflow Draft and reports precise Publish failure", () => {

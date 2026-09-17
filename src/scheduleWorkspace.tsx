@@ -215,7 +215,7 @@ function ScheduleWorkspaceContent({
                 value={row.applicability}
               >
                 <option value="applicable">Applicable</option>
-                <option value="notApplicable">Not applicable</option>
+                <option value="notApplicable">Not Applicable</option>
               </select>
               <button
                 aria-label={`Remove ${row.milestone}`}

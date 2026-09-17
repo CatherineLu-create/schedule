@@ -96,6 +96,37 @@ describe("PortfolioDashboardTable", () => {
     expect(leaf("schedule:a-a2-stage:a-g-o")).toHaveTextContent("P: —");
   });
 
+  it("shows mixed Published A2 values across exact Projects only while an applicable occurrence exists", () => {
+    const a2DefinitionId = toMilestoneDefinitionId("milestone-a-a2-a-g-o");
+    const withProjectId = (id: string, schedule: PortfolioCurrentPublishedRead): PortfolioDashboardRow => ({
+      ...rowWith(schedule), projectId: toProjectId(id),
+      project: { ...baseRow.project, projectId: toProjectId(id) },
+    });
+    const applicable = withProjectId("applicable-project", {
+      kind: "published", versionLabel: "Published v01", milestoneCount: 1,
+      cells: [{ milestoneDefinitionId: a2DefinitionId, occurrences: [{
+        milestoneId: toMilestoneId("applicable-a2"), applicability: "applicable", plan: "-", actual: "-",
+      }] }],
+    });
+    const notApplicable = withProjectId("not-applicable-project", {
+      kind: "published", versionLabel: "Published v02", milestoneCount: 1,
+      cells: [{ milestoneDefinitionId: a2DefinitionId, occurrences: [{
+        milestoneId: toMilestoneId("not-applicable-a2"), applicability: "notApplicable", plan: "2027/01/01", actual: "2027/01/02",
+      }] }],
+    });
+    const noPublished = withProjectId("no-published-project", { kind: "noPublishedSchedule" });
+    const { rerender } = render(<PortfolioDashboardTable rows={[applicable, notApplicable, noPublished]} onOpenProject={() => {}} />);
+    expect(screen.getByRole("columnheader", { name: "A2" })).toHaveAttribute("colspan", "4");
+    const a2Cell = (id: string) => screen.getByRole("table", { name: "Projects" })
+      .querySelector(`[data-project-id="${id}"] [data-column-key="schedule:a-a2-stage:a-g-o"]`);
+    expect(a2Cell("applicable-project")).toHaveTextContent("P: —");
+    expect(a2Cell("applicable-project")).toHaveTextContent("A: —");
+    expect(a2Cell("not-applicable-project")?.querySelector('[data-milestone-id="not-applicable-a2"]')).toHaveTextContent(/^N\/A$/);
+    expect(a2Cell("no-published-project")).toHaveTextContent(/^—$/);
+    rerender(<PortfolioDashboardTable rows={[notApplicable]} onOpenProject={() => {}} />);
+    expect(screen.queryByRole("columnheader", { name: "A2" })).not.toBeInTheDocument();
+  });
+
   // Mutation: restoring unconditional inline sticky positioning or dropping the approved 1024px CSS breakpoint.
   it("keeps all four Project context columns sticky only from the desktop breakpoint", () => {
     render(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
@@ -181,8 +212,8 @@ describe("PortfolioDashboardTable", () => {
     expect(new Set(appearances).size).toBe(3);
   });
 
-  // Mutation: keeping only first/last repeated occurrence, conflating same labels, clearing N/A dates, or exposing MDRR.
-  it("renders every stable-ID occurrence in snapshot order with dates and applicability", () => {
+  // Mutation: keeping only first/last repeated occurrence, exposing stored N/A dates, or exposing MDRR.
+  it("renders repeated Published occurrences in snapshot order and masks notApplicable dates", () => {
     const schedule: PortfolioCurrentPublishedRead = {
       kind: "published", versionLabel: "Published v03", milestoneCount: 4, cells: [
         { milestoneDefinitionId: toMilestoneDefinitionId("milestone-c2-c-g-o"), occurrences: [
@@ -200,13 +231,40 @@ describe("PortfolioDashboardTable", () => {
     const cell = leaf("schedule:c2-stage:c-g-o");
     expect(cell).toHaveAccessibleDescription("Published v03 · C G/O");
     expect([...cell.querySelectorAll('[data-milestone-id]')].map((element) => element.getAttribute("data-milestone-id"))).toEqual(["later-id", "earlier-id"]);
-    expect(within(cell).getByText("Not applicable")).toBeInTheDocument();
-    expect(within(cell).getByText("Applicable")).toBeInTheDocument();
-    for (const value of ["P: 2026/10/05", "A: 2026/10/06", "P: —", "A: —"]) expect(within(cell).getByText(value)).toBeInTheDocument();
+    const notApplicableOccurrence = cell.querySelector('[data-milestone-id="later-id"]');
+    const applicableOccurrence = cell.querySelector('[data-milestone-id="earlier-id"]');
+    expect(notApplicableOccurrence).not.toBeNull();
+    expect(notApplicableOccurrence).toHaveTextContent(/^N\/A$/);
+    expect(notApplicableOccurrence).not.toHaveTextContent("2026/10/05");
+    expect(notApplicableOccurrence).not.toHaveTextContent("2026/10/06");
+    expect(notApplicableOccurrence).not.toHaveTextContent("P:");
+    expect(notApplicableOccurrence).not.toHaveTextContent("A:");
+    expect(applicableOccurrence).toHaveTextContent("Applicable");
+    expect(applicableOccurrence).toHaveTextContent("P: —");
+    expect(applicableOccurrence).toHaveTextContent("A: —");
     expect(leaf("schedule:c1-stage:c-g-o")).toHaveTextContent(/^—$/);
     expect(leaf("schedule:mdrr:mdrr")).toHaveTextContent(/^—$/);
     expect(screen.queryByText(/2099/)).not.toBeInTheDocument();
     expect(row).toEqual(before);
+  });
+
+  it("shows dated applicable fields and one N/A for a notApplicable occurrence with null fields", () => {
+    const schedule: PortfolioCurrentPublishedRead = {
+      kind: "published", versionLabel: "Published v04", milestoneCount: 2, cells: [{
+        milestoneDefinitionId: toMilestoneDefinitionId("milestone-c2-c-g-o"),
+        occurrences: [
+          { milestoneId: toMilestoneId("dated-applicable"), applicability: "applicable", plan: "2027/01/03", actual: "2027/01/04" },
+          { milestoneId: toMilestoneId("null-not-applicable"), applicability: "notApplicable", plan: "-", actual: "-" },
+        ],
+      }],
+    };
+    const before = structuredClone(schedule);
+    render(<PortfolioDashboardTable rows={[rowWith(schedule)]} onOpenProject={() => {}} />);
+    const cell = leaf("schedule:c2-stage:c-g-o");
+    expect(cell.querySelector('[data-milestone-id="dated-applicable"]')).toHaveTextContent("P: 2027/01/03");
+    expect(cell.querySelector('[data-milestone-id="dated-applicable"]')).toHaveTextContent("A: 2027/01/04");
+    expect(cell.querySelector('[data-milestone-id="null-not-applicable"]')).toHaveTextContent(/^N\/A$/);
+    expect(schedule).toEqual(before);
   });
 
   // Mutation: wiring any of the eleven Project columns to a different field or a fixture value.

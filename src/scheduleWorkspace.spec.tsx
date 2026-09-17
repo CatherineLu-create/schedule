@@ -378,6 +378,8 @@ describe("Schedule Workspace presentation", () => {
     expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2026-09-15");
     const catalog = screen.getByLabelText("Milestone definition");
     expect(within(catalog).getByRole("option", { name: "Kickoff" })).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Applicability for Kickoff"))
+      .getByRole("option", { name: "Not Applicable" })).toHaveValue("notApplicable");
     expect(screen.queryByLabelText("Milestone name")).not.toBeInTheDocument();
     fireEvent.change(catalog, { target: { value: "milestone-design-kickoff" } });
     fireEvent.click(screen.getByRole("button", { name: "Add Milestone" }));

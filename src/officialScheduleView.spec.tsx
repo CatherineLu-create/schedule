@@ -118,11 +118,11 @@ describe("OfficialScheduleView", () => {
     expect(within(applicableRow).getByText("Applicable")).toBeInTheDocument();
 
     const notApplicableRow = screen.getByRole("row", {
-      name: /C1-stage C-SMT Not applicable - 2026\/10\/15/,
+      name: /C1-stage C-SMT Not Applicable - 2026\/10\/15/,
     });
     expect(within(notApplicableRow).getByText("C-SMT")).toBeInTheDocument();
     expect(
-      within(notApplicableRow).getByText("Not applicable"),
+      within(notApplicableRow).getByText("Not Applicable"),
     ).toBeInTheDocument();
 
     for (const forbiddenControl of [
