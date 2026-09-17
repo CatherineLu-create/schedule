@@ -38,6 +38,11 @@ vi.mock("../../application/commands/projectCommands", async (importOriginal) => 
   return { ...actual, updateProjectMaster: vi.fn(actual.updateProjectMaster) };
 });
 
+vi.mock("../../application/state/prototypeReducer", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../application/state/prototypeReducer")>();
+  return { ...actual, prototypeReducer: vi.fn(actual.prototypeReducer) };
+});
+
 vi.mock("xlsx", () => ({
   utils: {
     json_to_sheet: vi.fn(() => ({})),
@@ -247,7 +252,209 @@ function MalformedDraftWorkspaceHarness(): React.ReactElement {
   />;
 }
 
+function lastReducedState(): PrototypeState {
+  const result = vi.mocked(prototypeReducer).mock.results.at(-1);
+  if (result?.type !== "return") {
+    throw new Error("Expected a real completed reducer transition");
+  }
+  return result.value;
+}
+
 describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
+  it.each([
+    ["2026-12-15", "Dashboard"],
+    ["2026/12/15", "Dashboard"],
+    ["2026-12-15", "Nautilus"],
+    ["2026/12/15", "Nautilus"],
+  ])("applies initially-null ID fix Actual %s before navigating through %s", (text, route) => {
+    render(<App />);
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByLabelText("Actual for ID fix")).toHaveValue("");
+    const before = lastReducedState();
+    vi.mocked(prototypeReducer).mockClear();
+    fireEvent.change(screen.getByLabelText("Actual for ID fix"), { target: { value: text } });
+    const after = lastReducedState();
+    expect(vi.mocked(prototypeReducer).mock.calls.at(-1)?.[1]).toMatchObject({
+      type: "scheduleReplaced", projectId: devProject001.id,
+    });
+    const schedule = after.schedules.find((entry) => entry.projectId === devProject001.id)!;
+    expect(schedule.workingDraft?.milestones.find(
+      (entry) => entry.milestoneId === "dev-project-001-milestone-design-id-fix",
+    )?.actual).toBe("2026-12-15");
+    expect(schedule.publishedVersions).toBe(
+      before.schedules.find((entry) => entry.projectId === devProject001.id)!.publishedVersions,
+    );
+    for (const unrelated of before.schedules.filter((entry) => entry.projectId !== devProject001.id)) {
+      expect(after.schedules.find((entry) => entry.projectId === unrelated.projectId)).toBe(unrelated);
+    }
+    const transitionCount = vi.mocked(prototypeReducer).mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    if (route === "Nautilus") {
+      openProjectByName("Nautilus");
+      fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    }
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    expect(screen.getByLabelText("Actual for ID fix")).toHaveValue("2026-12-15");
+    expect(vi.mocked(prototypeReducer).mock.calls).toHaveLength(transitionCount);
+  });
+
+  it.each([
+    ["Plan", "2026-12-15", "Dashboard"],
+    ["Plan", "2026/12/15", "Dashboard"],
+    ["Plan", "2026-12-15", "Nautilus"],
+    ["Plan", "2026/12/15", "Nautilus"],
+    ["Actual", "2026-12-16", "Dashboard"],
+    ["Actual", "2026/12/16", "Dashboard"],
+    ["Actual", "2026-12-16", "Nautilus"],
+    ["Actual", "2026/12/16", "Nautilus"],
+  ] as const)("applies populated Kickoff %s %s before navigating through %s", (field, text, route) => {
+    render(<App />);
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const label = `${field} for Kickoff`;
+    const expected = field === "Plan" ? "2026-12-15" : "2026-12-16";
+    expect(screen.getByLabelText(label)).toHaveValue(field === "Plan" ? "2026-09-18" : "2026-09-19");
+    vi.mocked(prototypeReducer).mockClear();
+    fireEvent.change(screen.getByLabelText(label), { target: { value: text } });
+    const after = lastReducedState();
+    expect(vi.mocked(prototypeReducer).mock.calls.at(-1)?.[1]).toMatchObject({
+      type: "scheduleReplaced", projectId: devProject001.id,
+    });
+    const kickoff = after.schedules.find((entry) => entry.projectId === devProject001.id)
+      ?.workingDraft?.milestones.find(
+        (entry) => entry.milestoneId === "dev-project-001-milestone-design-kickoff",
+      );
+    expect(field === "Plan" ? kickoff?.plan : kickoff?.actual).toBe(expected);
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    if (route === "Nautilus") {
+      openProjectByName("Nautilus");
+      fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    }
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    expect(screen.getByLabelText(label)).toHaveValue(expected);
+  });
+
+  it.each(["Dashboard", "Nautilus"])("persists clear and applicability through %s navigation", (route) => {
+    render(<App />);
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    vi.mocked(prototypeReducer).mockClear();
+    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Applicability for Kickoff"), {
+      target: { value: "notApplicable" },
+    });
+    const after = lastReducedState();
+    const kickoff = after.schedules.find((entry) => entry.projectId === devProject001.id)
+      ?.workingDraft?.milestones.find(
+        (entry) => entry.milestoneId === "dev-project-001-milestone-design-kickoff",
+      );
+    expect(kickoff?.plan).toBeNull();
+    expect(kickoff?.applicability).toBe("notApplicable");
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    if (route === "Nautilus") {
+      openProjectByName("Nautilus");
+      fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    }
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("");
+    expect(screen.getByLabelText("Applicability for Kickoff")).toHaveValue("notApplicable");
+  });
+
+  it("keeps invalid date text unapplied without a reducer transition", () => {
+    render(<App />);
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const before = lastReducedState();
+    vi.mocked(prototypeReducer).mockClear();
+    const input = screen.getByLabelText("Plan for Kickoff");
+    fireEvent.change(input, { target: { value: "2026/02/30" } });
+    expect(vi.mocked(prototypeReducer)).not.toHaveBeenCalled();
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText("Date not applied. Enter a valid date as YYYY-MM-DD or YYYY/MM/DD."))
+      .toBeInTheDocument();
+    expect(before.schedules.find((entry) => entry.projectId === devProject001.id)?.workingDraft
+      ?.milestones.find((entry) => entry.milestoneId === "dev-project-001-milestone-design-kickoff")?.plan)
+      .toBe("2026-09-18");
+  });
+
+  it("restores the prior canonical date after impossible input and Dashboard navigation", () => {
+    render(<App />);
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    vi.mocked(prototypeReducer).mockClear();
+    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
+      target: { value: "2026-02-30" },
+    });
+    expect(vi.mocked(prototypeReducer)).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2026-09-18");
+    expect(vi.mocked(prototypeReducer)).not.toHaveBeenCalled();
+  });
+
+  it("keeps App confirmation directions mutually exclusive and clears them after Draft exits", () => {
+    render(<App />);
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard Draft" }));
+    expect(screen.queryByRole("dialog", { name: "Publish Working Draft" })).not.toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Discard Working Draft" }))
+      .getByRole("button", { name: "Discard Draft" }));
+    expect(screen.getByText("Published v01")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Discard Draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    expect(screen.queryByRole("dialog", { name: "Discard Working Draft" })).not.toBeInTheDocument();
+    const publish = screen.getByRole("dialog", { name: "Publish Working Draft" });
+    fireEvent.click(within(publish).getByRole("button", { name: "Keep Editing" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("clears confirmations after successful Publish before a later Draft starts", () => {
+    render(<App />);
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Publish Working Draft" }))
+      .getByRole("button", { name: "Publish" }));
+    expect(screen.getByText("Published v02")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByRole("heading", { name: "Working Draft" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Publish Working Draft" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Discard Working Draft" })).not.toBeInTheDocument();
+  });
+
+  it("clears an open confirmation across Dashboard navigation without a lifecycle reducer action", () => {
+    render(<App />);
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard Draft" }));
+    expect(screen.getByRole("dialog", { name: "Discard Working Draft" })).toBeInTheDocument();
+    vi.mocked(prototypeReducer).mockClear();
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    expect(screen.getByRole("heading", { name: "Working Draft" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(vi.mocked(prototypeReducer)).not.toHaveBeenCalled();
+  });
+
   it("starts Manta's Published v1 as a directly editable Working Draft", () => {
     render(<App />);
     openProjectByName("Manta");

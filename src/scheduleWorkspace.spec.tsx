@@ -173,6 +173,135 @@ describe("Schedule Workspace presentation", () => {
     });
   });
 
+  it.each(["2026-12-15", "2026/12/15"])("accepts %s as canonical ISO", (text) => {
+    render(<ScheduleWorkspace {...workingDraftProps} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Plan for Kickoff" }), {
+      target: { value: text },
+    });
+    expect(onUpdateMilestone).toHaveBeenCalledTimes(1);
+    expect(onUpdateMilestone).toHaveBeenCalledWith({
+      milestoneId: draft.milestones[0]!.milestoneId,
+      field: "plan",
+      value: parseDateOnly("2026-12-15"),
+    });
+  });
+
+  it("accepts a valid slash leap day as canonical ISO", () => {
+    render(<ScheduleWorkspace {...workingDraftProps} />);
+    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
+      target: { value: "2028/02/29" },
+    });
+    expect(onUpdateMilestone).toHaveBeenCalledWith({
+      milestoneId: draft.milestones[0]!.milestoneId,
+      field: "plan",
+      value: parseDateOnly("2028-02-29"),
+    });
+  });
+
+  it.each(["2026/02-28", "2026-2-28", "2026-02", "2026-02-30"])(
+    "keeps unsupported date text %s unapplied without dispatching",
+    (text) => {
+      render(<ScheduleWorkspace {...workingDraftProps} />);
+      const input = screen.getByLabelText("Plan for Kickoff");
+      fireEvent.change(input, { target: { value: text } });
+      expect(onUpdateMilestone).not.toHaveBeenCalled();
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(input).toHaveAccessibleDescription(
+        /Date not applied\. Enter a valid date as YYYY-MM-DD or YYYY\/MM\/DD\./,
+      );
+    },
+  );
+
+  it("shows invalid text as unapplied without dispatching an edit", () => {
+    render(<ScheduleWorkspace {...workingDraftProps} />);
+    const input = screen.getByRole("textbox", { name: "Plan for Kickoff" });
+    fireEvent.change(input, { target: { value: "2026/02/30" } });
+    expect(onUpdateMilestone).not.toHaveBeenCalled();
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAccessibleDescription(
+      /Date not applied\. Enter a valid date as YYYY-MM-DD or YYYY\/MM\/DD\./,
+    );
+  });
+
+  it("blocks Publish for invalid Plan text while keeping Discard available", () => {
+    render(<ScheduleWorkspace {...workingDraftProps} />);
+    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
+      target: { value: "2026-02-30" },
+    });
+    expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
+    expect(screen.getByText("Correct or clear unapplied dates before publishing."))
+      .toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Discard Draft" })).toBeEnabled();
+  });
+
+  it("blocks an open Publish confirmation for invalid Actual text", () => {
+    render(<ScheduleWorkspace {...workingDraftProps} />);
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    fireEvent.change(screen.getByLabelText("Actual for Kickoff"), {
+      target: { value: "2026/13/01" },
+    });
+    const dialog = screen.getByRole("dialog", { name: "Publish Working Draft" });
+    expect(within(dialog).getByRole("button", { name: "Publish" })).toBeDisabled();
+    expect(onPublishDraft).not.toHaveBeenCalled();
+  });
+
+  it("unblocks Publish only when a valid edit is reflected by canonical props", () => {
+    const { rerender } = render(<ScheduleWorkspace {...workingDraftProps} />);
+    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
+      target: { value: "2026-12-15" },
+    });
+    expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
+    rerender(<ScheduleWorkspace {...propsForDateBuffer(
+      "workspace-project", "draft-kickoff", parseDateOnly("2026-12-15"),
+    )} />);
+    expect(screen.getByRole("button", { name: "Publish" })).toBeEnabled();
+  });
+
+  it("clears an invalid editor's Publish guard when its row is removed", () => {
+    const { rerender } = render(<ScheduleWorkspace {...workingDraftProps} />);
+    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
+      target: { value: "2026-02-30" },
+    });
+    expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
+    rerender(<ScheduleWorkspace {...workingDraftProps} draftRead={{
+      kind: "workingDraft",
+      draft: { milestones: [] },
+      milestoneRows: [],
+    }} />);
+    expect(screen.getByRole("button", { name: "Publish" })).toBeEnabled();
+  });
+
+  it("keeps Publish blocked when one of two invalid rows remains", () => {
+    const secondId = toMilestoneId("draft-second-kickoff");
+    const secondRow: ScheduleWorkingDraftMilestoneRow = {
+      ...workingDraftRow,
+      milestoneId: secondId,
+      milestone: "Second Kickoff",
+    };
+    const secondMilestone = { ...draft.milestones[0]!, milestoneId: secondId };
+    const twoRows: ScheduleWorkspaceProps = {
+      ...workingDraftProps,
+      draftRead: {
+        kind: "workingDraft",
+        draft: { milestones: [draft.milestones[0]!, secondMilestone] },
+        milestoneRows: [workingDraftRow, secondRow],
+      },
+    };
+    const { rerender } = render(<ScheduleWorkspace {...twoRows} />);
+    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
+      target: { value: "2026-02-30" },
+    });
+    fireEvent.change(screen.getByLabelText("Plan for Second Kickoff"), {
+      target: { value: "2026-13-01" },
+    });
+    rerender(<ScheduleWorkspace {...twoRows} draftRead={{
+      kind: "workingDraft",
+      draft: { milestones: [secondMilestone] },
+      milestoneRows: [secondRow],
+    }} />);
+    expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
+  });
+
   function propsForDateBuffer(
     projectId: string, milestoneId: string, planValue: DateOnly | null,
   ): ScheduleWorkspaceProps {
@@ -189,6 +318,26 @@ describe("Schedule Workspace presentation", () => {
       },
     };
   }
+
+  it("clears unapplied feedback only after accepted canonical props reflect valid text or clear", () => {
+    const initial = parseDateOnly("2026-09-15");
+    const accepted = parseDateOnly("2026-12-15");
+    if (initial === null || accepted === null) throw new Error("Invalid test date");
+    const { rerender } = render(<ScheduleWorkspace {...propsForDateBuffer(
+      "p1", "m1", initial,
+    )} />);
+    const input = screen.getByLabelText("Plan for Kickoff");
+    fireEvent.change(input, { target: { value: "2026-02-30" } });
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    fireEvent.change(input, { target: { value: "2026-12-15" } });
+    expect(input).toHaveAccessibleDescription(/last accepted value is unchanged/i);
+    rerender(<ScheduleWorkspace {...propsForDateBuffer("p1", "m1", accepted)} />);
+    expect(screen.getByLabelText("Plan for Kickoff")).toHaveAttribute("aria-invalid", "false");
+    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), { target: { value: "" } });
+    rerender(<ScheduleWorkspace {...propsForDateBuffer("p1", "m1", null)} />);
+    expect(screen.getByLabelText("Plan for Kickoff")).toHaveAttribute("aria-invalid", "false");
+    expect(screen.queryByText(/Date not applied\./)).not.toBeInTheDocument();
+  });
 
   it("resets incomplete date text across Project, milestone, field, and canonical value changes", () => {
     const initial = parseDateOnly("2026-09-15");
@@ -268,6 +417,46 @@ describe("Schedule Workspace presentation", () => {
     dialog = screen.getByRole("dialog", { name: "Discard Working Draft" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Discard Draft" }));
     expect(onCancelDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps only the latest confirmation and clears it when the Draft exits", () => {
+    const { rerender } = render(<ScheduleWorkspace {...workingDraftProps} />);
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard Draft" }));
+    expect(screen.queryByRole("dialog", { name: "Publish Working Draft" })).not.toBeInTheDocument();
+    const discard = screen.getByRole("dialog", { name: "Discard Working Draft" });
+    fireEvent.click(within(discard).getByRole("button", { name: "Discard Draft" }));
+    expect(onCancelDraft).toHaveBeenCalledTimes(1);
+    rerender(<ScheduleWorkspace {...baseProps} />);
+    rerender(<ScheduleWorkspace {...workingDraftProps} />);
+    expect(screen.queryByRole("dialog", { name: "Publish Working Draft" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Discard Working Draft" })).not.toBeInTheDocument();
+    expect(onPublishDraft).not.toHaveBeenCalled();
+  });
+
+  it("replaces a Discard confirmation with Publish before either lifecycle command", () => {
+    render(<ScheduleWorkspace {...workingDraftProps} />);
+    fireEvent.click(screen.getByRole("button", { name: "Discard Draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    expect(screen.queryByRole("dialog", { name: "Discard Working Draft" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Publish Working Draft" })).toBeInTheDocument();
+    expect(onCancelDraft).not.toHaveBeenCalled();
+    expect(onPublishDraft).not.toHaveBeenCalled();
+  });
+
+  it("resets confirmation on Project change and after a failed void lifecycle callback", () => {
+    const { rerender } = render(<ScheduleWorkspace {...workingDraftProps} />);
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    rerender(<ScheduleWorkspace {...workingDraftProps} projectId={toProjectId("other-project")} />);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Publish Working Draft" }))
+      .getByRole("button", { name: "Publish" }));
+    expect(onPublishDraft).toHaveBeenCalledTimes(1);
+    rerender(<ScheduleWorkspace {...workingDraftProps} projectId={toProjectId("other-project")}
+      feedback={["The next Published version is unavailable."]} />);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByText("The next Published version is unavailable.")).toBeInTheDocument();
   });
 
   it("offers only Discard recovery for a malformed existing Draft", () => {

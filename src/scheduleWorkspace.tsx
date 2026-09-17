@@ -35,20 +35,37 @@ interface DateOnlyEditorProps {
   readonly field: "plan" | "actual";
   readonly label: string;
   readonly milestoneId: MilestoneId;
+  readonly onUnappliedChange: (editorKey: string, unapplied: boolean) => void;
   readonly onValidValue: (value: DateOnly | null) => void;
   readonly projectId: ProjectId;
   readonly value: DateOnly | null;
+}
+
+type EditorDate =
+  | { readonly ok: true; readonly value: DateOnly | null }
+  | { readonly ok: false };
+
+function parseEditorDate(text: string): EditorDate {
+  if (text === "") return { ok: true, value: null };
+  const normalized = /^\d{4}\/\d{2}\/\d{2}$/.test(text)
+    ? text.replaceAll("/", "-")
+    : text;
+  const value = parseDateOnly(normalized);
+  return value === null ? { ok: false } : { ok: true, value };
 }
 
 function DateOnlyEditor({
   field,
   label,
   milestoneId,
+  onUnappliedChange,
   onValidValue,
   projectId,
   value,
 }: DateOnlyEditorProps): React.ReactElement {
   const [text, setText] = React.useState<string>(value ?? "");
+  const helpId = React.useId();
+  const errorId = React.useId();
 
   React.useEffect(() => {
     setText(value ?? "");
@@ -56,16 +73,30 @@ function DateOnlyEditor({
 
   const acceptText = (nextText: string): void => {
     setText(nextText);
-    if (nextText === "") {
-      onValidValue(null);
-      return;
-    }
-    const parsed = parseDateOnly(nextText);
-    if (parsed !== null) onValidValue(parsed);
+    const parsed = parseEditorDate(nextText);
+    if (parsed.ok) onValidValue(parsed.value);
   };
 
-  return (
+  const parsed = parseEditorDate(text);
+  const invalid = !parsed.ok;
+  const unapplied = !parsed.ok || parsed.value !== value;
+  const error = invalid
+    ? "Date not applied. Enter a valid date as YYYY-MM-DD or YYYY/MM/DD."
+    : unapplied ? "Date not applied. The last accepted value is unchanged." : null;
+  const editorKey = JSON.stringify([projectId, milestoneId, field]);
+
+  React.useEffect(() => {
+    onUnappliedChange(editorKey, unapplied);
+  }, [editorKey, onUnappliedChange, unapplied]);
+
+  React.useEffect(() => () => {
+    onUnappliedChange(editorKey, false);
+  }, [editorKey, onUnappliedChange]);
+
+  return <div>
     <input
+      aria-describedby={error === null ? helpId : `${helpId} ${errorId}`}
+      aria-invalid={unapplied}
       aria-label={label}
       className="w-32 rounded border border-slate-300 px-2 py-1"
       onChange={(event) => acceptText(event.target.value)}
@@ -73,10 +104,12 @@ function DateOnlyEditor({
       type="text"
       value={text}
     />
-  );
+    <p className="mt-1 text-xs text-slate-500" id={helpId}>Use YYYY-MM-DD or YYYY/MM/DD.</p>
+    {error !== null && <p className="mt-1 text-xs text-rose-700" id={errorId}>{error}</p>}
+  </div>;
 }
 
-export function ScheduleWorkspace({
+function ScheduleWorkspaceContent({
   draftRead,
   feedback,
   milestoneDefinitions,
@@ -91,36 +124,48 @@ export function ScheduleWorkspace({
   projectId,
 }: ScheduleWorkspaceProps): React.ReactElement {
   const [definitionId, setDefinitionId] = React.useState("");
-  const [publishOpen, setPublishOpen] = React.useState(false);
-  const [discardOpen, setDiscardOpen] = React.useState(false);
+  const [confirmation, setConfirmation] = React.useState<"publish" | "discard" | null>(null);
+  const [unappliedEditors, setUnappliedEditors] = React.useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
+  const onUnappliedChange = React.useCallback((key: string, unapplied: boolean): void => {
+    setUnappliedEditors((current) => {
+      if (current.has(key) === unapplied) return current;
+      const next = new Set(current);
+      if (unapplied) next.add(key); else next.delete(key);
+      return next;
+    });
+  }, []);
+  const publishBlocked = unappliedEditors.size > 0;
   const messages = feedback.map((message, index) => (
     <p key={`${index}:${message}`}>{message}</p>
   ));
 
-  const publishDialog = publishOpen ? (
+  const publishDialog = confirmation === "publish" ? (
     <div aria-label="Publish Working Draft" className="mt-4 rounded border border-slate-300 bg-slate-50 p-4" role="dialog">
       <h3 className="font-semibold">Publish Working Draft?</h3>
       <p>This will create a new official Schedule version.</p>
       <p>Published versions cannot be edited.</p>
       {nextVersionLabel !== null && <p>{nextVersionLabel}</p>}
       <div className="mt-3 flex flex-wrap gap-2">
-        <button className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm" onClick={() => setPublishOpen(false)} type="button">Keep Editing</button>
-        <button className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white" onClick={() => {
-          setPublishOpen(false);
+        <button className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm" onClick={() => setConfirmation(null)} type="button">Keep Editing</button>
+        <button className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:cursor-not-allowed disabled:bg-slate-400" disabled={publishBlocked} onClick={() => {
+          if (publishBlocked) return;
+          setConfirmation(null);
           onPublishDraft();
         }} type="button">Publish</button>
       </div>
     </div>
   ) : null;
-  const discardDialog = discardOpen ? (
+  const discardDialog = confirmation === "discard" ? (
     <div aria-label="Discard Working Draft" className="mt-4 rounded border border-slate-300 bg-slate-50 p-4" role="dialog">
       <h3 className="font-semibold">Discard Working Draft?</h3>
       <p>All unpublished Schedule changes will be discarded.</p>
       <p>Published Schedule versions will not be affected.</p>
       <div className="mt-3 flex flex-wrap gap-2">
-        <button className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm" onClick={() => setDiscardOpen(false)} type="button">Keep Editing</button>
+        <button className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm" onClick={() => setConfirmation(null)} type="button">Keep Editing</button>
         <button className="rounded border border-rose-300 bg-white px-3 py-1.5 text-sm text-rose-700" onClick={() => {
-          setDiscardOpen(false);
+          setConfirmation(null);
           onCancelDraft();
         }} type="button">Discard Draft</button>
       </div>
@@ -131,7 +176,7 @@ export function ScheduleWorkspace({
     return <section aria-label="Schedule" className="rounded-md border border-slate-200 bg-white p-4">
       <h2 className="text-lg font-semibold">Working Draft</h2>
       <p>Working Draft data unavailable</p>
-      <button className="mt-3 rounded border border-rose-300 px-3 py-1.5 text-sm text-rose-700" onClick={() => setDiscardOpen(true)} type="button">Discard Draft</button>
+      <button className="mt-3 rounded border border-rose-300 px-3 py-1.5 text-sm text-rose-700" onClick={() => setConfirmation("discard")} type="button">Discard Draft</button>
       {discardDialog}
       {messages}
     </section>;
@@ -185,6 +230,7 @@ export function ScheduleWorkspace({
             key={`${projectId}:${row.milestoneId}:plan`}
             label={`Plan for ${row.milestone}`}
             milestoneId={row.milestoneId}
+            onUnappliedChange={onUnappliedChange}
             onValidValue={(value) => onUpdateMilestone({
               milestoneId: row.milestoneId,
               field: "plan",
@@ -198,6 +244,7 @@ export function ScheduleWorkspace({
             key={`${projectId}:${row.milestoneId}:actual`}
             label={`Actual for ${row.milestone}`}
             milestoneId={row.milestoneId}
+            onUnappliedChange={onUnappliedChange}
             onValidValue={(value) => onUpdateMilestone({
               milestoneId: row.milestoneId,
               field: "actual",
@@ -226,11 +273,21 @@ export function ScheduleWorkspace({
         }}
         type="button"
       >Add Milestone</button>
-      <button className="ml-auto rounded border border-rose-300 bg-white px-3 py-1.5 text-sm text-rose-700" onClick={() => setDiscardOpen(true)} type="button">Discard Draft</button>
-      <button className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white" onClick={() => setPublishOpen(true)} type="button">Publish</button>
+      <button className="ml-auto rounded border border-rose-300 bg-white px-3 py-1.5 text-sm text-rose-700" onClick={() => setConfirmation("discard")} type="button">Discard Draft</button>
+      <button className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:cursor-not-allowed disabled:bg-slate-400" disabled={publishBlocked} onClick={() => {
+        if (!publishBlocked) setConfirmation("publish");
+      }} type="button">Publish</button>
     </div>
+    {publishBlocked && <p className="mt-3 text-sm text-rose-700">Correct or clear unapplied dates before publishing.</p>}
     {publishDialog}
     {discardDialog}
     {messages}
   </section>;
+}
+
+export function ScheduleWorkspace(props: ScheduleWorkspaceProps): React.ReactElement {
+  const mode = props.draftRead.kind === "unavailable"
+    ? `unavailable:${props.draftRead.workingDraftExists}`
+    : props.draftRead.kind;
+  return <ScheduleWorkspaceContent key={JSON.stringify([props.projectId, mode])} {...props} />;
 }
