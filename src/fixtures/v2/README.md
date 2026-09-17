@@ -30,30 +30,34 @@ IDs must not be derived from display names, normalized names, or array
 positions. Projects with duplicate or similar display names remain independent
 records and must never be merged automatically.
 
-The canonical fixture matrix is:
+The canonical fixture ownership matrix is:
 
-1. A Project with no Saved Team and a separately owned Schedule with no
-   Published versions.
-2. A Project with a valid Saved Team and a separately owned Schedule with one
-   Published version.
-3. A different Project with the same Year/Product Line/STN Project Name
-   combination, a separately owned non-contiguous Published history, and an
-   older applied Team Template.
-4. A Project with a separately owned Published version containing zero
-   milestones.
-5. A punctuation-sensitive identity case with Team missing-Owner advisory,
-   a project-specific Custom Function, and a separately owned empty Schedule.
+| ProjectId | Project | Published Schedule | workingDraft |
+| --- | --- | --- | --- |
+| dev-project-001 | Manta | Published v1; four demo milestones | null |
+| dev-project-002 | Nautilus | No Published Schedule | null |
+| dev-project-003 | Orca | No Published Schedule | null |
+| dev-project-004 | Beluga | No Published Schedule | null |
+| dev-project-005 | Marlin | No Published Schedule | null |
 
-The set varies Year, Customer, and Status values.
+Every Project has one canonical Schedule container for its exact immutable
+`ProjectId`. Manta alone has the accepted Published demo Schedule; Nautilus,
+Orca, Beluga, and Marlin each have an existing empty Schedule container with no
+Published version. The set also varies Year, Customer, Status, Team, identity,
+and Project Master scenarios.
+
+Draft edge cases and non-contiguous or multiple Published-version scenarios use
+local test builders. They are not canonical runtime fixture topology.
 
 ## Canonical Schedule fixture rules
 
 `canonicalProjectFixtures.ts` owns Project/Master and Team fixture values only.
-`canonicalScheduleFixtures.ts` explicitly owns one canonical Schedule for each
-fixture Project by immutable `ProjectId`; it is not derived from Project values
-or legacy Schedule data. Published versions use positive version numbers and
-canonical milestone lineage IDs. A Schedule with no Published versions is an
-existing empty Schedule, not a missing resource or fake v0.
+`canonicalScheduleFixtures.ts` explicitly owns one canonical Schedule container
+for each fixture Project by its exact immutable `ProjectId`; it is not derived
+from Project values or legacy Schedule data. Published versions use positive
+version numbers and canonical milestone lineage IDs. A Schedule with no
+Published versions is an existing empty Schedule, not a missing resource or
+fake v0.
 
 Every canonical Schedule fixture carries an explicit `workingDraft: null`.
 Task 2.3 seeds no production Working Draft scenario: Manta alone retains its
@@ -70,16 +74,31 @@ it creates Published v1. A normal edit Draft for a Project with existing
 Published versions must use the latest Published version as its base. Fixtures
 must not create a fake v0 or seed a fake Published version.
 
-Working Draft and import-candidate values remain predecessor test data. They
-are disconnected from canonical runtime ownership and are not official
-Portfolio values. Navigation does not discard a predecessor Working Draft;
-only its explicit predecessor discard operation does so.
+Working Draft and import-candidate values remain disconnected predecessor test
+data. They are not canonical runtime authority or official Portfolio values.
+Navigation does not discard a predecessor Working Draft; only its explicit
+predecessor discard operation does so.
 
 Invalid, ambiguous, conflicting, or unmapped Schedule cases belong in Working
 Draft/import candidate fixtures. They must never be seeded as Published
 official data.
 
 ## Milestone catalog seeds
+
+As defined in the [Task 2.3 Human Acceptance Corrections design
+addendum](../../../docs/superpowers/specs/2026-09-17-task-2.3-human-acceptance-corrections-design.md),
+PIP definitions in `src/config/v2/referenceData.ts` own stable
+`MilestoneDefinitionId` values, classification, and display order. Each
+definition provides its ID, name, `stageGroupId`, `milestoneTypeId`, and
+`displayOrder`; `stageGroupCatalog` supplies the Stage label for a stable
+`StageGroupId`. Active/review metadata, aliases, and `showInPortfolio` retain
+their catalog meanings in `src/domain/schedule/milestoneCatalog.ts`.
+
+Published Schedule is Official Truth. A Project with no Published Schedule has
+a legal empty state, not a Published official version. A Working Draft is
+canonical unpublished state; only explicit successful Publish changes Current
+Schedule and Portfolio. Draft edits and Publish do not mutate the Milestone
+Definition catalog.
 
 The approved 34 Portfolio Milestone definitions are authoritative V2 catalog
 seeds. Each has a stable catalog ID and `showInPortfolio = true`; Project
@@ -90,10 +109,23 @@ MDRR is an additional valid Milestone Catalog item with:
 - Milestone Type: `MDRR`
 - Stage / Group: `MDRR`
 - `showInPortfolio = false`
-- participation in Milestone Due and Overdue calculations
 
 This MDRR definition is a deliberate V2 development catalog decision and is
-not inferred from legacy fixture data.
+not inferred from legacy fixture data. Milestone Due and Overdue calculations
+are not active in the current Dashboard.
+
+Workspace Add selects an existing PIP `MilestoneDefinitionId`; it does not
+create a definition. The future input boundary is:
+
+```text
+Weekly Report / PPT -> Kevin parser JSON -> mapping/resolution
+                    -> existing canonical PIP MilestoneDefinitionId
+```
+
+This future flow requires mapping/resolution into PIP IDs and cannot silently
+create, rename, or replace definitions. Unresolved input belongs to a future
+Import/Evidence design boundary; this fixture contract proposes no parser,
+mapping, or import API.
 
 ## Applicability and candidate data
 
@@ -111,9 +143,10 @@ without an Owner, may be included where the approved rules allow Save.
 ## Legacy source disposition
 
 Current Dashboard JSON, Schedule JSON, Excel workbooks, Team data embedded in
-the current UI, and historical fixture names remain legacy development
-material while the current UI still depends on them. They are not inputs to
-the canonical V2 aggregate seed and must not be maintained as a second
+the historical UI, and historical fixture names remain legacy development
+material where retained in the repository. The current V2 main, Portfolio, and
+canonical fixture paths do not import them as runtime data. They are not inputs
+to the canonical V2 aggregate seed and must not be maintained as a second
 independent V2 Project dataset.
 
 Typed fixture modules provide reusable V2 reference, Team Template, Team,
