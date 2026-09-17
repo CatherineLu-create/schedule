@@ -89,8 +89,6 @@ import "./styles.css";
 
 type Page = "dashboard" | "workspace";
 
-export type WorkspaceResource = "projectMaster" | "schedule";
-
 interface PendingDuplicateCreate {
   readonly input: CreateProjectInput;
   readonly context: CreateProjectContext;
@@ -175,7 +173,6 @@ export function App({
   const [state, dispatch] = React.useReducer(prototypeReducer, initialState);
   const [selectedProjectId, setSelectedProjectId] =
     React.useState<ProjectId | null>(initialSelectedProjectId);
-  const [activeResource, setActiveResource] = React.useState<WorkspaceResource>("projectMaster");
   const [isCreateProjectOpen, setIsCreateProjectOpen] = React.useState(false);
   const [isEditProjectOpen, setIsEditProjectOpen] = React.useState(false);
   const [createCandidateId, setCreateCandidateId] = React.useState<ProjectId | null>(null);
@@ -365,7 +362,6 @@ export function App({
       setIsEditProjectOpen(false);
       setPendingDuplicateCreate(null);
       setScheduleFeedback([]);
-      setActiveResource("projectMaster");
       setPage("dashboard");
     }
   }, [selectedProjectId, selectedCanonicalProject]);
@@ -373,16 +369,10 @@ export function App({
   const openProject = (projectId: ProjectId) => {
     setSelectedProjectId(projectId);
     setScheduleFeedback([]);
-    setActiveResource("projectMaster");
     setPage("workspace");
-  };
-  const openWorkspaceResource = (resource: WorkspaceResource): void => {
-    setScheduleFeedback([]);
-    setActiveResource(resource);
   };
   const backToDashboard = (): void => {
     setScheduleFeedback([]);
-    setActiveResource("projectMaster");
     setPage("dashboard");
   };
   const closeCreate = () => {
@@ -412,7 +402,6 @@ export function App({
     setSelectedProjectId(project.id);
     setEditFeedback(issues);
     setScheduleFeedback([]);
-    setActiveResource("projectMaster");
     setPage("workspace");
     closeCreate();
   };
@@ -501,7 +490,6 @@ export function App({
     setEditFeedback(interpretation.result.issues);
     setScheduleFeedback([]);
     setIsEditProjectOpen(false);
-    setActiveResource("projectMaster");
   };
 
   const matchingRows = pendingDuplicateCreate === null
@@ -529,11 +517,9 @@ export function App({
       )}
       {renderWorkspace && (
         <ProjectWorkspace
-          activeResource={activeResource}
           feedback={editFeedback}
           onBack={backToDashboard}
           onEditProject={openEdit}
-          onOpenResource={openWorkspaceResource}
           project={selectedCanonicalProject}
           row={selectedDashboardRow}
           scheduleWorkspaceProps={scheduleWorkspaceProps}
@@ -778,22 +764,18 @@ function ProjectInput({
 }
 
 export interface ProjectWorkspaceProps {
-  readonly activeResource: WorkspaceResource;
   readonly feedback: readonly ValidationIssue[];
   readonly onBack: () => void;
   readonly onEditProject: () => void;
-  readonly onOpenResource: (resource: WorkspaceResource) => void;
   readonly project: Project;
   readonly row: DashboardProjectRow;
   readonly scheduleWorkspaceProps: ScheduleWorkspaceProps;
 }
 
 export function ProjectWorkspace({
-  activeResource,
   feedback,
   onBack,
   onEditProject,
-  onOpenResource,
   project,
   row,
   scheduleWorkspaceProps,
@@ -861,20 +843,14 @@ export function ProjectWorkspace({
         </div>
       </section>
 
+      <ScheduleWorkspace {...scheduleWorkspaceProps} />
+
       <section aria-label="Resources" className="rounded-md border border-slate-200 bg-white p-4">
         <h2 className="text-lg font-semibold">Resources</h2>
         <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div className={`rounded-md border p-4 ${activeResource === "schedule" ? "border-slate-900" : "border-slate-300"}`}>
+          <div className="rounded-md border border-slate-300 p-4">
             <h3 className="font-semibold">Schedule</h3>
-            <div className="mt-2 text-sm text-slate-600">Official read-only</div>
-            <button
-              aria-pressed={activeResource === "schedule"}
-              className="mt-3 rounded-md border border-slate-300 px-3 py-1.5 text-sm"
-              onClick={() => onOpenResource("schedule")}
-              type="button"
-            >
-              Open Schedule
-            </button>
+            <div className="mt-2 text-sm text-slate-600">Shown above</div>
           </div>
           <div className="rounded-md border border-slate-300 p-4">
             <h3 className="font-semibold">Team Member</h3>
@@ -911,10 +887,6 @@ export function ProjectWorkspace({
           </div>
         </div>
       </section>
-
-      {activeResource === "schedule" && (
-        <ScheduleWorkspace {...scheduleWorkspaceProps} />
-      )}
 
       {feedback.map((issue) => (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm" key={`${issue.code}-${issue.target.field ?? "section"}`}>
