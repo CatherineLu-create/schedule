@@ -252,18 +252,26 @@ function lastReducedState(): PrototypeState {
 }
 
 describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
-  it("shows one Schedule directly after Project Master", () => {
+  it("shows one Current Schedule directly below Resources", () => {
     render(<App />);
     openProjectByName("Manta");
 
     const master = projectHeader();
-    const schedule = screen.getByRole("region", { name: "Current Schedule" });
     const resources = screen.getByRole("region", { name: "Resources" });
-    expect(master.compareDocumentPosition(schedule) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(schedule.compareDocumentPosition(resources) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const schedule = screen.getByRole("region", { name: "Current Schedule" });
+    expect(master.compareDocumentPosition(resources) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(resources.nextElementSibling).toBe(schedule);
     expect(screen.getAllByRole("region", { name: "Current Schedule" })).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Open Schedule" })).not.toBeInTheDocument();
-    expect(within(resources).getByText("Shown above")).toBeInTheDocument();
+    expect(within(resources).getByText("Shown below")).toBeInTheDocument();
+    expect(within(resources).getAllByRole("heading", { level: 3 })
+      .map((heading) => heading.textContent)).toEqual([
+        "Schedule", "Team Member", "Weekly Report", "AVL",
+      ]);
+    expect(within(resources).getAllByText("Migration pending")).toHaveLength(3);
+    for (const name of ["Open Team Member", "Open Weekly Report", "Open AVL"]) {
+      expect(within(resources).getByRole("button", { name })).toBeDisabled();
+    }
   });
 
   it.each([
@@ -454,6 +462,12 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(screen.getByText("Published v01")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     expect(screen.getByRole("heading", { name: "Working Draft" })).toBeInTheDocument();
+    const resources = screen.getByRole("region", { name: "Resources" });
+    const draftSchedule = screen.getByRole("region", { name: "Schedule" });
+    expect(projectHeader().compareDocumentPosition(resources) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
+    expect(resources.nextElementSibling).toBe(draftSchedule);
+    expect(screen.getAllByRole("region", { name: "Schedule" })).toHaveLength(1);
     expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2026-09-18");
     expect(screen.queryByRole("button", { name: "Resume Draft" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save Draft" })).not.toBeInTheDocument();
@@ -906,7 +920,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     ]);
     expect(within(resources).queryByText("Project Master")).not.toBeInTheDocument();
     expect(within(resources).getAllByText("Migration pending")).toHaveLength(3);
-    expect(within(resources).getByText("Shown above")).toBeInTheDocument();
+    expect(within(resources).getByText("Shown below")).toBeInTheDocument();
     expect(within(resources).queryByRole("button", { name: "Open Schedule" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open Team Member" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Open Weekly Report" })).toBeDisabled();
@@ -936,7 +950,12 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     render(<App />);
     openProjectByName("Nautilus");
 
+    const resources = screen.getByRole("region", { name: "Resources" });
     const scheduleView = screen.getByRole("region", { name: "Current Schedule" });
+    expect(projectHeader().compareDocumentPosition(resources) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
+    expect(resources.nextElementSibling).toBe(scheduleView);
+    expect(screen.getAllByRole("region", { name: "Current Schedule" })).toHaveLength(1);
     expect(within(scheduleView).getByText("-")).toBeInTheDocument();
     expect(within(scheduleView).queryByText("No published schedule")).not.toBeInTheDocument();
     expect(within(scheduleView).queryByText(/^Published v/)).not.toBeInTheDocument();

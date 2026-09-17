@@ -843,14 +843,12 @@ export function ProjectWorkspace({
         </div>
       </section>
 
-      <ScheduleWorkspace {...scheduleWorkspaceProps} />
-
       <section aria-label="Resources" className="rounded-md border border-slate-200 bg-white p-4">
         <h2 className="text-lg font-semibold">Resources</h2>
         <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-md border border-slate-300 p-4">
             <h3 className="font-semibold">Schedule</h3>
-            <div className="mt-2 text-sm text-slate-600">Shown above</div>
+            <div className="mt-2 text-sm text-slate-600">Shown below</div>
           </div>
           <div className="rounded-md border border-slate-300 p-4">
             <h3 className="font-semibold">Team Member</h3>
@@ -887,6 +885,8 @@ export function ProjectWorkspace({
           </div>
         </div>
       </section>
+
+      <ScheduleWorkspace {...scheduleWorkspaceProps} />
 
       {feedback.map((issue) => (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm" key={`${issue.code}-${issue.target.field ?? "section"}`}>
