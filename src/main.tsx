@@ -11,6 +11,19 @@ import {
   type CreateProjectInput,
   type CreateProjectRequiredField,
 } from "./application/commands/projectCommands";
+import {
+  addScheduleWorkingDraftMilestone,
+  cancelScheduleWorkingDraft,
+  getNextPublishedScheduleVersionNumber,
+  publishScheduleWorkingDraft,
+  removeScheduleWorkingDraftMilestone,
+  startScheduleWorkingDraft,
+  updateScheduleWorkingDraftMilestone,
+  type CanonicalScheduleCommandContext,
+  type CanonicalScheduleCommandFailure,
+  type CanonicalScheduleLifecycleFailureReason,
+  type UpdateScheduleWorkingDraftMilestoneInput,
+} from "./application/commands/canonicalScheduleCommands";
 import { prototypeReducer } from "./application/state/prototypeReducer";
 import type { PrototypeState } from "./application/state/prototypeState";
 import {
@@ -19,8 +32,9 @@ import {
   type DashboardProjectRow,
 } from "./application/selectors/dashboardProjectRows";
 import {
+  resolveCanonicalScheduleOwner,
   selectCurrentPublishedSchedule,
-  type CurrentPublishedScheduleRead,
+  selectScheduleWorkingDraft,
 } from "./application/selectors/scheduleSelectors";
 import { getProjectById } from "./application/selectors/projectSelectors";
 import {
@@ -30,11 +44,22 @@ import {
   type CreateProjectInterpretation,
   type DuplicateProjectDecisionRequest,
 } from "./application/workflow/workflowInterpretation";
-import { statusCatalog } from "./config/v2/referenceData";
+import { milestoneDefinitions, statusCatalog } from "./config/v2/referenceData";
 import type { Project } from "./domain/project/project";
-import { createEmptyCanonicalProjectSchedule } from "./domain/schedule/officialSchedule";
+import {
+  createEmptyCanonicalProjectSchedule,
+  type CanonicalProjectSchedule,
+} from "./domain/schedule/officialSchedule";
 import type { CatalogItem } from "./domain/reference-data/catalog";
-import { toCatalogItemId, toProjectId, type CatalogItemId, type ProjectId } from "./domain/shared/ids";
+import {
+  toCatalogItemId,
+  toMilestoneId,
+  toProjectId,
+  type CatalogItemId,
+  type MilestoneDefinitionId,
+  type MilestoneId,
+  type ProjectId,
+} from "./domain/shared/ids";
 import type { ValidationIssue } from "./domain/validation/validationIssue";
 import { DuplicateProjectReview } from "./duplicateProjectReview";
 import { canonicalProjectFixtures } from "./fixtures/v2/canonicalProjectFixtures";
@@ -55,7 +80,7 @@ import {
   type CatalogSelection,
   type ProjectMasterForm,
 } from "./projectMasterForm";
-import { OfficialScheduleView } from "./officialScheduleView";
+import { ScheduleWorkspace, type ScheduleWorkspaceProps } from "./scheduleWorkspace";
 import {
   defaultTeamMemberFields,
   type TeamMembersState,
@@ -84,6 +109,27 @@ const createDefaults: CreateProjectDefaults = {
   statusId: toCatalogItemId("status-rfq"),
   teamTemplate: devTeamTemplateV2,
 };
+
+const canonicalScheduleCommandContext: CanonicalScheduleCommandContext = {
+  milestoneDefinitions,
+};
+
+function scheduleFailureMessages(
+  failure: CanonicalScheduleCommandFailure<CanonicalScheduleLifecycleFailureReason>,
+): readonly string[] {
+  if (failure.reason === "validation-failed") {
+    return failure.issues.map(({ message }) => message);
+  }
+  const messages = {
+    "no-working-draft": "No Working Draft is available.",
+    "milestone-not-found": "The Working Draft milestone is unavailable.",
+    "next-version-unavailable": "The next Published version is unavailable.",
+  } satisfies Record<
+    Exclude<CanonicalScheduleLifecycleFailureReason, "validation-failed">,
+    string
+  >;
+  return [messages[failure.reason]];
+}
 
 function dashboardExportRow(project: DashboardProjectRow) {
   return {
@@ -114,10 +160,21 @@ function exportDashboardProjectListToExcel(projects: readonly DashboardProjectRo
   XLSX.writeFile(workbook, "Project_Portfolio_Summary.xlsx");
 }
 
-export function App() {
-  const [page, setPage] = React.useState<Page>("dashboard");
-  const [state, dispatch] = React.useReducer(prototypeReducer, initialPrototypeState);
-  const [selectedProjectId, setSelectedProjectId] = React.useState<ProjectId | null>(null);
+export interface AppProps {
+  readonly initialState?: PrototypeState;
+  readonly initialSelectedProjectId?: ProjectId | null;
+}
+
+export function App({
+  initialState = initialPrototypeState,
+  initialSelectedProjectId = null,
+}: AppProps = {}): React.ReactElement {
+  const [page, setPage] = React.useState<Page>(
+    initialSelectedProjectId === null ? "dashboard" : "workspace",
+  );
+  const [state, dispatch] = React.useReducer(prototypeReducer, initialState);
+  const [selectedProjectId, setSelectedProjectId] =
+    React.useState<ProjectId | null>(initialSelectedProjectId);
   const [activeResource, setActiveResource] = React.useState<WorkspaceResource>("projectMaster");
   const [isCreateProjectOpen, setIsCreateProjectOpen] = React.useState(false);
   const [isEditProjectOpen, setIsEditProjectOpen] = React.useState(false);
@@ -131,6 +188,7 @@ export function App() {
   const [editForm, setEditForm] = React.useState<ProjectMasterForm>(emptyProjectMasterForm);
   const [editIssues, setEditIssues] = React.useState<readonly ValidationIssue[]>([]);
   const [editFeedback, setEditFeedback] = React.useState<readonly ValidationIssue[]>([]);
+  const [scheduleFeedback, setScheduleFeedback] = React.useState<readonly string[]>([]);
 
   const selectedCanonicalProject =
     selectedProjectId === null ? null : getProjectById(state, selectedProjectId);
@@ -142,12 +200,171 @@ export function App() {
     selectedProjectId === null
       ? null
       : selectCurrentPublishedSchedule(state, selectedProjectId);
+  const selectedDraftRead = selectedProjectId === null
+    ? null
+    : selectScheduleWorkingDraft(state, selectedProjectId);
+  const selectedScheduleOwner = selectedProjectId === null
+    ? null
+    : resolveCanonicalScheduleOwner(state, selectedProjectId);
+
+  const dispatchScheduleReplacement = (
+    projectId: ProjectId,
+    result: { readonly ok: true; readonly schedule: CanonicalProjectSchedule },
+  ): void => {
+    dispatch({ type: "scheduleReplaced", projectId, schedule: result.schedule });
+  };
+
+  const startScheduleDraft = (): void => {
+    if (selectedProjectId === null) return;
+    const projectId = selectedProjectId;
+    const owner = resolveCanonicalScheduleOwner(state, projectId);
+    if (owner.kind === "unavailable") {
+      setScheduleFeedback(owner.issues.map(({ message }) => message));
+      return;
+    }
+    const result = startScheduleWorkingDraft(owner.schedule, canonicalScheduleCommandContext);
+    if (!result.ok) {
+      setScheduleFeedback(scheduleFailureMessages(result));
+      return;
+    }
+    if (result.status === "created") dispatchScheduleReplacement(projectId, result);
+    setScheduleFeedback([]);
+  };
+
+  const updateScheduleDraftMilestone = (
+    input: UpdateScheduleWorkingDraftMilestoneInput,
+  ): void => {
+    if (selectedProjectId === null) return;
+    const projectId = selectedProjectId;
+    const owner = resolveCanonicalScheduleOwner(state, projectId);
+    if (owner.kind === "unavailable") {
+      setScheduleFeedback(owner.issues.map(({ message }) => message));
+      return;
+    }
+    const result = updateScheduleWorkingDraftMilestone(
+      owner.schedule, input, canonicalScheduleCommandContext,
+    );
+    if (!result.ok) {
+      setScheduleFeedback(scheduleFailureMessages(result));
+      return;
+    }
+    dispatchScheduleReplacement(projectId, result);
+    setScheduleFeedback([]);
+  };
+
+  const addScheduleDraftMilestone = (milestoneDefinitionId: MilestoneDefinitionId): void => {
+    if (selectedProjectId === null) return;
+    const projectId = selectedProjectId;
+    const owner = resolveCanonicalScheduleOwner(state, projectId);
+    if (owner.kind === "unavailable") {
+      setScheduleFeedback(owner.issues.map(({ message }) => message));
+      return;
+    }
+    const milestoneId = toMilestoneId(globalThis.crypto.randomUUID());
+    const result = addScheduleWorkingDraftMilestone(
+      owner.schedule,
+      { milestoneId, milestoneDefinitionId },
+      canonicalScheduleCommandContext,
+    );
+    if (!result.ok) {
+      setScheduleFeedback(scheduleFailureMessages(result));
+      return;
+    }
+    dispatchScheduleReplacement(projectId, result);
+    setScheduleFeedback([]);
+  };
+
+  const removeScheduleDraftMilestone = (milestoneId: MilestoneId): void => {
+    if (selectedProjectId === null) return;
+    const projectId = selectedProjectId;
+    const owner = resolveCanonicalScheduleOwner(state, projectId);
+    if (owner.kind === "unavailable") {
+      setScheduleFeedback(owner.issues.map(({ message }) => message));
+      return;
+    }
+    const result = removeScheduleWorkingDraftMilestone(
+      owner.schedule, { milestoneId }, canonicalScheduleCommandContext,
+    );
+    if (!result.ok) {
+      setScheduleFeedback(scheduleFailureMessages(result));
+      return;
+    }
+    dispatchScheduleReplacement(projectId, result);
+    setScheduleFeedback([]);
+  };
+
+  const cancelScheduleDraft = (): void => {
+    if (selectedProjectId === null) return;
+    const projectId = selectedProjectId;
+    const owner = resolveCanonicalScheduleOwner(state, projectId);
+    if (owner.kind === "unavailable") {
+      setScheduleFeedback(owner.issues.map(({ message }) => message));
+      return;
+    }
+    const result = cancelScheduleWorkingDraft(owner.schedule);
+    if (!result.ok) {
+      setScheduleFeedback(scheduleFailureMessages(result));
+      return;
+    }
+    dispatchScheduleReplacement(projectId, result);
+    setScheduleFeedback([]);
+  };
+
+  const publishScheduleDraft = (): void => {
+    if (selectedProjectId === null) return;
+    const projectId = selectedProjectId;
+    const owner = resolveCanonicalScheduleOwner(state, projectId);
+    if (owner.kind === "unavailable") {
+      setScheduleFeedback(owner.issues.map(({ message }) => message));
+      return;
+    }
+    const publishedAt = new Date().toISOString();
+    const result = publishScheduleWorkingDraft(
+      owner.schedule, { publishedAt }, canonicalScheduleCommandContext,
+    );
+    if (!result.ok) {
+      setScheduleFeedback(scheduleFailureMessages(result));
+      return;
+    }
+    dispatchScheduleReplacement(projectId, result);
+    setScheduleFeedback([]);
+  };
+
+  const nextVersion =
+    selectedScheduleOwner?.kind === "available" &&
+    selectedDraftRead?.kind === "workingDraft" &&
+    selectedScheduleRead?.kind !== "unavailable"
+      ? getNextPublishedScheduleVersionNumber(selectedScheduleOwner.schedule)
+      : null;
+  const nextVersionLabel = nextVersion?.ok
+    ? `Publish as v${String(nextVersion.versionNumber).padStart(2, "0")}`
+    : null;
+  const scheduleWorkspaceProps: ScheduleWorkspaceProps | null =
+    selectedProjectId === null || selectedScheduleRead === null || selectedDraftRead === null
+      ? null
+      : {
+          draftRead: selectedDraftRead,
+          feedback: scheduleFeedback,
+          milestoneDefinitions,
+          nextVersionLabel,
+          officialRead: selectedScheduleRead,
+          onAddMilestone: addScheduleDraftMilestone,
+          onCancelDraft: cancelScheduleDraft,
+          onPublishDraft: publishScheduleDraft,
+          onRemoveMilestone: removeScheduleDraftMilestone,
+          onStartDraft: selectedScheduleOwner?.kind === "available"
+            ? startScheduleDraft
+            : null,
+          onUpdateMilestone: updateScheduleDraftMilestone,
+          projectId: selectedProjectId,
+        };
 
   React.useEffect(() => {
     if (selectedProjectId !== null && selectedCanonicalProject === null) {
       setSelectedProjectId(null);
       setIsEditProjectOpen(false);
       setPendingDuplicateCreate(null);
+      setScheduleFeedback([]);
       setActiveResource("projectMaster");
       setPage("dashboard");
     }
@@ -155,8 +372,18 @@ export function App() {
 
   const openProject = (projectId: ProjectId) => {
     setSelectedProjectId(projectId);
+    setScheduleFeedback([]);
     setActiveResource("projectMaster");
     setPage("workspace");
+  };
+  const openWorkspaceResource = (resource: WorkspaceResource): void => {
+    setScheduleFeedback([]);
+    setActiveResource(resource);
+  };
+  const backToDashboard = (): void => {
+    setScheduleFeedback([]);
+    setActiveResource("projectMaster");
+    setPage("dashboard");
   };
   const closeCreate = () => {
     setIsCreateProjectOpen(false);
@@ -184,6 +411,7 @@ export function App() {
     });
     setSelectedProjectId(project.id);
     setEditFeedback(issues);
+    setScheduleFeedback([]);
     setActiveResource("projectMaster");
     setPage("workspace");
     closeCreate();
@@ -271,6 +499,7 @@ export function App() {
 
     dispatch({ type: "projectReplaced", project: interpretation.result.project });
     setEditFeedback(interpretation.result.issues);
+    setScheduleFeedback([]);
     setIsEditProjectOpen(false);
     setActiveResource("projectMaster");
   };
@@ -286,7 +515,7 @@ export function App() {
     page === "workspace" &&
     selectedCanonicalProject !== null &&
     selectedDashboardRow !== null &&
-    selectedScheduleRead !== null;
+    scheduleWorkspaceProps !== null;
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-slate-100 text-slate-950">
@@ -302,12 +531,12 @@ export function App() {
         <ProjectWorkspace
           activeResource={activeResource}
           feedback={editFeedback}
-          onBack={() => setPage("dashboard")}
+          onBack={backToDashboard}
           onEditProject={openEdit}
-          onOpenResource={setActiveResource}
+          onOpenResource={openWorkspaceResource}
           project={selectedCanonicalProject}
           row={selectedDashboardRow}
-          scheduleRead={selectedScheduleRead}
+          scheduleWorkspaceProps={scheduleWorkspaceProps}
         />
       )}
       {isCreateProjectOpen && (
@@ -556,7 +785,7 @@ export interface ProjectWorkspaceProps {
   readonly onOpenResource: (resource: WorkspaceResource) => void;
   readonly project: Project;
   readonly row: DashboardProjectRow;
-  readonly scheduleRead: CurrentPublishedScheduleRead;
+  readonly scheduleWorkspaceProps: ScheduleWorkspaceProps;
 }
 
 export function ProjectWorkspace({
@@ -567,7 +796,7 @@ export function ProjectWorkspace({
   onOpenResource,
   project,
   row,
-  scheduleRead,
+  scheduleWorkspaceProps,
 }: ProjectWorkspaceProps): React.ReactElement {
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5 px-6 py-6">
@@ -684,7 +913,7 @@ export function ProjectWorkspace({
       </section>
 
       {activeResource === "schedule" && (
-        <OfficialScheduleView read={scheduleRead} />
+        <ScheduleWorkspace {...scheduleWorkspaceProps} />
       )}
 
       {feedback.map((issue) => (

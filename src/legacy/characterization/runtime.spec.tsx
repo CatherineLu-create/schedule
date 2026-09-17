@@ -7,13 +7,26 @@ import {
   type UpdateProjectMasterInput,
   type UpdateProjectMasterResult,
 } from "../../application/commands/projectCommands";
+import {
+  cancelScheduleWorkingDraft,
+  startScheduleWorkingDraft,
+} from "../../application/commands/canonicalScheduleCommands";
 import { selectDashboardProjectRow } from "../../application/selectors/dashboardProjectRows";
-import { selectCurrentPublishedSchedule } from "../../application/selectors/scheduleSelectors";
+import {
+  resolveCanonicalScheduleOwner,
+  selectCurrentPublishedSchedule,
+  selectScheduleWorkingDraft,
+} from "../../application/selectors/scheduleSelectors";
+import { prototypeReducer } from "../../application/state/prototypeReducer";
 import type { PrototypeState } from "../../application/state/prototypeState";
+import { milestoneDefinitions } from "../../config/v2/referenceData";
 import type { Project } from "../../domain/project/project";
 import type { CanonicalProjectSchedule } from "../../domain/schedule/officialSchedule";
 import type { ScheduleVersionNumber } from "../../domain/schedule/schedule";
-import { devProject003 } from "../../fixtures/v2/canonicalProjectFixtures";
+import { toMilestoneDefinitionId } from "../../domain/shared/ids";
+import { devProject001, devProject003 } from "../../fixtures/v2/canonicalProjectFixtures";
+import { devSchedule001 } from "../../fixtures/v2/canonicalScheduleFixtures";
+import type { ScheduleWorkspaceProps } from "../../scheduleWorkspace";
 import {
   App,
   ProjectWorkspace,
@@ -126,10 +139,20 @@ function LocalScheduleWorkspaceHarness({ schedule }: { schedule: CanonicalProjec
       onOpenResource={setActiveResource}
       project={devProject003}
       row={row}
-      scheduleRead={selectCurrentPublishedSchedule(
-        localState,
-        devProject003.id,
-      )}
+      scheduleWorkspaceProps={{
+        draftRead: selectScheduleWorkingDraft(localState, devProject003.id),
+        feedback: [],
+        milestoneDefinitions,
+        nextVersionLabel: null,
+        officialRead: selectCurrentPublishedSchedule(localState, devProject003.id),
+        onAddMilestone: () => undefined,
+        onCancelDraft: () => undefined,
+        onPublishDraft: () => undefined,
+        onRemoveMilestone: () => undefined,
+        onStartDraft: () => undefined,
+        onUpdateMilestone: () => undefined,
+        projectId: devProject003.id,
+      }}
     />
   );
 }
@@ -153,17 +176,349 @@ const malformedSchedule: CanonicalProjectSchedule = {
   }],
 };
 
-const currentScheduleWithIgnoredDraft = {
+const currentScheduleWithOutOfOrderHistory: CanonicalProjectSchedule = {
   projectId: devProject003.id,
   publishedVersions: [
     { ...zeroMilestoneSchedule.publishedVersions[0]!, versionNumber: 1 as ScheduleVersionNumber },
     { ...zeroMilestoneSchedule.publishedVersions[0]!, versionNumber: 4 as ScheduleVersionNumber },
     { ...zeroMilestoneSchedule.publishedVersions[0]!, versionNumber: 2 as ScheduleVersionNumber },
   ],
-  workingDraft: { sentinel: "must not become Current Schedule" },
-} as unknown as CanonicalProjectSchedule;
+  workingDraft: null,
+};
+
+function MalformedDraftWorkspaceHarness(): React.ReactElement {
+  const source = devSchedule001.publishedVersions[0]!.milestones[0]!;
+  const [state, dispatch] = React.useReducer(prototypeReducer, {
+    projects: [devProject001],
+    schedules: [{
+      ...devSchedule001,
+      workingDraft: {
+        milestones: [{
+          ...source,
+          milestoneDefinitionId: toMilestoneDefinitionId("missing-definition"),
+        }],
+      },
+    }],
+  });
+  const [activeResource, setActiveResource] =
+    React.useState<WorkspaceResource>("projectMaster");
+  const row = selectDashboardProjectRow(state, devProject001.id);
+  if (row === null) throw new Error("Missing malformed-harness Dashboard row");
+
+  const owner = resolveCanonicalScheduleOwner(state, devProject001.id);
+  const onCancelDraft = (): void => {
+    if (owner.kind === "unavailable") return;
+    const result = cancelScheduleWorkingDraft(owner.schedule);
+    if (!result.ok) return;
+    dispatch({ type: "scheduleReplaced", projectId: devProject001.id,
+      schedule: result.schedule });
+  };
+  const onStartDraft = (): void => {
+    if (owner.kind === "unavailable") return;
+    const result = startScheduleWorkingDraft(owner.schedule, { milestoneDefinitions });
+    if (!result.ok || result.status === "existing") return;
+    dispatch({ type: "scheduleReplaced", projectId: devProject001.id,
+      schedule: result.schedule });
+  };
+  const scheduleWorkspaceProps: ScheduleWorkspaceProps = {
+    draftRead: selectScheduleWorkingDraft(state, devProject001.id),
+    feedback: [],
+    milestoneDefinitions,
+    nextVersionLabel: null,
+    officialRead: selectCurrentPublishedSchedule(state, devProject001.id),
+    onAddMilestone: () => undefined,
+    onCancelDraft,
+    onPublishDraft: () => undefined,
+    onRemoveMilestone: () => undefined,
+    onStartDraft: owner.kind === "available" ? onStartDraft : null,
+    onUpdateMilestone: () => undefined,
+    projectId: devProject001.id,
+  };
+
+  return <ProjectWorkspace
+    activeResource={activeResource}
+    feedback={[]}
+    onBack={() => undefined}
+    onEditProject={() => undefined}
+    onOpenResource={setActiveResource}
+    project={devProject001}
+    row={row}
+    scheduleWorkspaceProps={scheduleWorkspaceProps}
+  />;
+}
 
 describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
+  it("starts Manta's Published v1 as a directly editable Working Draft", () => {
+    render(<App />);
+    openProjectByName("Manta");
+    expect(screen.getByRole("heading", { name: "Project Master" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    expect(screen.getByText("Published v01")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByRole("heading", { name: "Working Draft" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2026-09-18");
+    expect(screen.queryByRole("button", { name: "Resume Draft" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save Draft" })).not.toBeInTheDocument();
+  });
+
+  it("persists valid Plan/Actual edits and null clears across navigation", () => {
+    render(<App />);
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
+      target: { value: "2026-12-15" },
+    });
+    fireEvent.change(screen.getByLabelText("Actual for Kickoff"), {
+      target: { value: "2026-12-16" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    expect(screen.getByRole("heading", { name: "Working Draft" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2026-12-15");
+    expect(screen.getByLabelText("Actual for Kickoff")).toHaveValue("2026-12-16");
+    fireEvent.change(screen.getByLabelText("Actual for Kickoff"), {
+      target: { value: "" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2026-12-15");
+    expect(screen.getByLabelText("Actual for Kickoff")).toHaveValue("");
+    expect(projectHeader()).toHaveAttribute("data-project-id", "dev-project-001");
+  });
+
+  it("keeps incomplete date text transient and changes applicability without clearing dates", () => {
+    render(<App />);
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
+      target: { value: "2030-0" },
+    });
+    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2030-0");
+    fireEvent.change(screen.getByLabelText("Applicability for Kickoff"), {
+      target: { value: "notApplicable" },
+    });
+    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2030-0");
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2026-09-18");
+    expect(screen.getByLabelText("Applicability for Kickoff")).toHaveValue("notApplicable");
+  });
+
+  it("allocates one identity per Add and removes only the Draft row", () => {
+    const randomUuid = vi.spyOn(globalThis.crypto, "randomUUID")
+      .mockReturnValueOnce("22222222-2222-4222-8222-222222222222")
+      .mockReturnValueOnce("33333333-3333-4333-8333-333333333333");
+    render(<App />);
+    openProjectByName("Nautilus");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Milestone definition"), {
+      target: { value: "milestone-design-kickoff" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add Milestone" }));
+    expect(randomUuid).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("row", { name: /Kickoff/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Remove Kickoff" }));
+    expect(screen.queryByRole("row", { name: /Kickoff/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add Milestone" }));
+    expect(randomUuid).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("row", { name: /Kickoff/ })).toBeInTheDocument();
+    expect(randomUuid.mock.results.map(({ value }) => value)).toEqual([
+      "22222222-2222-4222-8222-222222222222",
+      "33333333-3333-4333-8333-333333333333",
+    ]);
+  });
+
+  it("keeps edits until Discard confirmation and restores Official v1", () => {
+    render(<App />);
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
+      target: { value: "2032-02-20" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Discard Draft" }));
+    let dialog = screen.getByRole("dialog", { name: "Discard Working Draft" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keep Editing" }));
+    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2032-02-20");
+    fireEvent.click(screen.getByRole("button", { name: "Discard Draft" }));
+    dialog = screen.getByRole("dialog", { name: "Discard Working Draft" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Discard Draft" }));
+    expect(screen.getByText("Published v01")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Working Draft" })).not.toBeInTheDocument();
+  });
+
+  it("publishes Manta v1 as v2 only after confirmation", () => {
+    render(<App />);
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
+      target: { value: "2033-03-04" },
+    });
+    fireEvent.change(screen.getByLabelText("Actual for Kickoff"), {
+      target: { value: "2033-03-05" },
+    });
+    fireEvent.change(screen.getByLabelText("Applicability for Kickoff"), {
+      target: { value: "notApplicable" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    let dialog = screen.getByRole("dialog", { name: "Publish Working Draft" });
+    expect(within(dialog).getByText("Publish as v02")).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keep Editing" }));
+    expect(screen.getByRole("heading", { name: "Working Draft" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    dialog = screen.getByRole("dialog", { name: "Publish Working Draft" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Publish" }));
+    expect(screen.getByText("Published v02")).toBeInTheDocument();
+    expect(screen.getByText("2033/03/04")).toBeInTheDocument();
+    expect(screen.getByText("2033/03/05")).toBeInTheDocument();
+    expect(screen.getByText("Not applicable")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Working Draft" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Publish" })).not.toBeInTheDocument();
+  });
+
+  it("publishes an empty no-Published Draft as v1", () => {
+    render(<App />);
+    openProjectByName("Nautilus");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    expect(within(screen.getByRole("region", { name: "Current Schedule" }))
+      .getByText("-")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByText("No milestones")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Publish Working Draft" }))
+      .getByRole("button", { name: "Publish" }));
+    expect(screen.getByText("Published v01")).toBeInTheDocument();
+    expect(screen.getByText("No milestones")).toBeInTheDocument();
+  });
+
+  it("isolates and resumes Drafts by exact ProjectId", () => {
+    render(<App />);
+    openProjectByName("Nautilus");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Milestone definition"), {
+      target: { value: "milestone-design-kickoff" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add Milestone" }));
+    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
+      target: { value: "2031-01-15" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    expect(screen.queryByDisplayValue("2031-01-15")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    openProjectByName("Nautilus");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    expect(screen.getByDisplayValue("2031-01-15")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Resume Draft" })).not.toBeInTheDocument();
+    expect(projectHeader()).toHaveAttribute("data-project-id", "dev-project-002");
+  });
+
+  it("keeps healthy Published truth available while recovering a malformed Draft", () => {
+    render(<MalformedDraftWorkspaceHarness />);
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    expect(screen.getByText("Working Draft data unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("Published v01")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Publish" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Discard Draft" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Discard Working Draft" }))
+      .getByRole("button", { name: "Discard Draft" }));
+    expect(screen.getByText("Published v01")).toBeInTheDocument();
+    expect(within(projectHeader()).getByText("Project Name: Manta")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByRole("heading", { name: "Working Draft" })).toBeInTheDocument();
+  });
+
+  it("keeps Portfolio Published-only while editing, then reflects Publish", () => {
+    render(<App />);
+    const initialCell = dashboardRow("dev-project-001")
+      .querySelector('[data-column-key="schedule:design:kickoff"]');
+    expect(initialCell).toHaveTextContent("P: 2026/09/18");
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
+      target: { value: "2034-04-05" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    expect(dashboardRow("dev-project-001")
+      .querySelector('[data-column-key="schedule:design:kickoff"]'))
+      .toHaveTextContent("P: 2026/09/18");
+    expect(dashboardRow("dev-project-001")).not.toHaveTextContent("2034/04/05");
+    expect(screen.queryByRole("columnheader", { name: "A2" })).not.toBeInTheDocument();
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Publish Working Draft" }))
+      .getByRole("button", { name: "Publish" }));
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    expect(dashboardRow("dev-project-001")
+      .querySelector('[data-column-key="schedule:design:kickoff"]'))
+      .toHaveTextContent("P: 2034/04/05");
+    expect(screen.queryByRole("columnheader", { name: "A2" })).not.toBeInTheDocument();
+  });
+
+  it("preserves an overflow Draft and reports precise Publish failure", () => {
+    const overflowSchedule: CanonicalProjectSchedule = {
+      ...devSchedule001,
+      publishedVersions: [{
+        ...devSchedule001.publishedVersions[0]!,
+        versionNumber: Number.MAX_SAFE_INTEGER as ScheduleVersionNumber,
+      }],
+      workingDraft: { milestones: [{ ...devSchedule001.publishedVersions[0]!.milestones[0]! }] },
+    };
+    render(<App initialState={{ projects: [devProject001], schedules: [overflowSchedule] }}
+      initialSelectedProjectId={devProject001.id} />);
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    expect(screen.getByRole("heading", { name: "Working Draft" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Publish Working Draft" }))
+      .getByRole("button", { name: "Publish" }));
+    expect(screen.getByText("The next Published version is unavailable."))
+      .toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Working Draft" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2026-09-18");
+  });
+
+  it("discards a no-Published Draft back to the legal empty Official state", () => {
+    render(<App />);
+    openProjectByName("Nautilus");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByRole("heading", { name: "Working Draft" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Discard Draft" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Discard Working Draft" }))
+      .getByRole("button", { name: "Discard Draft" }));
+    expect(within(screen.getByRole("region", { name: "Current Schedule" }))
+      .getByText("-")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Discard Draft" })).not.toBeInTheDocument();
+  });
+
+  it("cleans an unresolved selected Project without rendering stale Draft data", async () => {
+    const source = devSchedule001.publishedVersions[0]!.milestones[0]!;
+    const staleSchedule = {
+      ...devSchedule001,
+      workingDraft: { milestones: [{ ...source }] },
+    };
+    render(<App initialSelectedProjectId={devProject001.id}
+      initialState={{ projects: [], schedules: [staleSchedule] }} />);
+    expect(screen.queryByRole("heading", { name: "Working Draft" }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Schedule" }))
+      .not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Project Information" }))
+      .toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Project Header" }))
+      .not.toBeInTheDocument();
+  });
   it("integrates the canonical Portfolio shell, Current Published grouped table, search, and seven filters", () => {
     render(<App />);
 
@@ -331,17 +686,16 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(within(scheduleView).queryByText(/^Published v/)).not.toBeInTheDocument();
   });
 
-  it("renders the maximum Published version as Current Schedule and ignores Draft-like data", () => {
+  it("renders the maximum Published version as Current Schedule", () => {
     expect(Object.hasOwn(zeroMilestoneSchedule, "workingDraft")).toBe(true);
     expect(Reflect.get(zeroMilestoneSchedule, "workingDraft")).toBeNull();
-    render(<LocalScheduleWorkspaceHarness schedule={currentScheduleWithIgnoredDraft} />);
+    render(<LocalScheduleWorkspaceHarness schedule={currentScheduleWithOutOfOrderHistory} />);
     fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
 
     const currentSchedule = screen.getByRole("region", { name: "Current Schedule" });
     expect(within(currentSchedule).getByText("Published v04")).toBeInTheDocument();
-    expect(within(currentSchedule).queryByText(/must not become Current Schedule/)).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Working Draft" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Start Draft|Edit Draft|Publish|Cancel Draft/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Publish|Discard Draft|Resume Draft/ })).not.toBeInTheDocument();
   });
 
   it("shows a Published version with zero milestones distinctly", () => {
@@ -435,6 +789,9 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(randomUuid).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
     expect(within(screen.getByRole("region", { name: "Current Schedule" })).getByText("-")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByRole("heading", { name: "Working Draft" })).toBeInTheDocument();
+    expect(screen.getByText("No milestones")).toBeInTheDocument();
     expect(projectHeader()).toHaveAttribute("data-project-id", fixedUuid);
     fireEvent.click(screen.getByRole("button", { name: "← Dashboard" }));
     expect(dashboardRows()).toHaveLength(6);
@@ -512,6 +869,8 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     const reviewDialog = screen.getByRole("dialog", { name: "Create Project" });
+    expect(dashboardRows()).toHaveLength(5);
+    expect(screen.queryByRole("region", { name: "Project Header" })).not.toBeInTheDocument();
     fireEvent.click(within(reviewDialog).getByRole("button", { name: "Create Anyway" }));
 
     expect(projectHeader()).toHaveAttribute("data-project-id", fixedUuid);
@@ -520,12 +879,24 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
     expect(within(screen.getByRole("region", { name: "Current Schedule" })).getByText("-")).toBeInTheDocument();
     expect(screen.queryByText("Schedule data unavailable")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByRole("heading", { name: "Working Draft" })).toBeInTheDocument();
     expect(projectHeader()).toHaveAttribute("data-project-id", fixedUuid);
   });
 
   it("edits through the Master command, preserves hidden fields, and retains ProjectId", () => {
     render(<App />);
     openProjectByQci("DEV-QCI-ALPHA-02");
+    fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Milestone definition"), {
+      target: { value: "milestone-design-kickoff" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add Milestone" }));
+    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
+      target: { value: "2035-07-08" },
+    });
+    expect(projectHeader()).toHaveAttribute("data-project-id", "dev-project-003");
     fireEvent.click(within(projectHeader()).getByRole("button", { name: "Edit Project" }));
     const dialog = screen.getByRole("dialog", { name: "Edit Project" });
 
@@ -564,7 +935,10 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(projectHeader()).toHaveAttribute("data-project-id", "dev-project-003");
     expect(within(projectHeader()).getByText("Project Name: Orca Revised")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open Schedule" }));
-    expect(within(screen.getByRole("region", { name: "Current Schedule" })).getByText("-")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Working Draft" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2035-07-08");
+    expect(screen.getByRole("row", { name: /Kickoff/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
     expect(projectHeader()).toHaveAttribute("data-project-id", "dev-project-003");
     fireEvent.click(screen.getByRole("button", { name: "← Dashboard" }));
     expect(within(dashboardTable()).getByText("Orca Revised")).toBeInTheDocument();
