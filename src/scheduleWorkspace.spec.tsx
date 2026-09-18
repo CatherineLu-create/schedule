@@ -137,8 +137,8 @@ describe("Schedule Workspace presentation", () => {
       .toEqual(["Phase", "Stage", "Milestone", "Plan", "Actual"]);
     expect(screen.getByRole("row", { name: /Kickoff/ })).toHaveTextContent("Design");
     expect(screen.getByLabelText("Applicability for Kickoff")).toHaveValue("applicable");
-    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2026-09-15");
-    expect(screen.getByLabelText("Actual for Kickoff")).toHaveValue("");
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveValue("2026-09-15");
+    expect(screen.getByLabelText(/^Actual for Kickoff occurrence/)).toHaveValue("");
     expect(screen.queryByRole("columnheader", { name: "Applicability" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Remove Kickoff" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Discard Draft" })).toBeInTheDocument();
@@ -149,83 +149,182 @@ describe("Schedule Workspace presentation", () => {
       .not.toBeInTheDocument();
   });
 
-  it("emits only complete raw DateOnly values and null clears", () => {
+  it("keeps labelled mutable native inputs and hides field actions while inactive", () => {
     render(<ScheduleWorkspace {...workingDraftProps} />);
-    const plan = screen.getByLabelText("Plan for Kickoff");
-    fireEvent.change(plan, { target: { value: "2026-09" } });
+    const plan = screen.getByLabelText(
+      "Plan for Kickoff occurrence draft-kickoff in Project workspace-project",
+    );
+    const actual = screen.getByLabelText(
+      "Actual for Kickoff occurrence draft-kickoff in Project workspace-project",
+    );
+    for (const input of [plan, actual]) {
+      expect(input).toHaveAttribute("type", "date");
+      expect(input).toBeEnabled();
+      expect(input).not.toHaveAttribute("readonly");
+    }
+    expect(plan).toHaveValue("2026-09-15");
+    expect(actual).toHaveValue("");
+    expect(screen.queryByRole("button", { name: /^Open calendar for/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Apply Date to/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Cancel date edit for/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Clear Actual for Kickoff occurrence/ })).toBeEnabled();
+    fireEvent.focus(plan);
+    expect(screen.getByRole("button", { name: /^Apply Date to Plan for Kickoff occurrence/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^Cancel date edit for Plan for Kickoff occurrence/ })).toBeEnabled();
+    fireEvent.blur(plan);
+    expect(screen.queryByRole("button", { name: /^Apply Date to/ })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["Plan", "2026-09-15"],
+    ["Actual", ""],
+  ])("opens and dismisses clean %s native input without a canonical write", (field, initial) => {
+    render(<ScheduleWorkspace {...workingDraftProps} />);
+    const input = screen.getByLabelText(new RegExp("^" + field + " for Kickoff occurrence"));
+    fireEvent.pointerDown(input);
+    fireEvent.focus(input);
+    expect(input).toHaveValue(initial);
+    fireEvent.keyDown(input, { key: "Escape" });
+    fireEvent.blur(input);
     expect(onUpdateMilestone).not.toHaveBeenCalled();
-    expect(plan).toHaveValue("2026-09");
+    expect(input).toHaveAttribute("aria-invalid", "false");
+    expect(screen.getByRole("button", { name: "Publish" })).toBeEnabled();
+  });
+
+  it("applies Plan and initially-null Actual only by click and clears Plan explicitly", () => {
+    render(<ScheduleWorkspace {...workingDraftProps} />);
+    const plan = screen.getByLabelText(/^Plan for Kickoff occurrence/);
+    const actual = screen.getByLabelText(/^Actual for Kickoff occurrence/);
     fireEvent.change(plan, { target: { value: "2026-09-30" } });
+    expect(onUpdateMilestone).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /^Apply Date to Plan for Kickoff occurrence/ }));
+    expect(onUpdateMilestone).toHaveBeenCalledExactlyOnceWith({
+      milestoneId: toMilestoneId("draft-kickoff"), field: "plan", value: parseDateOnly("2026-09-30"),
+    });
+    fireEvent.change(actual, { target: { value: "2026-10-01" } });
+    expect(onUpdateMilestone).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: /^Apply Date to Actual for Kickoff occurrence/ }));
+    expect(onUpdateMilestone).toHaveBeenCalledTimes(2);
     expect(onUpdateMilestone).toHaveBeenLastCalledWith({
-      milestoneId: toMilestoneId("draft-kickoff"), field: "plan",
-      value: parseDateOnly("2026-09-30"),
+      milestoneId: toMilestoneId("draft-kickoff"), field: "actual", value: parseDateOnly("2026-10-01"),
     });
     fireEvent.change(plan, { target: { value: "" } });
+    expect(onUpdateMilestone).toHaveBeenCalledTimes(2);
+    expect(plan).toHaveAccessibleDescription(/Date not applied/);
+    expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /^Clear Plan for Kickoff occurrence/ }));
+    expect(onUpdateMilestone).toHaveBeenCalledTimes(3);
     expect(onUpdateMilestone).toHaveBeenLastCalledWith({
       milestoneId: toMilestoneId("draft-kickoff"), field: "plan", value: null,
     });
-    fireEvent.change(screen.getByLabelText("Actual for Kickoff"), {
-      target: { value: "2026-10-01" },
-    });
-    expect(onUpdateMilestone).toHaveBeenLastCalledWith({
-      milestoneId: toMilestoneId("draft-kickoff"), field: "actual",
-      value: parseDateOnly("2026-10-01"),
+  });
+
+  it("keeps provisional native date events out of the canonical callback until Apply Date", () => {
+    render(<ScheduleWorkspace {...workingDraftProps} />);
+    const plan = screen.getByLabelText(/^Plan for Kickoff occurrence/);
+    fireEvent.input(plan, { target: { value: "2027-03-19" } });
+    fireEvent.change(plan, { target: { value: "2027-03-19" } });
+    expect(plan).toHaveValue("2027-03-19");
+    expect(onUpdateMilestone).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", {
+      name: /^Apply Date to Plan for Kickoff occurrence/,
+    }));
+    expect(onUpdateMilestone).toHaveBeenCalledExactlyOnceWith({
+      milestoneId: toMilestoneId("draft-kickoff"),
+      field: "plan",
+      value: parseDateOnly("2027-03-19"),
     });
   });
 
-  it.each(["2026-12-15", "2026/12/15"])("accepts %s as canonical ISO", (text) => {
-    render(<ScheduleWorkspace {...workingDraftProps} />);
-    fireEvent.change(screen.getByRole("textbox", { name: "Plan for Kickoff" }), {
-      target: { value: text },
+  it("submits one Apply while pending and permits a deliberate retry after rejection feedback", () => {
+    const { rerender } = render(<ScheduleWorkspace {...workingDraftProps} />);
+    fireEvent.change(screen.getByLabelText(/^Plan for Kickoff occurrence/), {
+      target: { value: "2027-03-19" },
     });
+    const apply = screen.getByRole("button", { name: /^Apply Date to Plan for Kickoff occurrence/ });
+    fireEvent.click(apply);
+    expect(apply).toBeDisabled();
+    fireEvent.click(apply);
     expect(onUpdateMilestone).toHaveBeenCalledTimes(1);
-    expect(onUpdateMilestone).toHaveBeenCalledWith({
-      milestoneId: draft.milestones[0]!.milestoneId,
-      field: "plan",
-      value: parseDateOnly("2026-12-15"),
-    });
+    rerender(<ScheduleWorkspace {...workingDraftProps} feedback={["Update rejected"]} />);
+    expect(apply).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
+    fireEvent.click(apply);
+    expect(onUpdateMilestone).toHaveBeenCalledTimes(2);
   });
 
-  it("accepts a valid slash leap day as canonical ISO", () => {
+  it("keeps a second pending field guarded when field Cancel closes only the first edit", () => {
     render(<ScheduleWorkspace {...workingDraftProps} />);
-    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
-      target: { value: "2028/02/29" },
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    fireEvent.change(screen.getByLabelText(/^Plan for Kickoff occurrence/), {
+      target: { value: "2027-03-19" },
     });
-    expect(onUpdateMilestone).toHaveBeenCalledWith({
-      milestoneId: draft.milestones[0]!.milestoneId,
-      field: "plan",
-      value: parseDateOnly("2028-02-29"),
+    fireEvent.change(screen.getByLabelText(/^Actual for Kickoff occurrence/), {
+      target: { value: "2027-03-20" },
     });
+    expect(onUpdateMilestone).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /^Cancel date edit for Plan for Kickoff occurrence/ }));
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveValue("2026-09-15");
+    expect(screen.getByLabelText(/^Actual for Kickoff occurrence/)).toHaveValue("2027-03-20");
+    expect(screen.getByRole("dialog", { name: "Publish Working Draft" })).toBeInTheDocument();
+    expect(within(screen.getByRole("dialog", { name: "Publish Working Draft" }))
+      .getByRole("button", { name: "Publish" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /^Cancel date edit for Actual for Kickoff occurrence/ }));
+    expect(screen.getByLabelText(/^Actual for Kickoff occurrence/)).toHaveValue("");
+    expect(within(screen.getByRole("dialog", { name: "Publish Working Draft" }))
+      .getByRole("button", { name: "Publish" })).toBeEnabled();
+    expect(onUpdateMilestone).not.toHaveBeenCalled();
   });
 
-  it.each(["2026/02-28", "2026-2-28", "2026-02", "2026-02-30"])(
-    "keeps unsupported date text %s unapplied without dispatching",
-    (text) => {
-      render(<ScheduleWorkspace {...workingDraftProps} />);
-      const input = screen.getByLabelText("Plan for Kickoff");
-      fireEvent.change(input, { target: { value: text } });
-      expect(onUpdateMilestone).not.toHaveBeenCalled();
-      expect(input).toHaveAttribute("aria-invalid", "true");
-      expect(input).toHaveAccessibleDescription(
-        /Date not applied\. Enter a valid date as YYYY-MM-DD or YYYY\/MM\/DD\./,
-      );
-    },
-  );
+  it("keeps initially-null Plan and populated Actual local until each Apply Date", () => {
+    const actual = parseDateOnly("2026-09-19");
+    if (actual === null) throw new Error("Invalid test date");
+    render(<ScheduleWorkspace {...workingDraftProps} draftRead={{
+      kind: "workingDraft",
+      draft: { milestones: [{ ...draft.milestones[0]!, plan: null, actual }] },
+      milestoneRows: [{ ...workingDraftRow, plan: null, actual }],
+    }} />);
+    const planInput = screen.getByLabelText(/^Plan for Kickoff occurrence/);
+    const actualInput = screen.getByLabelText(/^Actual for Kickoff occurrence/);
+    expect(planInput).toHaveValue("");
+    expect(planInput).toHaveAttribute("aria-invalid", "false");
+    fireEvent.input(planInput, { target: { value: "2027-03-18" } });
+    fireEvent.change(actualInput, { target: { value: "2027-03-19" } });
+    fireEvent.blur(actualInput);
+    expect(onUpdateMilestone).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /^Apply Date to Plan for Kickoff occurrence/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Apply Date to Actual for Kickoff occurrence/ }));
+    expect(onUpdateMilestone.mock.calls).toEqual([
+      [{ milestoneId: toMilestoneId("draft-kickoff"), field: "plan", value: parseDateOnly("2027-03-18") }],
+      [{ milestoneId: toMilestoneId("draft-kickoff"), field: "actual", value: parseDateOnly("2027-03-19") }],
+    ]);
+  });
 
-  it("shows invalid text as unapplied without dispatching an edit", () => {
+  it("keeps an empty native input unapplied without clearing a saved date", () => {
     render(<ScheduleWorkspace {...workingDraftProps} />);
-    const input = screen.getByRole("textbox", { name: "Plan for Kickoff" });
-    fireEvent.change(input, { target: { value: "2026/02/30" } });
+    const input = screen.getByLabelText(/^Plan for Kickoff occurrence/);
+    fireEvent.input(input, { target: { value: "" } });
+    fireEvent.change(input, { target: { value: "" } });
     expect(onUpdateMilestone).not.toHaveBeenCalled();
     expect(input).toHaveAttribute("aria-invalid", "true");
-    expect(input).toHaveAccessibleDescription(
-      /Date not applied\. Enter a valid date as YYYY-MM-DD or YYYY\/MM\/DD\./,
-    );
+    expect(input).toHaveAccessibleDescription(/Date not applied/);
+    expect(screen.getByRole("button", { name: /^Apply Date to Plan for Kickoff occurrence/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
   });
 
-  it("blocks Publish for invalid Plan text while keeping Discard available", () => {
+  it("keeps a sanitized invalid native value unapplied", () => {
     render(<ScheduleWorkspace {...workingDraftProps} />);
-    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
+    const input = screen.getByLabelText(/^Plan for Kickoff occurrence/);
+    fireEvent.change(input, { target: { value: "2026-02-30" } });
+    expect(onUpdateMilestone).not.toHaveBeenCalled();
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAccessibleDescription(/Date not applied/);
+    expect(screen.getByRole("button", { name: /^Apply Date to Plan for Kickoff occurrence/ })).toBeDisabled();
+  });
+
+  it("blocks Publish for invalid Plan input while keeping Discard available", () => {
+    render(<ScheduleWorkspace {...workingDraftProps} />);
+    fireEvent.change(screen.getByLabelText(/^Plan for Kickoff occurrence/), {
       target: { value: "2026-02-30" },
     });
     expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
@@ -234,10 +333,10 @@ describe("Schedule Workspace presentation", () => {
     expect(screen.getByRole("button", { name: "Discard Draft" })).toBeEnabled();
   });
 
-  it("blocks an open Publish confirmation for invalid Actual text", () => {
+  it("blocks an open Publish confirmation for invalid Actual input", () => {
     render(<ScheduleWorkspace {...workingDraftProps} />);
     fireEvent.click(screen.getByRole("button", { name: "Publish" }));
-    fireEvent.change(screen.getByLabelText("Actual for Kickoff"), {
+    fireEvent.input(screen.getByLabelText(/^Actual for Kickoff occurrence/), {
       target: { value: "2026/13/01" },
     });
     const dialog = screen.getByRole("dialog", { name: "Publish Working Draft" });
@@ -247,9 +346,12 @@ describe("Schedule Workspace presentation", () => {
 
   it("unblocks Publish only when a valid edit is reflected by canonical props", () => {
     const { rerender } = render(<ScheduleWorkspace {...workingDraftProps} />);
-    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
+    fireEvent.change(screen.getByLabelText(/^Plan for Kickoff occurrence/), {
       target: { value: "2026-12-15" },
     });
+    expect(onUpdateMilestone).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /^Apply Date to Plan for Kickoff occurrence/ }));
+    expect(onUpdateMilestone).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
     rerender(<ScheduleWorkspace {...propsForDateBuffer(
       "workspace-project", "draft-kickoff", parseDateOnly("2026-12-15"),
@@ -257,9 +359,73 @@ describe("Schedule Workspace presentation", () => {
     expect(screen.getByRole("button", { name: "Publish" })).toBeEnabled();
   });
 
+  it("keeps rejected selections and pending Clear guarded until canonical props reflect them", () => {
+    const populatedActual = parseDateOnly("2026-09-19");
+    const nextPlan = parseDateOnly("2026-11-03");
+    if (populatedActual === null || nextPlan === null) throw new Error("Invalid test date");
+    const propsWith = (plan: DateOnly | null, actual: DateOnly | null): ScheduleWorkspaceProps => ({
+      ...workingDraftProps,
+      draftRead: {
+        kind: "workingDraft",
+        draft: { milestones: [{ ...draft.milestones[0]!, plan, actual }] },
+        milestoneRows: [{ ...workingDraftRow, plan, actual }],
+      },
+    });
+    const initial = propsWith(null, populatedActual);
+    const { rerender } = render(<ScheduleWorkspace {...initial} />);
+    fireEvent.change(screen.getByLabelText(/^Plan for Kickoff occurrence/), {
+      target: { value: "2026-11-03" },
+    });
+    expect(onUpdateMilestone).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /^Apply Date to Plan for Kickoff occurrence/ }));
+    expect(onUpdateMilestone).toHaveBeenLastCalledWith({
+      milestoneId: toMilestoneId("draft-kickoff"), field: "plan", value: nextPlan,
+    });
+    rerender(<ScheduleWorkspace {...initial} feedback={["Update rejected"]} />);
+    expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveAccessibleDescription(/last accepted value is unchanged/);
+    rerender(<ScheduleWorkspace {...propsWith(nextPlan, populatedActual)} />);
+    expect(screen.getByRole("button", { name: "Publish" })).toBeEnabled();
+
+    fireEvent.change(screen.getByLabelText(/^Actual for Kickoff occurrence/), {
+      target: { value: "2026-12-04" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^Apply Date to Actual for Kickoff occurrence/ }));
+    expect(onUpdateMilestone).toHaveBeenLastCalledWith({
+      milestoneId: toMilestoneId("draft-kickoff"), field: "actual", value: parseDateOnly("2026-12-04"),
+    });
+    rerender(<ScheduleWorkspace {...propsWith(nextPlan, parseDateOnly("2026-12-04"))} />);
+    expect(screen.getByRole("button", { name: "Publish" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: /^Clear Actual for Kickoff occurrence/ }));
+    expect(onUpdateMilestone).toHaveBeenLastCalledWith({
+      milestoneId: toMilestoneId("draft-kickoff"), field: "actual", value: null,
+    });
+    expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
+    rerender(<ScheduleWorkspace {...propsWith(nextPlan, null)} />);
+    expect(screen.getByRole("button", { name: "Publish" })).toBeEnabled();
+  });
+
+  it("distinguishes duplicate milestone definitions by occurrence and Project in each date action", () => {
+    const secondId = toMilestoneId("draft-kickoff-two");
+    render(<ScheduleWorkspace {...workingDraftProps} draftRead={{
+      kind: "workingDraft",
+      draft: { milestones: [draft.milestones[0]!, { ...draft.milestones[0]!, milestoneId: secondId }] },
+      milestoneRows: [workingDraftRow, { ...workingDraftRow, milestoneId: secondId }],
+    }} />);
+    for (const occurrence of ["draft-kickoff", "draft-kickoff-two"]) {
+      const name = `Plan for Kickoff occurrence ${occurrence} in Project workspace-project`;
+      const input = screen.getByLabelText(name);
+      expect(input).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: `Clear ${name}` })).toBeInTheDocument();
+      fireEvent.focus(input);
+      expect(screen.getByRole("button", { name: `Apply Date to ${name}` })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: `Cancel date edit for ${name}` })).toBeInTheDocument();
+    }
+  });
+
   it("clears an invalid editor's Publish guard when its row is removed", () => {
     const { rerender } = render(<ScheduleWorkspace {...workingDraftProps} />);
-    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
+    fireEvent.change(screen.getByLabelText(/^Plan for Kickoff occurrence/), {
       target: { value: "2026-02-30" },
     });
     expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
@@ -288,10 +454,10 @@ describe("Schedule Workspace presentation", () => {
       },
     };
     const { rerender } = render(<ScheduleWorkspace {...twoRows} />);
-    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
+    fireEvent.change(screen.getByLabelText(/^Plan for Kickoff occurrence/), {
       target: { value: "2026-02-30" },
     });
-    fireEvent.change(screen.getByLabelText("Plan for Second Kickoff"), {
+    fireEvent.change(screen.getByLabelText(/^Plan for Second Kickoff occurrence/), {
       target: { value: "2026-13-01" },
     });
     rerender(<ScheduleWorkspace {...twoRows} draftRead={{
@@ -326,43 +492,44 @@ describe("Schedule Workspace presentation", () => {
     const { rerender } = render(<ScheduleWorkspace {...propsForDateBuffer(
       "p1", "m1", initial,
     )} />);
-    const input = screen.getByLabelText("Plan for Kickoff");
+    const input = screen.getByLabelText(/^Plan for Kickoff occurrence/);
     fireEvent.change(input, { target: { value: "2026-02-30" } });
     expect(input).toHaveAttribute("aria-invalid", "true");
     fireEvent.change(input, { target: { value: "2026-12-15" } });
     expect(input).toHaveAccessibleDescription(/last accepted value is unchanged/i);
+    fireEvent.click(screen.getByRole("button", { name: /^Apply Date to Plan for Kickoff occurrence/ }));
     rerender(<ScheduleWorkspace {...propsForDateBuffer("p1", "m1", accepted)} />);
-    expect(screen.getByLabelText("Plan for Kickoff")).toHaveAttribute("aria-invalid", "false");
-    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), { target: { value: "" } });
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveAttribute("aria-invalid", "false");
+    fireEvent.click(screen.getByRole("button", { name: /^Clear Plan for Kickoff occurrence/ }));
     rerender(<ScheduleWorkspace {...propsForDateBuffer("p1", "m1", null)} />);
-    expect(screen.getByLabelText("Plan for Kickoff")).toHaveAttribute("aria-invalid", "false");
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveAttribute("aria-invalid", "false");
     expect(screen.queryByText(/Date not applied\./)).not.toBeInTheDocument();
   });
 
-  it("resets incomplete date text across Project, milestone, field, and canonical value changes", () => {
+  it("resets unapplied native input across Project, milestone, field, and canonical changes", () => {
     const initial = parseDateOnly("2026-09-15");
     const replacement = parseDateOnly("2026-10-20");
     if (initial === null || replacement === null) throw new Error("Invalid test date");
     const { rerender } = render(
       <ScheduleWorkspace {...propsForDateBuffer("p1", "m1", initial)} />,
     );
-    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
-      target: { value: "2030-0" },
+    fireEvent.change(screen.getByLabelText(/^Plan for Kickoff occurrence/), {
+      target: { value: "" },
     });
-    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2030-0");
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveAttribute("aria-invalid", "true");
     rerender(<ScheduleWorkspace {...propsForDateBuffer("p2", "m1", initial)} />);
-    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2026-09-15");
-    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
-      target: { value: "2031-0" },
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveValue("2026-09-15");
+    fireEvent.change(screen.getByLabelText(/^Plan for Kickoff occurrence/), {
+      target: { value: "" },
     });
     rerender(<ScheduleWorkspace {...propsForDateBuffer("p2", "m2", initial)} />);
-    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2026-09-15");
-    fireEvent.change(screen.getByLabelText("Actual for Kickoff"), {
-      target: { value: "2032-0" },
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveValue("2026-09-15");
+    fireEvent.change(screen.getByLabelText(/^Actual for Kickoff occurrence/), {
+      target: { value: "" },
     });
-    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2026-09-15");
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveValue("2026-09-15");
     rerender(<ScheduleWorkspace {...propsForDateBuffer("p2", "m2", replacement)} />);
-    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2026-10-20");
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveValue("2026-10-20");
   });
 
   it("emits only approved applicability, catalog Add, and exact Remove inputs", () => {
@@ -375,7 +542,7 @@ describe("Schedule Workspace presentation", () => {
       value: "notApplicable",
     });
     expect(onUpdateMilestone).toHaveBeenCalledTimes(1);
-    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2026-09-15");
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveValue("2026-09-15");
     const catalog = screen.getByLabelText("Milestone definition");
     expect(within(catalog).getByRole("option", { name: "Kickoff" })).toBeInTheDocument();
     expect(within(screen.getByLabelText("Applicability for Kickoff"))
@@ -469,7 +636,7 @@ describe("Schedule Workspace presentation", () => {
     expect(screen.getByText("Working Draft data unavailable")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Publish" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Add Milestone" })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Plan for Kickoff")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Plan for Kickoff occurrence/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Resume Draft" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Discard Draft" }));
     fireEvent.click(within(screen.getByRole("dialog", { name: "Discard Working Draft" }))

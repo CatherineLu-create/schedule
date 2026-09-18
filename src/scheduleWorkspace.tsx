@@ -32,6 +32,7 @@ export interface ScheduleWorkspaceProps {
 }
 
 interface DateOnlyEditorProps {
+  readonly feedback: readonly string[];
   readonly field: "plan" | "actual";
   readonly label: string;
   readonly milestoneId: MilestoneId;
@@ -41,20 +42,8 @@ interface DateOnlyEditorProps {
   readonly value: DateOnly | null;
 }
 
-type EditorDate =
-  | { readonly ok: true; readonly value: DateOnly | null }
-  | { readonly ok: false };
-
-function parseEditorDate(text: string): EditorDate {
-  if (text === "") return { ok: true, value: null };
-  const normalized = /^\d{4}\/\d{2}\/\d{2}$/.test(text)
-    ? text.replaceAll("/", "-")
-    : text;
-  const value = parseDateOnly(normalized);
-  return value === null ? { ok: false } : { ok: true, value };
-}
-
 function DateOnlyEditor({
+  feedback,
   field,
   label,
   milestoneId,
@@ -63,25 +52,38 @@ function DateOnlyEditor({
   projectId,
   value,
 }: DateOnlyEditorProps): React.ReactElement {
-  const [text, setText] = React.useState<string>(value ?? "");
-  const helpId = React.useId();
+  const canonicalText = value ?? "";
+  const [text, setText] = React.useState(canonicalText);
+  const [badEmptyInput, setBadEmptyInput] = React.useState(false);
+  const [editing, setEditing] = React.useState(false);
+  const [awaitingCanonical, setAwaitingCanonical] = React.useState(false);
+  const previousFeedback = React.useRef(feedback);
+  const contextId = React.useId();
   const errorId = React.useId();
 
   React.useEffect(() => {
-    setText(value ?? "");
+    setText(canonicalText);
+    setBadEmptyInput(false);
+    setEditing(false);
+    setAwaitingCanonical(false);
   }, [field, milestoneId, projectId, value]);
 
-  const acceptText = (nextText: string): void => {
-    setText(nextText);
-    const parsed = parseEditorDate(nextText);
-    if (parsed.ok) onValidValue(parsed.value);
+  React.useEffect(() => {
+    if (previousFeedback.current === feedback) return;
+    previousFeedback.current = feedback;
+    setAwaitingCanonical(false);
+  }, [feedback]);
+
+  const recordNativeInput = (input: HTMLInputElement): void => {
+    setText(input.value);
+    setBadEmptyInput(input.value === "");
+    setEditing(true);
   };
 
-  const parsed = parseEditorDate(text);
-  const invalid = !parsed.ok;
-  const unapplied = !parsed.ok || parsed.value !== value;
+  const unapplied = badEmptyInput || text !== canonicalText || awaitingCanonical;
+  const invalid = badEmptyInput || (text !== "" && parseDateOnly(text) === null);
   const error = invalid
-    ? "Date not applied. Enter a valid date as YYYY-MM-DD or YYYY/MM/DD."
+    ? "Date not applied. Choose a valid date or use Clear."
     : unapplied ? "Date not applied. The last accepted value is unchanged." : null;
   const editorKey = JSON.stringify([projectId, milestoneId, field]);
 
@@ -94,17 +96,45 @@ function DateOnlyEditor({
   }, [editorKey, onUnappliedChange]);
 
   return <div>
-    <input
-      aria-describedby={error === null ? helpId : `${helpId} ${errorId}`}
-      aria-invalid={unapplied}
-      aria-label={label}
-      className="w-32 rounded border border-slate-300 px-2 py-1"
-      onChange={(event) => acceptText(event.target.value)}
-      placeholder="YYYY-MM-DD"
-      type="text"
-      value={text}
-    />
-    <p className="mt-1 text-xs text-slate-500" id={helpId}>Use YYYY-MM-DD or YYYY/MM/DD.</p>
+    <div className="flex flex-wrap items-center gap-1">
+      <input
+        aria-describedby={error === null ? contextId : `${contextId} ${errorId}`}
+        aria-invalid={unapplied}
+        aria-label={label}
+        className="w-36 rounded border border-slate-300 px-2 py-1"
+        onBlur={() => { if (!unapplied) setEditing(false); }}
+        onChange={(event) => recordNativeInput(event.currentTarget)}
+        onFocus={() => setEditing(true)}
+        onInput={(event) => recordNativeInput(event.currentTarget)}
+        onKeyDown={() => setEditing(true)}
+        onPointerDown={() => setEditing(true)}
+        type="date"
+        value={text}
+      />
+      <button aria-label={`Clear ${label}`} className="rounded border border-slate-300 px-2 py-1" onClick={() => {
+        setText("");
+        setBadEmptyInput(false);
+        setEditing(false);
+        setAwaitingCanonical(value !== null);
+        onValidValue(null);
+      }} type="button">Clear</button>
+    </div>
+    {(editing || unapplied) && <div className="mt-1 flex flex-wrap gap-1">
+      <button aria-label={`Apply Date to ${label}`} className="rounded border border-slate-300 px-2 py-1 disabled:text-slate-400" disabled={invalid || text === canonicalText || awaitingCanonical} onClick={() => {
+        const parsed = parseDateOnly(text);
+        if (parsed !== null && text !== canonicalText && !awaitingCanonical) {
+          setAwaitingCanonical(true);
+          onValidValue(parsed);
+        }
+      }} type="button">Apply Date</button>
+      <button aria-label={`Cancel date edit for ${label}`} className="rounded border border-slate-300 px-2 py-1" onClick={() => {
+        setText(canonicalText);
+        setBadEmptyInput(false);
+        setEditing(false);
+        setAwaitingCanonical(false);
+      }} type="button">Cancel</button>
+    </div>}
+    <p className="sr-only" id={contextId}>{label}</p>
     {error !== null && <p className="mt-1 text-xs text-rose-700" id={errorId}>{error}</p>}
   </div>;
 }
@@ -226,9 +256,10 @@ function ScheduleWorkspaceContent({
             </div>
           </td>
           <td className="px-4 py-3"><DateOnlyEditor
+            feedback={feedback}
             field="plan"
             key={`${projectId}:${row.milestoneId}:plan`}
-            label={`Plan for ${row.milestone}`}
+            label={`Plan for ${row.milestone} occurrence ${row.milestoneId} in Project ${projectId}`}
             milestoneId={row.milestoneId}
             onUnappliedChange={onUnappliedChange}
             onValidValue={(value) => onUpdateMilestone({
@@ -240,9 +271,10 @@ function ScheduleWorkspaceContent({
             value={row.plan}
           /></td>
           <td className="px-4 py-3"><DateOnlyEditor
+            feedback={feedback}
             field="actual"
             key={`${projectId}:${row.milestoneId}:actual`}
-            label={`Actual for ${row.milestone}`}
+            label={`Actual for ${row.milestone} occurrence ${row.milestoneId} in Project ${projectId}`}
             milestoneId={row.milestoneId}
             onUnappliedChange={onUnappliedChange}
             onValidValue={(value) => onUpdateMilestone({

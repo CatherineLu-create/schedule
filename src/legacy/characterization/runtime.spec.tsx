@@ -251,6 +251,13 @@ function lastReducedState(): PrototypeState {
   return result.value;
 }
 
+function applyDateInput(input: HTMLElement, date: string): void {
+  const label = input.getAttribute("aria-label");
+  if (label === null) throw new Error("Date input needs an accessible label");
+  fireEvent.change(input, { target: { value: date } });
+  fireEvent.click(screen.getByRole("button", { name: `Apply Date to ${label}` }));
+}
+
 describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
   it("shows one Current Schedule directly below Resources", () => {
     render(<App />);
@@ -276,17 +283,18 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
 
   it.each([
     ["2026-12-15", "Dashboard"],
-    ["2026/12/15", "Dashboard"],
     ["2026-12-15", "Nautilus"],
-    ["2026/12/15", "Nautilus"],
   ])("applies initially-null ID fix Actual %s before navigating through %s", (text, route) => {
     render(<App />);
     openProjectByName("Manta");
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    expect(screen.getByLabelText("Actual for ID fix")).toHaveValue("");
+    expect(screen.getByLabelText(/^Actual for ID fix occurrence/)).toHaveValue("");
     const before = lastReducedState();
     vi.mocked(prototypeReducer).mockClear();
-    fireEvent.change(screen.getByLabelText("Actual for ID fix"), { target: { value: text } });
+    const actualInput = screen.getByLabelText(/^Actual for ID fix occurrence/);
+    fireEvent.change(actualInput, { target: { value: text } });
+    expect(vi.mocked(prototypeReducer)).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: `Apply Date to ${actualInput.getAttribute("aria-label")}` }));
     const after = lastReducedState();
     expect(vi.mocked(prototypeReducer).mock.calls.at(-1)?.[1]).toMatchObject({
       type: "scheduleReplaced", projectId: devProject001.id,
@@ -308,28 +316,27 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
       fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
     }
     openProjectByName("Manta");
-    expect(screen.getByLabelText("Actual for ID fix")).toHaveValue("2026-12-15");
+    expect(screen.getByLabelText(/^Actual for ID fix occurrence/)).toHaveValue("2026-12-15");
     expect(vi.mocked(prototypeReducer).mock.calls).toHaveLength(transitionCount);
   });
 
   it.each([
     ["Plan", "2026-12-15", "Dashboard"],
-    ["Plan", "2026/12/15", "Dashboard"],
     ["Plan", "2026-12-15", "Nautilus"],
-    ["Plan", "2026/12/15", "Nautilus"],
     ["Actual", "2026-12-16", "Dashboard"],
-    ["Actual", "2026/12/16", "Dashboard"],
     ["Actual", "2026-12-16", "Nautilus"],
-    ["Actual", "2026/12/16", "Nautilus"],
   ] as const)("applies populated Kickoff %s %s before navigating through %s", (field, text, route) => {
     render(<App />);
     openProjectByName("Manta");
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     const label = `${field} for Kickoff`;
     const expected = field === "Plan" ? "2026-12-15" : "2026-12-16";
-    expect(screen.getByLabelText(label)).toHaveValue(field === "Plan" ? "2026-09-18" : "2026-09-19");
+    expect(screen.getByLabelText(new RegExp(`^${label} occurrence `))).toHaveValue(field === "Plan" ? "2026-09-18" : "2026-09-19");
     vi.mocked(prototypeReducer).mockClear();
-    fireEvent.change(screen.getByLabelText(label), { target: { value: text } });
+    const dateInput = screen.getByLabelText(new RegExp(`^${label} occurrence `));
+    fireEvent.change(dateInput, { target: { value: text } });
+    expect(vi.mocked(prototypeReducer)).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: `Apply Date to ${dateInput.getAttribute("aria-label")}` }));
     const after = lastReducedState();
     expect(vi.mocked(prototypeReducer).mock.calls.at(-1)?.[1]).toMatchObject({
       type: "scheduleReplaced", projectId: devProject001.id,
@@ -345,7 +352,66 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
       fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
     }
     openProjectByName("Manta");
-    expect(screen.getByLabelText(label)).toHaveValue(expected);
+    expect(screen.getByLabelText(new RegExp(`^${label} occurrence `))).toHaveValue(expected);
+  });
+
+  it("keeps provisional input, change, and focus loss out of the real reducer until Apply Date", () => {
+    render(<App />);
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const before = lastReducedState();
+    vi.mocked(prototypeReducer).mockClear();
+    const plan = screen.getByLabelText(/^Plan for Kickoff occurrence/);
+    fireEvent.focus(plan);
+    fireEvent.input(plan, { target: { value: "2027-03-19" } });
+    fireEvent.change(plan, { target: { value: "2027-03-19" } });
+    fireEvent.blur(plan);
+    expect(vi.mocked(prototypeReducer)).not.toHaveBeenCalled();
+    expect(plan).toHaveValue("2027-03-19");
+    expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /^Cancel date edit for Plan for Kickoff occurrence/ }));
+    expect(plan).toHaveValue("2026-09-18");
+    expect(vi.mocked(prototypeReducer)).not.toHaveBeenCalled();
+    fireEvent.change(plan, { target: { value: "2027-03-19" } });
+    expect(vi.mocked(prototypeReducer)).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /^Apply Date to Plan for Kickoff occurrence/ }));
+    expect(vi.mocked(prototypeReducer).mock.calls).toHaveLength(1);
+    expect(vi.mocked(prototypeReducer).mock.calls[0]?.[1]).toMatchObject({
+      type: "scheduleReplaced", projectId: devProject001.id,
+    });
+    const after = lastReducedState();
+    const schedule = after.schedules.find((entry) => entry.projectId === devProject001.id)!;
+    expect(schedule.workingDraft?.milestones.find((entry) =>
+      entry.milestoneId === "dev-project-001-milestone-design-kickoff")?.plan).toBe("2027-03-19");
+    expect(schedule.publishedVersions).toBe(
+      before.schedules.find((entry) => entry.projectId === devProject001.id)!.publishedVersions,
+    );
+    for (const unrelated of before.schedules.filter((entry) => entry.projectId !== devProject001.id)) {
+      expect(after.schedules.find((entry) => entry.projectId === unrelated.projectId)).toBe(unrelated);
+    }
+  });
+
+  it("drops a valid unapplied candidate on Dashboard and Project navigation", () => {
+    render(<App />);
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    vi.mocked(prototypeReducer).mockClear();
+    fireEvent.change(screen.getByLabelText(/^Plan for Kickoff occurrence/), {
+      target: { value: "2027-03-19" },
+    });
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveValue("2027-03-19");
+    expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
+    expect(vi.mocked(prototypeReducer)).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    openProjectByName("Nautilus");
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.queryByText(/Date not applied/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    openProjectByName("Manta");
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveValue("2026-09-18");
+    expect(screen.queryByText(/Date not applied/)).not.toBeInTheDocument();
+    expect(vi.mocked(prototypeReducer).mock.calls.every(([, action]) =>
+      action.type !== "scheduleReplaced" || action.projectId !== devProject001.id)).toBe(true);
   });
 
   it.each(["Dashboard", "Nautilus"])("persists clear and applicability through %s navigation", (route) => {
@@ -353,7 +419,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     openProjectByName("Manta");
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     vi.mocked(prototypeReducer).mockClear();
-    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Clear Plan for Kickoff occurrence/ }));
     fireEvent.change(screen.getByLabelText("Applicability for Kickoff"), {
       target: { value: "notApplicable" },
     });
@@ -370,25 +436,52 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
       fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
     }
     openProjectByName("Manta");
-    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("");
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveValue("");
     expect(screen.getByLabelText("Applicability for Kickoff")).toHaveValue("notApplicable");
   });
 
-  it("keeps invalid date text unapplied without a reducer transition", () => {
+  it("keeps invalid native input unapplied without a reducer transition", () => {
     render(<App />);
     openProjectByName("Manta");
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     const before = lastReducedState();
     vi.mocked(prototypeReducer).mockClear();
-    const input = screen.getByLabelText("Plan for Kickoff");
-    fireEvent.change(input, { target: { value: "2026/02/30" } });
+    const input = screen.getByLabelText(/^Plan for Kickoff occurrence/);
+    fireEvent.change(input, { target: { value: "2026-02-30" } });
     expect(vi.mocked(prototypeReducer)).not.toHaveBeenCalled();
     expect(input).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByText("Date not applied. Enter a valid date as YYYY-MM-DD or YYYY/MM/DD."))
+    expect(screen.getByText("Date not applied. Choose a valid date or use Clear."))
       .toBeInTheDocument();
     expect(before.schedules.find((entry) => entry.projectId === devProject001.id)?.workingDraft
       ?.milestones.find((entry) => entry.milestoneId === "dev-project-001-milestone-design-kickoff")?.plan)
       .toBe("2026-09-18");
+  });
+
+  it("keeps empty Plan input out of canonical state and blocks an open confirmation without Project leakage", () => {
+    render(<App />);
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    const before = lastReducedState();
+    vi.mocked(prototypeReducer).mockClear();
+    fireEvent.input(screen.getByLabelText(/^Plan for Kickoff occurrence/), { target: { value: "" } });
+    expect(vi.mocked(prototypeReducer)).not.toHaveBeenCalled();
+    expect(before.schedules.find((entry) => entry.projectId === devProject001.id)
+      ?.workingDraft?.milestones.find((entry) =>
+        entry.milestoneId === "dev-project-001-milestone-design-kickoff")?.plan)
+      .toBe("2026-09-18");
+    expect(within(screen.getByRole("dialog", { name: "Publish Working Draft" }))
+      .getByRole("button", { name: "Publish" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    openProjectByName("Nautilus");
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.queryByText(/Date not applied/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    openProjectByName("Manta");
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveValue("2026-09-18");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Date not applied/)).not.toBeInTheDocument();
   });
 
   it("restores the prior canonical date after impossible input and Dashboard navigation", () => {
@@ -396,13 +489,13 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     openProjectByName("Manta");
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     vi.mocked(prototypeReducer).mockClear();
-    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
+    fireEvent.change(screen.getByLabelText(/^Plan for Kickoff occurrence/), {
       target: { value: "2026-02-30" },
     });
     expect(vi.mocked(prototypeReducer)).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
     openProjectByName("Manta");
-    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2026-09-18");
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveValue("2026-09-18");
     expect(vi.mocked(prototypeReducer)).not.toHaveBeenCalled();
   });
 
@@ -468,7 +561,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
       .toBeTruthy();
     expect(resources.nextElementSibling).toBe(draftSchedule);
     expect(screen.getAllByRole("region", { name: "Schedule" })).toHaveLength(1);
-    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2026-09-18");
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveValue("2026-09-18");
     expect(screen.queryByRole("button", { name: "Resume Draft" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save Draft" })).not.toBeInTheDocument();
   });
@@ -477,42 +570,36 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     render(<App />);
     openProjectByName("Manta");
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
-      target: { value: "2026-12-15" },
-    });
-    fireEvent.change(screen.getByLabelText("Actual for Kickoff"), {
-      target: { value: "2026-12-16" },
-    });
+    applyDateInput(screen.getByLabelText(/^Plan for Kickoff occurrence/), "2026-12-15");
+    applyDateInput(screen.getByLabelText(/^Actual for Kickoff occurrence/), "2026-12-16");
     fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
     openProjectByName("Manta");
     expect(screen.getByRole("heading", { name: "Working Draft" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2026-12-15");
-    expect(screen.getByLabelText("Actual for Kickoff")).toHaveValue("2026-12-16");
-    fireEvent.change(screen.getByLabelText("Actual for Kickoff"), {
-      target: { value: "" },
-    });
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveValue("2026-12-15");
+    expect(screen.getByLabelText(/^Actual for Kickoff occurrence/)).toHaveValue("2026-12-16");
+    fireEvent.click(screen.getByRole("button", { name: /^Clear Actual for Kickoff occurrence/ }));
     fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
     openProjectByName("Manta");
-    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2026-12-15");
-    expect(screen.getByLabelText("Actual for Kickoff")).toHaveValue("");
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveValue("2026-12-15");
+    expect(screen.getByLabelText(/^Actual for Kickoff occurrence/)).toHaveValue("");
     expect(projectHeader()).toHaveAttribute("data-project-id", "dev-project-001");
   });
 
-  it("keeps incomplete date text transient and changes applicability without clearing dates", () => {
+  it("keeps empty native input transient and changes applicability without clearing dates", () => {
     render(<App />);
     openProjectByName("Manta");
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
-      target: { value: "2030-0" },
+    fireEvent.change(screen.getByLabelText(/^Plan for Kickoff occurrence/), {
+      target: { value: "" },
     });
-    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2030-0");
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveAttribute("aria-invalid", "true");
     fireEvent.change(screen.getByLabelText("Applicability for Kickoff"), {
       target: { value: "notApplicable" },
     });
-    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2030-0");
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveAttribute("aria-invalid", "true");
     fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
     openProjectByName("Manta");
-    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2026-09-18");
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveValue("2026-09-18");
     expect(screen.getByLabelText("Applicability for Kickoff")).toHaveValue("notApplicable");
   });
 
@@ -544,13 +631,11 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     render(<App />);
     openProjectByName("Manta");
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
-      target: { value: "2032-02-20" },
-    });
+    applyDateInput(screen.getByLabelText(/^Plan for Kickoff occurrence/), "2032-02-20");
     fireEvent.click(screen.getByRole("button", { name: "Discard Draft" }));
     let dialog = screen.getByRole("dialog", { name: "Discard Working Draft" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Keep Editing" }));
-    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2032-02-20");
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveValue("2032-02-20");
     fireEvent.click(screen.getByRole("button", { name: "Discard Draft" }));
     dialog = screen.getByRole("dialog", { name: "Discard Working Draft" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Discard Draft" }));
@@ -562,12 +647,8 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     render(<App />);
     openProjectByName("Manta");
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
-      target: { value: "2033-03-04" },
-    });
-    fireEvent.change(screen.getByLabelText("Actual for Kickoff"), {
-      target: { value: "2033-03-05" },
-    });
+    applyDateInput(screen.getByLabelText(/^Plan for Kickoff occurrence/), "2033-03-04");
+    applyDateInput(screen.getByLabelText(/^Actual for Kickoff occurrence/), "2033-03-05");
     fireEvent.change(screen.getByLabelText("Applicability for Kickoff"), {
       target: { value: "notApplicable" },
     });
@@ -609,9 +690,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
       target: { value: "milestone-design-kickoff" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Add Milestone" }));
-    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
-      target: { value: "2031-01-15" },
-    });
+    applyDateInput(screen.getByLabelText(/^Plan for Kickoff occurrence/), "2031-01-15");
     fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
     openProjectByName("Manta");
     expect(screen.queryByDisplayValue("2031-01-15")).not.toBeInTheDocument();
@@ -643,9 +722,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(initialCell).toHaveTextContent("P: 2026/09/18");
     openProjectByName("Manta");
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
-      target: { value: "2034-04-05" },
-    });
+    applyDateInput(screen.getByLabelText(/^Plan for Kickoff occurrence/), "2034-04-05");
     fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
     expect(dashboardRow("dev-project-001")
       .querySelector('[data-column-key="schedule:design:kickoff"]'))
@@ -672,16 +749,14 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
 
     openProjectByName("Manta");
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    expect(screen.getByLabelText("Actual for ID fix")).toHaveValue("");
-    fireEvent.change(screen.getByLabelText("Actual for ID fix"), {
-      target: { value: "2026-12-15" },
-    });
+    expect(screen.getByLabelText(/^Actual for ID fix occurrence/)).toHaveValue("");
+    applyDateInput(screen.getByLabelText(/^Actual for ID fix occurrence/), "2026-12-15");
     fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
     expect(idFixCell()).toHaveTextContent("A: —");
     expect(idFixCell()).not.toHaveTextContent("2026/12/15");
 
     openProjectByName("Manta");
-    expect(screen.getByLabelText("Actual for ID fix")).toHaveValue("2026-12-15");
+    expect(screen.getByLabelText(/^Actual for ID fix occurrence/)).toHaveValue("2026-12-15");
     fireEvent.click(screen.getByRole("button", { name: "Publish" }));
     fireEvent.click(within(screen.getByRole("dialog", { name: "Publish Working Draft" }))
       .getByRole("button", { name: "Publish" }));
@@ -764,7 +839,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(screen.getByText("The next Published version is unavailable."))
       .toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Working Draft" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2026-09-18");
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveValue("2026-09-18");
   });
 
   it("discards a no-Published Draft back to the legal empty Official state", () => {
@@ -1170,9 +1245,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
       target: { value: "milestone-design-kickoff" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Add Milestone" }));
-    fireEvent.change(screen.getByLabelText("Plan for Kickoff"), {
-      target: { value: "2035-07-08" },
-    });
+    applyDateInput(screen.getByLabelText(/^Plan for Kickoff occurrence/), "2035-07-08");
     expect(projectHeader()).toHaveAttribute("data-project-id", "dev-project-003");
     fireEvent.click(within(projectHeader()).getByRole("button", { name: "Edit Project" }));
     const dialog = screen.getByRole("dialog", { name: "Edit Project" });
@@ -1212,7 +1285,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(projectHeader()).toHaveAttribute("data-project-id", "dev-project-003");
     expect(within(projectHeader()).getByText("Project Name: Orca Revised")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Working Draft" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Plan for Kickoff")).toHaveValue("2035-07-08");
+    expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveValue("2035-07-08");
     expect(screen.getByRole("row", { name: /Kickoff/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
     expect(projectHeader()).toHaveAttribute("data-project-id", "dev-project-003");
