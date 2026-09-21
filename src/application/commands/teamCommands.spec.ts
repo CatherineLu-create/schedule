@@ -8,6 +8,7 @@ import {
 	applicableWithoutOwnerTeamCandidate,
 	missingEmailTeamCandidate,
 	multipleOwnerTeamCandidate,
+	multipleRestrictedOwnerTeamCandidate,
 } from "../../fixtures/v2/teamCandidateFixtures";
 import {
 	devMeTeamFunctionDefinition,
@@ -24,7 +25,7 @@ import { saveProjectTeam } from "./teamCommands";
 describe("Team Save command", () => {
 	it("rejects a Team containing Blocking issues", () => {
 		const result = saveProjectTeam(devProject002, {
-			team: multipleOwnerTeamCandidate,
+			team: multipleRestrictedOwnerTeamCandidate,
 		});
 
 		expect(result.ok).toBe(false);
@@ -32,11 +33,24 @@ describe("Team Save command", () => {
 		expect(result.reason).toBe("validation");
 		expect(result.issues).toContainEqual(
 			expect.objectContaining({
-				code: "team.data.multiple-owners",
+				code: "team.data.restricted-role-multiple",
 				severity: "blocking",
 			}),
 		);
-		expect(devProject002.team).not.toBe(multipleOwnerTeamCandidate);
+		expect(devProject002.team).not.toBe(multipleRestrictedOwnerTeamCandidate);
+	});
+
+	it("allows multiple nonrestricted Owners without a count issue", () => {
+		const result = saveProjectTeam(devProject002, {
+			team: multipleOwnerTeamCandidate,
+		});
+
+		expect(result.ok).toBe(true);
+		expect(result.issues).not.toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ code: "team.data.multiple-owners" }),
+			]),
+		);
 	});
 
 	it("allows an Advisory-only Team and preserves Project identity, Master, and aliases", () => {
@@ -48,7 +62,7 @@ describe("Team Save command", () => {
 		if (!result.ok) return;
 		expect(result.issues).toContainEqual(
 			expect.objectContaining({
-				code: "team.data.missing-owner",
+				code: "team.data.restricted-role-missing",
 				severity: "advisory",
 			}),
 		);
@@ -72,7 +86,7 @@ describe("Team Save command", () => {
 		);
 	});
 
-	it("deduplicates exact Member records before saving without merging roles", () => {
+	it("preserves exact Member records for later candidate-aware identity handling", () => {
 		const existingTeam = devProject002.team;
 		expect(existingTeam).not.toBeNull();
 		const sourceFunction = existingTeam!.functions[0]!;
@@ -105,7 +119,7 @@ describe("Team Save command", () => {
 			result.project.team?.functions[0]?.assignments.filter(
 				(assignment) => assignment.assignmentId === duplicateMember.assignmentId,
 			),
-		).toHaveLength(1);
+		).toHaveLength(2);
 		expect(team.functions[0]?.assignments).toHaveLength(
 			sourceFunction.assignments.length + 2,
 		);

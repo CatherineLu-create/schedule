@@ -1,7 +1,6 @@
 import type { Project } from "../../domain/project/project";
 import type { ProjectTeam } from "../../domain/team/team";
 import {
-	deduplicateExactMemberAssignments,
 	validateProjectTeam,
 	type TeamImportProblem,
 } from "../../domain/team/teamValidation";
@@ -29,8 +28,7 @@ export function saveProjectTeam(
 	project: Project,
 	input: SaveProjectTeamInput,
 ): SaveProjectTeamResult {
-	const normalizedTeam = deduplicateExactMemberAssignments(input.team);
-	const issues = validateProjectTeam(normalizedTeam, {
+	const issues = validateProjectTeam(input.team, {
 		importProblems: input.importProblems,
 	});
 
@@ -43,7 +41,7 @@ export function saveProjectTeam(
 		issues,
 		project: {
 			...project,
-			team: normalizedTeam,
+			team: input.team,
 		},
 	};
 }

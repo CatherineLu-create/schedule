@@ -51,6 +51,37 @@ export const multipleOwnerTeamCandidate: ProjectTeam = {
 	appliedTemplate: candidateAppliedTemplate,
 };
 
+export const multipleRestrictedOwnerTeamCandidate: ProjectTeam = {
+	projectRoles: candidateProjectRoles,
+	functions: [
+		{
+			function: {
+				kind: "standard",
+				functionId: devMeTeamFunctionDefinition.id,
+			},
+			applicability: "applicable",
+			assignments: [
+				{
+					assignmentId: toPersonAssignmentId("candidate-qci-me-owner-1"),
+					role: "owner",
+					functionText: "QCI-ME-Owner",
+					name: "Synthetic QCI ME Owner One",
+					email: "qci.me.one@example.test",
+				},
+				{
+					assignmentId: toPersonAssignmentId("candidate-qci-me-owner-2"),
+					role: "owner",
+					functionText: "QCI-ME-Owner",
+					name: "Synthetic QCI ME Owner Two",
+					email: "qci.me.two@example.test",
+				},
+			],
+		},
+	],
+	preservedUnclassifiedEntries: [],
+	appliedTemplate: candidateAppliedTemplate,
+};
+
 export const multipleLeaderTeamCandidate: ProjectTeam = {
 	projectRoles: candidateProjectRoles,
 	functions: [

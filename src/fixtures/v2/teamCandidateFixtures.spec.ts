@@ -5,6 +5,7 @@ import {
 	missingEmailTeamCandidate,
 	multipleLeaderTeamCandidate,
 	multipleOwnerTeamCandidate,
+	multipleRestrictedOwnerTeamCandidate,
 	notApplicableWithPeopleTeamCandidate,
 } from "./teamCandidateFixtures";
 
@@ -16,6 +17,15 @@ describe("Team validation candidate fixtures", () => {
 		expect(
 			functionTeam?.assignments.filter(({ role }) => role === "owner"),
 		).toHaveLength(2);
+	});
+
+	it("represents two exact restricted-role Owners with source labels", () => {
+		const [functionTeam] = multipleRestrictedOwnerTeamCandidate.functions;
+
+		expect(functionTeam?.assignments).toHaveLength(2);
+		expect(
+			functionTeam?.assignments.map(({ functionText }) => functionText),
+		).toEqual(["QCI-ME-Owner", "QCI-ME-Owner"]);
 	});
 
 	it("represents two Leaders without introducing a missing-Owner condition", () => {

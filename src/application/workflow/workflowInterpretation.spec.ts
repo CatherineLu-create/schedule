@@ -12,7 +12,7 @@ import {
 	customerReferenceFixtures,
 	productLineReferenceFixtures,
 } from "../../fixtures/v2/referenceFixtures";
-import { multipleOwnerTeamCandidate } from "../../fixtures/v2/teamCandidateFixtures";
+import { multipleRestrictedOwnerTeamCandidate } from "../../fixtures/v2/teamCandidateFixtures";
 import { devTeamTemplateV2 } from "../../fixtures/v2/teamTemplateFixtures";
 import {
 	toMilestoneRowId,
@@ -223,7 +223,7 @@ describe("ActionDisposition", () => {
 
 		it("interprets Blocking validation failure as blocked", () => {
 			const result = saveProjectTeam(devProject002, {
-				team: multipleOwnerTeamCandidate,
+				team: multipleRestrictedOwnerTeamCandidate,
 			});
 
 			expect(interpretSaveProjectTeamResult(result)).toEqual({
