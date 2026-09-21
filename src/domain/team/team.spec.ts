@@ -16,7 +16,10 @@ import {
   type ProjectRoleAssignment,
   type ProjectRoles,
   type ProjectTeam,
+  type PreservedUnclassifiedEntry,
   type StandardProjectFunctionRef,
+  type TeamSourceCell,
+  type TeamSourceRow,
 } from "./team";
 
 const qciPm: ProjectRoleAssignment = {
@@ -86,6 +89,118 @@ describe("Project Team domain model", () => {
     expectTypeOf<FunctionAssignmentRole>().toEqualTypeOf<
       "leader" | "owner" | "member"
     >();
+  });
+
+  it("keeps an unknown source row outside the three canonical assignment roles", () => {
+    const sourceRows: readonly TeamSourceRow[] = [
+      {
+        fileName: "synthetic.xlsx",
+        sheetName: "Roster",
+        rowNumber: 4,
+        cells: [
+          {
+            columnIndex: 1,
+            headerText: "Function",
+            rawType: "s",
+            rawValue: "Custom Lab",
+            formattedText: "Custom Lab",
+            hidden: false,
+          },
+          {
+            columnIndex: 4,
+            headerText: "Tel. No.",
+            rawType: "n",
+            rawValue: 123456,
+            formattedText: "123456",
+            hidden: true,
+          },
+        ],
+      },
+      {
+        fileName: "synthetic.xlsx",
+        sheetName: "Roster",
+        rowNumber: 7,
+        cells: [
+          {
+            columnIndex: 1,
+            headerText: "Function",
+            rawType: "s",
+            rawValue: "Custom Lab",
+            formattedText: "Custom Lab",
+            hidden: false,
+          },
+        ],
+      },
+    ];
+    const extraCells: readonly TeamSourceCell[] = [
+      sourceRows[0]!.cells[1]!,
+      {
+        columnIndex: 5,
+        headerText: "Note",
+        rawType: "s",
+        rawValue: "synthetic note",
+        formattedText: "synthetic note",
+        hidden: false,
+      },
+      {
+        columnIndex: 6,
+        headerText: "Note",
+        rawType: "s",
+        rawValue: "second note",
+        formattedText: "second note",
+        hidden: false,
+      },
+    ];
+    const functionRef: CustomProjectFunctionRef = {
+      kind: "custom",
+      functionId: toTeamFunctionId("synthetic-custom-lab-id"),
+      displayName: "Custom Lab",
+    };
+    const preserved: PreservedUnclassifiedEntry = {
+      entryId: toPersonAssignmentId("synthetic-preserved-row"),
+      function: functionRef,
+      functionText: "Custom Lab",
+      roleText: "Unclear Coordinator",
+      name: "Synthetic Person",
+      email: null,
+      extraCells,
+      sourceRows,
+      restrictedRoleExclusion: {
+        functionText: "Custom Lab",
+        roleText: "Unclear Coordinator",
+      },
+    };
+    const team: ProjectTeam = {
+      projectRoles: { qciPm: null, qciPjm: null, acerPm: null },
+      functions: [
+        {
+          function: functionRef,
+          applicability: "applicable",
+          assignments: [],
+        },
+      ],
+      preservedUnclassifiedEntries: [preserved],
+      appliedTemplate: null,
+    };
+
+    expect(functionAssignmentRoles).toEqual(["leader", "owner", "member"]);
+    expect(team.functions[0]?.assignments).toEqual([]);
+    expect(team.preservedUnclassifiedEntries).toEqual([preserved]);
+    expect(preserved.sourceRows.map((row) => row.rowNumber)).toEqual([4, 7]);
+    expect(preserved.extraCells.map((cell) => cell.columnIndex)).toEqual([
+      4,
+      5,
+      6,
+    ]);
+    expect(preserved.extraCells[0]).toMatchObject({
+      rawType: "n",
+      rawValue: 123456,
+      hidden: true,
+    });
+    expect(preserved.restrictedRoleExclusion).toEqual({
+      functionText: "Custom Lab",
+      roleText: "Unclear Coordinator",
+    });
   });
 
   it("allows the same person to hold different Function roles", () => {
@@ -333,6 +448,54 @@ describe("Project Team domain model", () => {
         customFunction,
         retainedCustomFunction,
       ]);
+    });
+
+    it("rejects custom Function removal while an assignment references it", () => {
+      const assignedCustom: ProjectFunctionTeam = {
+        ...customFunction,
+        assignments: [
+          {
+            assignmentId: toPersonAssignmentId("synthetic-assigned-custom"),
+            role: "member",
+            name: "Synthetic Member",
+            email: "member@example.test",
+          },
+        ],
+      };
+      const assignedTeam: ProjectTeam = {
+        ...team,
+        functions: [standardFunction, assignedCustom],
+      };
+
+      expect(() =>
+        removeProjectFunction(assignedTeam, customFunction.function.functionId),
+      ).toThrow(/custom Project Function.*people/i);
+      expect(assignedTeam.functions[1]).toBe(assignedCustom);
+      expect(assignedCustom.assignments).toHaveLength(1);
+    });
+
+    it("rejects custom Function removal while a preserved row references it", () => {
+      const preserved: PreservedUnclassifiedEntry = {
+        entryId: toPersonAssignmentId("synthetic-preserved-custom"),
+        function: customFunction.function,
+        functionText: "Removable Fixture",
+        roleText: "Unclear Role",
+        name: "Synthetic Person",
+        email: null,
+        extraCells: [],
+        sourceRows: [],
+        restrictedRoleExclusion: null,
+      };
+      const preservedTeam: ProjectTeam = {
+        ...team,
+        preservedUnclassifiedEntries: [preserved],
+      };
+
+      expect(() =>
+        removeProjectFunction(preservedTeam, customFunction.function.functionId),
+      ).toThrow(/custom Project Function.*people/i);
+      expect(preservedTeam.functions).toBe(team.functions);
+      expect(preservedTeam.preservedUnclassifiedEntries).toEqual([preserved]);
     });
 
     it("rejects removal when a custom and standard Function share an ID", () => {

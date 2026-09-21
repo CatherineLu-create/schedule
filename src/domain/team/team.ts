@@ -23,10 +23,29 @@ export const functionAssignmentRoles = [
 export type FunctionAssignmentRole =
   (typeof functionAssignmentRoles)[number];
 
+export interface TeamSourceCell {
+  readonly columnIndex: number;
+  readonly headerText: string | null;
+  readonly rawType: string;
+  readonly rawValue: string | number | boolean | null;
+  readonly formattedText: string | null;
+  readonly hidden: boolean;
+}
+
+export interface TeamSourceRow {
+  readonly fileName: string;
+  readonly sheetName: string;
+  readonly rowNumber: number;
+  readonly cells: readonly TeamSourceCell[];
+}
+
 export interface ProjectRoleAssignment {
   readonly assignmentId: PersonAssignmentId;
   readonly name: string | null;
   readonly email: string | null;
+  readonly functionText?: string;
+  readonly extraCells?: readonly TeamSourceCell[];
+  readonly sourceRows?: readonly TeamSourceRow[];
 }
 
 export interface ProjectRoles {
@@ -40,6 +59,9 @@ export interface FunctionPersonAssignment {
   readonly role: FunctionAssignmentRole;
   readonly name: string | null;
   readonly email: string | null;
+  readonly functionText?: string;
+  readonly extraCells?: readonly TeamSourceCell[];
+  readonly sourceRows?: readonly TeamSourceRow[];
 }
 
 export interface StandardProjectFunctionRef {
@@ -68,9 +90,25 @@ export interface AppliedTeamTemplate {
   readonly versionNumber: TeamTemplateVersionNumber;
 }
 
+export interface PreservedUnclassifiedEntry {
+  readonly entryId: PersonAssignmentId;
+  readonly function: ProjectFunctionRef;
+  readonly functionText: string;
+  readonly roleText: string;
+  readonly name: string | null;
+  readonly email: string | null;
+  readonly extraCells: readonly TeamSourceCell[];
+  readonly sourceRows: readonly TeamSourceRow[];
+  readonly restrictedRoleExclusion: {
+    readonly functionText: string;
+    readonly roleText: string;
+  } | null;
+}
+
 export interface ProjectTeam {
   readonly projectRoles: ProjectRoles;
   readonly functions: readonly ProjectFunctionTeam[];
+  readonly preservedUnclassifiedEntries?: readonly PreservedUnclassifiedEntry[];
   readonly appliedTemplate: AppliedTeamTemplate | null;
 }
 
@@ -92,6 +130,15 @@ export function removeProjectFunction(
     )
   ) {
     throw new Error("Standard Project Function cannot be removed");
+  }
+
+  if (
+    matchingFunctions.some((functionTeam) => functionTeam.assignments.length > 0) ||
+    (team.preservedUnclassifiedEntries ?? []).some(
+      (entry) => entry.function.functionId === functionId,
+    )
+  ) {
+    throw new Error("Custom Project Function cannot be removed while it contains people");
   }
 
   return {

@@ -5,7 +5,12 @@ import {
   toTeamFunctionId,
   toTeamTemplateId,
 } from "../shared/ids";
-import type { ProjectFunctionTeam, ProjectTeam } from "./team";
+import type {
+  PreservedUnclassifiedEntry,
+  ProjectFunctionTeam,
+  ProjectTeam,
+  TeamSourceRow,
+} from "./team";
 import {
   getMissingStandardFunctions,
   renameTeamFunctionDefinition,
@@ -318,6 +323,72 @@ describe("Team Template domain model", () => {
       expect(updated.functions[1]?.applicability).toBe("notApplicable");
       expect(updated.functions).toContain(customFunction);
       expect(updated.functions).toContain(omittedStandard);
+    });
+
+    it("preserves unclassified rows and source evidence during explicit template update", () => {
+      const sourceRows: readonly TeamSourceRow[] = [
+        {
+          fileName: "synthetic.xlsx",
+          sheetName: "Roster",
+          rowNumber: 8,
+          cells: [
+            {
+              columnIndex: 4,
+              headerText: "Tel. No.",
+              rawType: "n",
+              rawValue: 765432,
+              formattedText: "765432",
+              hidden: true,
+            },
+          ],
+        },
+      ];
+      const preserved: PreservedUnclassifiedEntry = {
+        entryId: toPersonAssignmentId("synthetic-template-preserved"),
+        function: customFunction.function,
+        functionText: "Project-owned Fixture Function",
+        roleText: "Coordinator",
+        name: "Synthetic Person",
+        email: null,
+        extraCells: sourceRows[0]!.cells,
+        sourceRows,
+        restrictedRoleExclusion: null,
+      };
+      const sourcedOwner: ProjectFunctionTeam = {
+        ...existingAlpha,
+        assignments: [
+          {
+            ...ownerAssignment,
+            functionText: "Synthetic Function Label",
+            sourceRows,
+            extraCells: sourceRows[0]!.cells,
+          },
+        ],
+      };
+      const sourcedTeam: ProjectTeam = {
+        ...team,
+        functions: [sourcedOwner, existingBeta, customFunction, omittedStandard],
+        preservedUnclassifiedEntries: [preserved],
+      };
+
+      const updated = updateProjectTeamFromTemplate(sourcedTeam, latestTemplate);
+
+      expect(updated.functions.slice(0, 4)).toEqual(sourcedTeam.functions);
+      expect(updated.functions[0]).toBe(sourcedOwner);
+      expect(updated.functions[0]?.assignments[0]?.sourceRows).toBe(sourceRows);
+      expect(updated.preservedUnclassifiedEntries).toBe(
+        sourcedTeam.preservedUnclassifiedEntries,
+      );
+      expect(updated.preservedUnclassifiedEntries?.[0]?.sourceRows).toBe(
+        sourceRows,
+      );
+      expect(updated.preservedUnclassifiedEntries?.[0]?.extraCells[0]).toMatchObject({
+        rawType: "n",
+        rawValue: 765432,
+        hidden: true,
+      });
+      expect(sourcedTeam.functions).toHaveLength(4);
+      expect(sourcedTeam.preservedUnclassifiedEntries).toEqual([preserved]);
     });
 
     it("returns a new Team without mutating either input", () => {
