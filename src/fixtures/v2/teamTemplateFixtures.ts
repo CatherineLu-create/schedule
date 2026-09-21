@@ -3,6 +3,12 @@ import {
 	toTeamFunctionId,
 	toTeamTemplateId,
 } from "../../domain/shared/ids";
+import {
+	qciBiosTeamFunctionDefinition,
+	qciEeTeamFunctionDefinition,
+	qciMeTeamFunctionDefinition,
+	qciThermalTeamFunctionDefinition,
+} from "../../config/v2/referenceData";
 import type { ProjectTeam } from "../../domain/team/team";
 import {
 	toTeamTemplateVersionNumber,
@@ -10,29 +16,13 @@ import {
 	type TeamTemplate,
 } from "../../domain/team/teamTemplate";
 
-export const devMeTeamFunctionDefinition: TeamFunctionDefinition = {
-	id: toTeamFunctionId("dev-team-function-me"),
-	displayName: "DEV ME",
-	active: true,
-};
+export const devMeTeamFunctionDefinition = qciMeTeamFunctionDefinition;
 
-export const devEeTeamFunctionDefinition: TeamFunctionDefinition = {
-	id: toTeamFunctionId("dev-team-function-ee"),
-	displayName: "DEV EE",
-	active: true,
-};
+export const devEeTeamFunctionDefinition = qciEeTeamFunctionDefinition;
 
-export const devThermalTeamFunctionDefinition: TeamFunctionDefinition = {
-	id: toTeamFunctionId("dev-team-function-thermal"),
-	displayName: "DEV Thermal",
-	active: true,
-};
+export const devThermalTeamFunctionDefinition = qciThermalTeamFunctionDefinition;
 
-export const devBiosTeamFunctionDefinition: TeamFunctionDefinition = {
-	id: toTeamFunctionId("dev-team-function-bios"),
-	displayName: "DEV BIOS",
-	active: true,
-};
+export const devBiosTeamFunctionDefinition = qciBiosTeamFunctionDefinition;
 
 export const devLegacyTeamFunctionDefinition: TeamFunctionDefinition = {
 	id: toTeamFunctionId("dev-team-function-legacy"),

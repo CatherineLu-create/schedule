@@ -1,4 +1,11 @@
 import { describe, expect, it } from "vitest";
+import {
+	qciBiosTeamFunctionDefinition,
+	qciEeTeamFunctionDefinition,
+	qciMeTeamFunctionDefinition,
+	qciThermalTeamFunctionDefinition,
+	teamFunctionCatalog,
+} from "../../config/v2/referenceData";
 import { getMissingStandardFunctions } from "../../domain/team/teamTemplate";
 import type { ProjectTeam } from "../../domain/team/team";
 import {
@@ -14,7 +21,7 @@ import {
 } from "./teamTemplateFixtures";
 
 describe("synthetic Team Function and Template fixtures", () => {
-	it("defines exactly five stable development Functions including inactive DEV Legacy", () => {
+	it("reuses the four production standard Functions and keeps inactive DEV Legacy fixture-only", () => {
 		expect(
 			devTeamFunctionDefinitions.map((definition) => ({
 				id: definition.id,
@@ -23,23 +30,23 @@ describe("synthetic Team Function and Template fixtures", () => {
 			})),
 		).toEqual([
 			{
-				id: "dev-team-function-me",
-				displayName: "DEV ME",
+				id: "team-function-qci-me",
+				displayName: "QCI-ME",
 				active: true,
 			},
 			{
-				id: "dev-team-function-ee",
-				displayName: "DEV EE",
+				id: "team-function-qci-ee",
+				displayName: "QCI-EE",
 				active: true,
 			},
 			{
-				id: "dev-team-function-thermal",
-				displayName: "DEV Thermal",
+				id: "team-function-qci-thermal",
+				displayName: "QCI-Thermal",
 				active: true,
 			},
 			{
-				id: "dev-team-function-bios",
-				displayName: "DEV BIOS",
+				id: "team-function-qci-bios",
+				displayName: "QCI-BIOS",
 				active: true,
 			},
 			{
@@ -51,7 +58,20 @@ describe("synthetic Team Function and Template fixtures", () => {
 		expect(new Set(devTeamFunctionDefinitions.map(({ id }) => id)).size).toBe(
 			5,
 		);
+		expect(devMeTeamFunctionDefinition).toBe(
+			qciMeTeamFunctionDefinition,
+		);
+		expect(devEeTeamFunctionDefinition).toBe(
+			qciEeTeamFunctionDefinition,
+		);
+		expect(devThermalTeamFunctionDefinition).toBe(
+			qciThermalTeamFunctionDefinition,
+		);
+		expect(devBiosTeamFunctionDefinition).toBe(
+			qciBiosTeamFunctionDefinition,
+		);
 		expect(devLegacyTeamFunctionDefinition.active).toBe(false);
+		expect(teamFunctionCatalog).not.toContain(devLegacyTeamFunctionDefinition);
 	});
 
 	it("defines v1 and v2 with one stable Template ID and explicit ordered versions", () => {
@@ -60,17 +80,17 @@ describe("synthetic Team Function and Template fixtures", () => {
 		expect(devTeamTemplateV1.versionNumber).toBe(1);
 		expect(devTeamTemplateV2.versionNumber).toBe(2);
 		expect(devTeamTemplateV1.functions).toEqual([
-			{ functionId: devMeTeamFunctionDefinition.id, displayOrder: 10 },
-			{ functionId: devEeTeamFunctionDefinition.id, displayOrder: 20 },
+			{ functionId: "team-function-qci-me", displayOrder: 10 },
+			{ functionId: "team-function-qci-ee", displayOrder: 20 },
 		]);
 		expect(devTeamTemplateV2.functions).toEqual([
-			{ functionId: devMeTeamFunctionDefinition.id, displayOrder: 10 },
-			{ functionId: devEeTeamFunctionDefinition.id, displayOrder: 20 },
+			{ functionId: "team-function-qci-me", displayOrder: 10 },
+			{ functionId: "team-function-qci-ee", displayOrder: 20 },
 			{
-				functionId: devThermalTeamFunctionDefinition.id,
+				functionId: "team-function-qci-thermal",
 				displayOrder: 30,
 			},
-			{ functionId: devBiosTeamFunctionDefinition.id, displayOrder: 40 },
+			{ functionId: "team-function-qci-bios", displayOrder: 40 },
 		]);
 		expect(
 			devTeamTemplateV2.functions.some(
@@ -116,10 +136,10 @@ describe("synthetic Team Function and Template fixtures", () => {
 			getMissingStandardFunctions(v1ShapedTeam, devTeamTemplateV2),
 		).toEqual([
 			{
-				functionId: devThermalTeamFunctionDefinition.id,
+				functionId: "team-function-qci-thermal",
 				displayOrder: 30,
 			},
-			{ functionId: devBiosTeamFunctionDefinition.id, displayOrder: 40 },
+			{ functionId: "team-function-qci-bios", displayOrder: 40 },
 		]);
 	});
 });
@@ -158,22 +178,22 @@ describe("valid saved Team fixture", () => {
 			})),
 		).toEqual([
 			{
-				functionId: devMeTeamFunctionDefinition.id,
+				functionId: "team-function-qci-me",
 				applicability: "applicable",
 				roles: ["owner"],
 			},
 			{
-				functionId: devEeTeamFunctionDefinition.id,
+				functionId: "team-function-qci-ee",
 				applicability: "applicable",
 				roles: ["owner"],
 			},
 			{
-				functionId: devThermalTeamFunctionDefinition.id,
+				functionId: "team-function-qci-thermal",
 				applicability: "notApplicable",
 				roles: [],
 			},
 			{
-				functionId: devBiosTeamFunctionDefinition.id,
+				functionId: "team-function-qci-bios",
 				applicability: "applicable",
 				roles: ["owner"],
 			},

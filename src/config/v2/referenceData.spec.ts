@@ -1,13 +1,19 @@
 import { describe, expect, it } from "vitest";
 
+import type { TeamFunctionDefinition } from "../../domain/team/teamTemplate";
 import {
   coverCatalog,
   mdrrMilestoneDefinition,
   milestoneDefinitions,
   milestoneTypeCatalog,
   portfolioMilestoneDefinitions,
+  qciBiosTeamFunctionDefinition,
+  qciEeTeamFunctionDefinition,
+  qciMeTeamFunctionDefinition,
+  qciThermalTeamFunctionDefinition,
   stageGroupCatalog,
   statusCatalog,
+  teamFunctionCatalog,
 } from "./referenceData";
 
 function expectUniqueIds(items: readonly { readonly id: string }[]): void {
@@ -41,6 +47,85 @@ function expectNoCatchAllValues(
 }
 
 describe("authoritative V2 reference data", () => {
+  describe("Team Function catalog", () => {
+    it("contains exactly the four approved standard Functions", () => {
+      expect(teamFunctionCatalog).toEqual([
+        {
+          id: "team-function-qci-me",
+          displayName: "QCI-ME",
+          active: true,
+          aliases: [],
+          reviewStatus: "reviewed",
+        },
+        {
+          id: "team-function-qci-ee",
+          displayName: "QCI-EE",
+          active: true,
+          aliases: [],
+          reviewStatus: "reviewed",
+        },
+        {
+          id: "team-function-qci-thermal",
+          displayName: "QCI-Thermal",
+          active: true,
+          aliases: [],
+          reviewStatus: "reviewed",
+        },
+        {
+          id: "team-function-qci-bios",
+          displayName: "QCI-BIOS",
+          active: true,
+          aliases: [],
+          reviewStatus: "reviewed",
+        },
+      ]);
+    });
+
+    it("uses unique IDs and names without Project Roles or unapproved units", () => {
+      expectUniqueIds(teamFunctionCatalog);
+      expect(new Set(teamFunctionCatalog.map(({ displayName }) => displayName)).size)
+        .toBe(teamFunctionCatalog.length);
+      expectActiveReviewedItems(teamFunctionCatalog);
+      expect(teamFunctionCatalog.map(({ displayName }) => displayName)).not.toEqual(
+        expect.arrayContaining([
+          "QCI-PM",
+          "QCI-PjM",
+          "Acer PM",
+          "QCMC",
+          "EE ERD",
+          "EE IQC",
+          "EC",
+          "RF",
+          "SW Bundle",
+        ]),
+      );
+
+      const definitions: readonly TeamFunctionDefinition[] = teamFunctionCatalog;
+      expect(definitions).toBe(teamFunctionCatalog);
+    });
+
+    it("exposes named references to the same catalog objects", () => {
+      expect(qciMeTeamFunctionDefinition).toBe(
+        teamFunctionCatalog.find(({ id }) => id === "team-function-qci-me"),
+      );
+      expect(qciEeTeamFunctionDefinition).toBe(
+        teamFunctionCatalog.find(({ id }) => id === "team-function-qci-ee"),
+      );
+      expect(qciThermalTeamFunctionDefinition).toBe(
+        teamFunctionCatalog.find(({ id }) => id === "team-function-qci-thermal"),
+      );
+      expect(qciBiosTeamFunctionDefinition).toBe(
+        teamFunctionCatalog.find(({ id }) => id === "team-function-qci-bios"),
+      );
+    });
+
+    it("does not make the fixture-only DEV Legacy Function authoritative", () => {
+      expect(teamFunctionCatalog.map(({ id }) => id)).not.toContain(
+        "dev-team-function-legacy",
+      );
+    });
+  });
+
   describe("Status catalog", () => {
     it("contains exactly the six approved values in their approved order", () => {
       expect(statusCatalog.map((item) => item.displayName)).toEqual([

@@ -5,13 +5,54 @@ import type {
   MilestoneDefinitionId,
   MilestoneTypeId,
   StageGroupId,
+  TeamFunctionId,
 } from "../../domain/shared/ids";
 import {
   toCatalogItemId,
   toMilestoneDefinitionId,
   toMilestoneTypeId,
   toStageGroupId,
+  toTeamFunctionId,
 } from "../../domain/shared/ids";
+
+export const qciMeTeamFunctionDefinition: CatalogItem<TeamFunctionId> = {
+  id: toTeamFunctionId("team-function-qci-me"),
+  displayName: "QCI-ME",
+  aliases: [],
+  active: true,
+  reviewStatus: "reviewed",
+};
+
+export const qciEeTeamFunctionDefinition: CatalogItem<TeamFunctionId> = {
+  id: toTeamFunctionId("team-function-qci-ee"),
+  displayName: "QCI-EE",
+  aliases: [],
+  active: true,
+  reviewStatus: "reviewed",
+};
+
+export const qciThermalTeamFunctionDefinition: CatalogItem<TeamFunctionId> = {
+  id: toTeamFunctionId("team-function-qci-thermal"),
+  displayName: "QCI-Thermal",
+  aliases: [],
+  active: true,
+  reviewStatus: "reviewed",
+};
+
+export const qciBiosTeamFunctionDefinition: CatalogItem<TeamFunctionId> = {
+  id: toTeamFunctionId("team-function-qci-bios"),
+  displayName: "QCI-BIOS",
+  aliases: [],
+  active: true,
+  reviewStatus: "reviewed",
+};
+
+export const teamFunctionCatalog: readonly CatalogItem<TeamFunctionId>[] = [
+  qciMeTeamFunctionDefinition,
+  qciEeTeamFunctionDefinition,
+  qciThermalTeamFunctionDefinition,
+  qciBiosTeamFunctionDefinition,
+];
 
 const stageGroupIds = {
   design: toStageGroupId("stage-design"),
