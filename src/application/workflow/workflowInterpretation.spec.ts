@@ -13,7 +13,11 @@ import {
 	productLineReferenceFixtures,
 } from "../../fixtures/v2/referenceFixtures";
 import { multipleRestrictedOwnerTeamCandidate } from "../../fixtures/v2/teamCandidateFixtures";
-import { devTeamTemplateV2 } from "../../fixtures/v2/teamTemplateFixtures";
+import {
+	devMeTeamFunctionDefinition,
+	devTeamFunctionDefinitions,
+	devTeamTemplateV2,
+} from "../../fixtures/v2/teamTemplateFixtures";
 import {
 	toMilestoneRowId,
 	toProjectId,
@@ -37,6 +41,7 @@ import {
 	startProjectScheduleWorkingDraft,
 } from "../commands/scheduleCommands";
 import { saveProjectTeam } from "../commands/teamCommands";
+import { createEditCandidate } from "../teamImport/teamCandidate";
 import type { ValidationIssue } from "../../domain/validation/validationIssue";
 import {
 	confirmCreateProjectAnyway,
@@ -212,7 +217,12 @@ describe("ActionDisposition", () => {
 		it("interprets Advisory-only success as completed", () => {
 			expect(devProject005.team).not.toBeNull();
 			const result = saveProjectTeam(devProject005, {
-				team: devProject005.team!,
+				candidate: createEditCandidate(
+					devProject005.id,
+					devProject005.team,
+					devTeamFunctionDefinitions,
+				),
+				standardFunctionDefinitions: devTeamFunctionDefinitions,
 			});
 
 			expect(interpretSaveProjectTeamResult(result)).toEqual({
@@ -222,8 +232,18 @@ describe("ActionDisposition", () => {
 		});
 
 		it("interprets Blocking validation failure as blocked", () => {
+			const restrictedDefinitions = devTeamFunctionDefinitions.map((definition) =>
+				definition.id === devMeTeamFunctionDefinition.id
+					? { ...definition, displayName: "QCI-ME-Owner" }
+					: definition,
+			);
 			const result = saveProjectTeam(devProject002, {
-				team: multipleRestrictedOwnerTeamCandidate,
+				candidate: createEditCandidate(
+					devProject002.id,
+					multipleRestrictedOwnerTeamCandidate,
+					restrictedDefinitions,
+				),
+				standardFunctionDefinitions: restrictedDefinitions,
 			});
 
 			expect(interpretSaveProjectTeamResult(result)).toEqual({

@@ -12,6 +12,7 @@ import {
 } from "../../fixtures/v2/teamCandidateFixtures";
 import {
 	devMeTeamFunctionDefinition,
+	devTeamFunctionDefinitions,
 	devTeamTemplateV1,
 	devTeamTemplateV2,
 } from "../../fixtures/v2/teamTemplateFixtures";
@@ -20,13 +21,33 @@ import {
 	toTeamFunctionId,
 } from "../../domain/shared/ids";
 import type { ProjectTeam } from "../../domain/team/team";
+import type { TeamFunctionDefinition } from "../../domain/team/teamTemplate";
+import { createEditCandidate } from "../teamImport/teamCandidate";
 import { saveProjectTeam } from "./teamCommands";
+
+function saveTeam(
+	project: typeof devProject002,
+	team: ProjectTeam,
+	standardFunctionDefinitions: readonly TeamFunctionDefinition[] = devTeamFunctionDefinitions,
+) {
+	return saveProjectTeam(project, {
+		candidate: createEditCandidate(project.id, team, standardFunctionDefinitions),
+		standardFunctionDefinitions,
+	});
+}
 
 describe("Team Save command", () => {
 	it("rejects a Team containing Blocking issues", () => {
-		const result = saveProjectTeam(devProject002, {
-			team: multipleRestrictedOwnerTeamCandidate,
-		});
+		const restrictedDefinitions = devTeamFunctionDefinitions.map((definition) =>
+			definition.id === devMeTeamFunctionDefinition.id
+				? { ...definition, displayName: "QCI-ME-Owner" }
+				: definition,
+		);
+		const result = saveTeam(
+			devProject002,
+			multipleRestrictedOwnerTeamCandidate,
+			restrictedDefinitions,
+		);
 
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
@@ -41,9 +62,7 @@ describe("Team Save command", () => {
 	});
 
 	it("allows multiple nonrestricted Owners without a count issue", () => {
-		const result = saveProjectTeam(devProject002, {
-			team: multipleOwnerTeamCandidate,
-		});
+		const result = saveTeam(devProject002, multipleOwnerTeamCandidate);
 
 		expect(result.ok).toBe(true);
 		expect(result.issues).not.toEqual(
@@ -54,9 +73,7 @@ describe("Team Save command", () => {
 	});
 
 	it("allows an Advisory-only Team and preserves Project identity, Master, and aliases", () => {
-		const result = saveProjectTeam(devProject002, {
-			team: applicableWithoutOwnerTeamCandidate,
-		});
+		const result = saveTeam(devProject002, applicableWithoutOwnerTeamCandidate);
 
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
@@ -66,7 +83,10 @@ describe("Team Save command", () => {
 				severity: "advisory",
 			}),
 		);
-		expect(result.project.team).toBe(applicableWithoutOwnerTeamCandidate);
+		expect(result.project.team).toEqual(expect.objectContaining({
+			projectRoles: applicableWithoutOwnerTeamCandidate.projectRoles,
+			appliedTemplate: applicableWithoutOwnerTeamCandidate.appliedTemplate,
+		}));
 		expect(result.project.id).toBe(devProject002.id);
 		expect(result.project.master).toBe(devProject002.master);
 		expect(result.project.identityAliases).toBe(devProject002.identityAliases);
@@ -75,7 +95,8 @@ describe("Team Save command", () => {
 	it("keeps canonical Project 005 saveable with Advisory issues", () => {
 		expect(devProject005.team).not.toBeNull();
 		const result = saveProjectTeam(devProject005, {
-			team: devProject005.team!,
+			candidate: createEditCandidate(devProject005.id, devProject005.team, devTeamFunctionDefinitions),
+			standardFunctionDefinitions: devTeamFunctionDefinitions,
 		});
 
 		expect(result.ok).toBe(true);
@@ -86,15 +107,36 @@ describe("Team Save command", () => {
 		);
 	});
 
-	it("preserves exact Member records for later candidate-aware identity handling", () => {
+	it("folds exact Member rows while preserving every source row", () => {
 		const existingTeam = devProject002.team;
 		expect(existingTeam).not.toBeNull();
 		const sourceFunction = existingTeam!.functions[0]!;
+		const sourceCell = {
+			columnIndex: 2,
+			headerText: "Member",
+			rawType: "s",
+			rawValue: "DEV Exact Member",
+			formattedText: "DEV Exact Member",
+			hidden: false,
+		};
 		const duplicateMember = {
 			assignmentId: toPersonAssignmentId("team-save-exact-member"),
 			role: "member" as const,
 			name: "DEV Exact Member",
 			email: "exact.member@example.test",
+			sourceRows: [{
+				fileName: "synthetic.xlsx",
+				sheetName: "Roster",
+				rowNumber: 2,
+				cells: [sourceCell],
+			}],
+		};
+		const secondDuplicateMember = {
+			...duplicateMember,
+			sourceRows: [{
+				...duplicateMember.sourceRows[0],
+				rowNumber: 9,
+			}],
 		};
 		const team: ProjectTeam = {
 			...existingTeam!,
@@ -104,14 +146,14 @@ describe("Team Save command", () => {
 					assignments: [
 						...sourceFunction.assignments,
 						duplicateMember,
-						duplicateMember,
+						secondDuplicateMember,
 					],
 				},
 				...existingTeam!.functions.slice(1),
 			],
 		};
 
-		const result = saveProjectTeam(devProject002, { team });
+		const result = saveTeam(devProject002, team);
 
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
@@ -119,57 +161,71 @@ describe("Team Save command", () => {
 			result.project.team?.functions[0]?.assignments.filter(
 				(assignment) => assignment.assignmentId === duplicateMember.assignmentId,
 			),
-		).toHaveLength(2);
+		).toHaveLength(1);
+		expect(
+			result.project.team?.functions[0]?.assignments.find(
+				(assignment) => assignment.assignmentId === duplicateMember.assignmentId,
+			)?.sourceRows,
+		).toEqual([
+			expect.objectContaining({ rowNumber: 2 }),
+			expect.objectContaining({ rowNumber: 9 }),
+		]);
 		expect(team.functions[0]?.assignments).toHaveLength(
 			sourceFunction.assignments.length + 2,
 		);
 	});
 
-	it("rejects an unassigned imported person but allows an unknown Function Advisory", () => {
-		const blocking = saveProjectTeam(devProject002, {
-			team: applicableWithoutOwnerTeamCandidate,
-			importProblems: [
-				{
-					kind: "unassignedPerson",
-					entityId: "team-import-row-unassigned",
-					message: "Imported person cannot be assigned to a Function.",
-				},
-			],
-		});
-		const advisory = saveProjectTeam(devProject002, {
-			team: {
-				...applicableWithoutOwnerTeamCandidate,
-				functions: [
-					{
-						function: {
-							kind: "custom",
-							functionId: toTeamFunctionId("imported-custom-function"),
-							displayName: "DEV Imported Custom",
-						},
-						applicability: "notApplicable",
-						assignments: [],
-					},
-				],
-			},
-			importProblems: [
-				{
-					kind: "unknownFunction",
-					entityId: "imported-custom-function",
-					message: "Unknown imported Function is preserved as custom.",
-				},
-			],
+
+	it("rejects a candidate owned by another Project without a replacement", () => {
+		const candidate = createEditCandidate(
+			devProject005.id,
+			devProject005.team,
+			devTeamFunctionDefinitions,
+		);
+		const result = saveProjectTeam(devProject002, {
+			candidate,
+			standardFunctionDefinitions: devTeamFunctionDefinitions,
 		});
 
-		expect(blocking.ok).toBe(false);
-		expect(advisory.ok).toBe(true);
-		if (!advisory.ok) return;
-		expect(advisory.issues).toContainEqual(
-			expect.objectContaining({
-				code: "team.import.unknown-function",
-				severity: "advisory",
-			}),
+		expect(result).toMatchObject({ ok: false, reason: "validation" });
+		if (result.ok) return;
+		expect(result).not.toHaveProperty("project");
+		expect(result.issues).toContainEqual(expect.objectContaining({
+			code: "team.data.project-mismatch",
+			severity: "blocking",
+		}));
+	});
+
+	it("uses import rows as a whole replacement while preserving Function metadata and template", () => {
+		const fullCandidate = createEditCandidate(
+			devProject002.id,
+			devProject002.team,
+			devTeamFunctionDefinitions,
 		);
-		expect(advisory.project.team?.functions[0]?.function.kind).toBe("custom");
+		const retained = fullCandidate.rows.find(({ restrictedKey }) => restrictedKey === "qciPm")!;
+		const candidate = {
+			...fullCandidate,
+			origin: "import" as const,
+			fileName: "synthetic.xlsx",
+			rows: [retained],
+		};
+		const result = saveProjectTeam(devProject002, {
+			candidate,
+			standardFunctionDefinitions: devTeamFunctionDefinitions,
+		});
+
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.project.team?.projectRoles.qciPm?.assignmentId).toBe(
+			retained.assignmentId,
+		);
+		expect(result.project.team?.projectRoles.qciPjm).toBeNull();
+		expect(result.project.team?.projectRoles.acerPm).toBeNull();
+		expect(result.project.team?.functions.every(({ assignments }) => assignments.length === 0)).toBe(true);
+		expect(result.project.team?.functions.map(({ function: value }) => value.functionId)).toEqual(
+			devProject002.team?.functions.map(({ function: value }) => value.functionId),
+		);
+		expect(result.project.team?.appliedTemplate).toBe(devProject002.team?.appliedTemplate);
 	});
 
 	it("does not auto-force an old saved Team onto the latest Template", () => {
@@ -186,7 +242,7 @@ describe("Team Save command", () => {
 			},
 		};
 
-		const result = saveProjectTeam(devProject002, { team: oldTemplateTeam });
+		const result = saveTeam(devProject002, oldTemplateTeam);
 
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
@@ -254,7 +310,7 @@ describe("Team Save command", () => {
 			appliedTemplate: null,
 		};
 
-		const result = saveProjectTeam(devProject002, { team });
+		const result = saveTeam(devProject002, team);
 
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
@@ -263,6 +319,73 @@ describe("Team Save command", () => {
 				(assignment) => assignment.assignmentId === member.assignmentId,
 			),
 		).toHaveLength(2);
+	});
+
+	it("returns one local-row missing-email issue when canonical IDs repeat across Functions", () => {
+		const sharedAssignmentId = toPersonAssignmentId("shared-diagnostic-assignment");
+		const firstFunctionId = toTeamFunctionId("diagnostic-function-a");
+		const secondFunctionId = toTeamFunctionId("diagnostic-function-b");
+		const team: ProjectTeam = {
+			projectRoles: { qciPm: null, qciPjm: null, acerPm: null },
+			functions: [
+				{
+					function: { kind: "custom", functionId: firstFunctionId, displayName: "Diagnostic A-Member" },
+					applicability: "applicable",
+					assignments: [{ assignmentId: sharedAssignmentId, role: "member", name: "Synthetic Missing", email: null }],
+				},
+				{
+					function: { kind: "custom", functionId: secondFunctionId, displayName: "Diagnostic B-Member" },
+					applicability: "applicable",
+					assignments: [{ assignmentId: sharedAssignmentId, role: "member", name: "Synthetic Present", email: "present@example.test" }],
+				},
+			],
+			preservedUnclassifiedEntries: [],
+			appliedTemplate: null,
+		};
+		const candidate = createEditCandidate(devProject002.id, team, []);
+		const missingRow = candidate.rows[0]!;
+		const result = saveProjectTeam(devProject002, {
+			candidate,
+			standardFunctionDefinitions: [],
+		});
+
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		const missingEmailIssues = result.issues.filter(({ code }) => code === "team.data.missing-email");
+		expect(missingEmailIssues).toHaveLength(1);
+		expect(missingEmailIssues[0]?.target).toMatchObject({
+			entityId: missingRow.rowId,
+			field: "email",
+		});
+	});
+
+	it("returns same-email identity conflicts against candidate-local row IDs", () => {
+		const functionId = toTeamFunctionId("diagnostic-conflict-function");
+		const team: ProjectTeam = {
+			projectRoles: { qciPm: null, qciPjm: null, acerPm: null },
+			functions: [{
+				function: { kind: "custom", functionId, displayName: "Diagnostic Conflict-Member" },
+				applicability: "applicable",
+				assignments: [
+					{ assignmentId: toPersonAssignmentId("diagnostic-conflict-one"), role: "member", name: "Synthetic One", email: "conflict@example.test" },
+					{ assignmentId: toPersonAssignmentId("diagnostic-conflict-two"), role: "member", name: "Synthetic Two", email: "conflict@example.test" },
+				],
+			}],
+			preservedUnclassifiedEntries: [],
+			appliedTemplate: null,
+		};
+		const candidate = createEditCandidate(devProject002.id, team, []);
+		const result = saveProjectTeam(devProject002, {
+			candidate,
+			standardFunctionDefinitions: [],
+		});
+
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		const conflictTargets = result.issues
+			.filter(({ code }) => code === "team.data.identity-conflict")
+			.map(({ target }) => target.entityId);
+		expect(conflictTargets).toEqual(candidate.rows.map(({ rowId }) => rowId));
 	});
 
 	it("returns a Project Role missing-email Advisory without blocking Save", () => {
@@ -279,7 +402,7 @@ describe("Team Save command", () => {
 			},
 		};
 
-		const result = saveProjectTeam(devProject002, { team });
+		const result = saveTeam(devProject002, team);
 
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;

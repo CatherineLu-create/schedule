@@ -11,6 +11,8 @@ import type {
 	TeamSourceRow,
 } from "../../domain/team/team";
 import type { TeamFunctionDefinition } from "../../domain/team/teamTemplate";
+import { validateProjectTeam } from "../../domain/team/teamValidation";
+import { countBlocking } from "../../domain/validation/validationIssue";
 import type { TeamParsedSheet } from "./teamImport";
 import {
 	addTeamCandidateRow,
@@ -21,11 +23,14 @@ import {
 	createCustomCandidateFunctionRef,
 	editTeamCandidate,
 	excludeImportSourceRow,
+	materializeProjectTeam,
 	removeTeamCandidateRow,
 	renameCustomCandidateFunction,
+	validateTeamEditCandidate,
 	type TeamCandidateRow,
 	type TeamCandidateEditablePatch,
 	type TeamEditCandidate,
+	type NewTeamCandidateRow,
 } from "./teamCandidate";
 
 const projectId = toProjectId("synthetic-team-import-project");
@@ -72,12 +77,20 @@ function deterministicFactory(...values: string[]) {
 	});
 }
 
+function deterministicAssignmentFactory(...values: string[]) {
+	let index = 0;
+	return vi.fn(() =>
+		toPersonAssignmentId(values.shift() ?? `synthetic-assignment-${index++}`),
+	);
+}
+
 function importCandidate(
 	baseTeam: ProjectTeam | null,
 	selectedSheet: TeamParsedSheet,
 	createFunctionId: () => ReturnType<typeof toTeamFunctionId>,
 	importSessionId = "default-import-session",
 	definitions: readonly TeamFunctionDefinition[] = standardDefinitions,
+	createAssignmentId = deterministicAssignmentFactory(),
 ): TeamEditCandidate {
 	return createImportCandidate(
 		projectId,
@@ -86,6 +99,7 @@ function importCandidate(
 		importSessionId,
 		definitions,
 		createFunctionId,
+		createAssignmentId,
 	);
 }
 
@@ -93,10 +107,10 @@ describe("Team import candidate creation", () => {
 	it("creates distinct row IDs for identical source coordinates in separate import sessions", () => {
 		const selectedSheet = sheet([sourceRow(2, "QCI-PM-Owner", "Synthetic PM", "pm@example.test")]);
 		const first = createImportCandidate(
-			projectId, emptyTeam(), selectedSheet, "import-session-one", standardDefinitions, deterministicFactory(),
+			projectId, emptyTeam(), selectedSheet, "import-session-one", standardDefinitions, deterministicFactory(), deterministicAssignmentFactory(),
 		);
 		const second = createImportCandidate(
-			projectId, emptyTeam(), selectedSheet, "import-session-two", standardDefinitions, deterministicFactory(),
+			projectId, emptyTeam(), selectedSheet, "import-session-two", standardDefinitions, deterministicFactory(), deterministicAssignmentFactory(),
 		);
 
 		expect(first.rows[0]?.rowId).not.toBe(second.rows[0]?.rowId);
@@ -122,6 +136,7 @@ describe("Team import candidate creation", () => {
 			"standard-import-session",
 			definitions,
 			createFunctionId,
+			deterministicAssignmentFactory(),
 		);
 
 		expect(candidate.rows[0]).toMatchObject({
@@ -142,6 +157,7 @@ describe("Team import candidate creation", () => {
 			"unknown-import-session",
 			standardDefinitions,
 			createFunctionId,
+			deterministicAssignmentFactory(),
 		);
 
 		expect(candidate.rows[0]?.functionRef).toEqual({
@@ -379,6 +395,329 @@ describe("Team import candidate creation", () => {
 	});
 });
 
+describe("Team candidate materialization", () => {
+	it("saves and reopens a lossless confirmed noncritical row without reblocking", () => {
+		const functionId = toTeamFunctionId("preserved-custom-id");
+		const rawSource = sourceRow(8, "Original QCI ME wording", "Synthetic Preserved", null, [{
+			columnIndex: 4,
+			headerText: "Tel. No.",
+			rawType: "n",
+			rawValue: 24680,
+			formattedText: "24680",
+			hidden: true,
+		}]);
+		const candidate: TeamEditCandidate = {
+			projectId,
+			origin: "import",
+			fileName: "synthetic.xlsx",
+			baseTeam: emptyTeam(),
+			rows: [{
+				rowId: "preserved-row",
+				assignmentId: toPersonAssignmentId("preserved-row"),
+				functionText: "Original QCI ME wording",
+				functionRef: { kind: "custom", functionId, displayName: "QCI ME Owner" },
+				parsedRole: "unclassified",
+				restrictedKey: null,
+				possibleRestricted: true,
+				restrictedRoleDecision: "confirmedNoncritical",
+				roleText: "Coordinator",
+				name: "Synthetic Preserved",
+				email: null,
+				extraCells: rawSource.cells.slice(3),
+				sourceRows: [rawSource],
+				applicability: "applicable",
+			}],
+			excludedSourceRowIds: [],
+		};
+
+		const issues = validateTeamEditCandidate(candidate, standardDefinitions);
+		expect(countBlocking(issues)).toBe(0);
+		expect(issues).toContainEqual(expect.objectContaining({
+			code: "team.data.unclassified-role",
+			severity: "advisory",
+		}));
+		const result = materializeProjectTeam(candidate, standardDefinitions);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.team.preservedUnclassifiedEntries).toEqual([
+			expect.objectContaining({
+				entryId: toPersonAssignmentId("preserved-row"),
+				function: { kind: "custom", functionId, displayName: "QCI ME Owner" },
+				functionText: "Original QCI ME wording",
+				restrictedRoleExclusion: {
+					functionText: "QCI ME Owner",
+					roleText: "Coordinator",
+				},
+				extraCells: rawSource.cells.slice(3),
+				sourceRows: [rawSource],
+			}),
+		]);
+		const reopened = createEditCandidate(projectId, result.team, standardDefinitions);
+		expect(reopened.rows).toHaveLength(1);
+		expect(reopened.rows[0]).toMatchObject({
+			parsedRole: "unclassified",
+			restrictedRoleDecision: "confirmedNoncritical",
+		});
+		expect(countBlocking(validateTeamEditCandidate(reopened, standardDefinitions))).toBe(0);
+	});
+
+	it("folds exact duplicates while preserving every source row and hidden numeric cell", () => {
+		const hiddenPhone: TeamSourceCell = {
+			columnIndex: 4, headerText: "Tel. No.", rawType: "n", rawValue: 13579,
+			formattedText: "13579", hidden: true,
+		};
+		const candidate = importCandidate(emptyTeam(), sheet([
+			sourceRow(2, "Synthetic Lab-Owner", "Synthetic Exact", "exact@example.test", [hiddenPhone]),
+			sourceRow(9, "Synthetic Lab-Owner", "Synthetic Exact", "exact@example.test", [hiddenPhone]),
+		]), deterministicFactory("materialized-custom-id"));
+
+		const result = materializeProjectTeam(candidate, standardDefinitions);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.team.functions).toHaveLength(1);
+		expect(result.team.functions[0]?.assignments).toHaveLength(1);
+		expect(result.team.functions[0]?.assignments[0]).toMatchObject({
+			extraCells: [hiddenPhone],
+			sourceRows: [expect.objectContaining({ rowNumber: 2 }), expect.objectContaining({ rowNumber: 9 })],
+		});
+		const reopened = createEditCandidate(projectId, result.team, standardDefinitions);
+		expect(reopened.rows[0]?.extraCells).toEqual([hiddenPhone]);
+		expect(reopened.rows[0]?.sourceRows).toHaveLength(2);
+	});
+
+	it("does not merge same-name different-email or same-email conflicting-extra rows", () => {
+		const note = (value: string): TeamSourceCell => ({
+			columnIndex: 4, headerText: "Note", rawType: "s", rawValue: value,
+			formattedText: value, hidden: false,
+		});
+		const candidate = importCandidate(emptyTeam(), sheet([
+			sourceRow(2, "Synthetic Lab-Member", "Synthetic Same", "one@example.test"),
+			sourceRow(3, "Synthetic Lab-Member", "Synthetic Same", "two@example.test"),
+			sourceRow(4, "Synthetic Lab-Member", "Synthetic Conflict", "conflict@example.test", [note("A")]),
+			sourceRow(5, "Synthetic Lab-Member", "Synthetic Conflict", "conflict@example.test", [note("B")]),
+		]), deterministicFactory("conflict-custom-id"));
+
+		const result = materializeProjectTeam(candidate, standardDefinitions);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.team.functions[0]?.assignments).toHaveLength(4);
+		expect(validateProjectTeam(result.team, standardDefinitions)).toEqual(expect.arrayContaining([
+			expect.objectContaining({ code: "team.data.identity-conflict", severity: "advisory" }),
+		]));
+	});
+
+	it("blocks restricted ambiguity blank-email uncertainty and unresolved Function refs", () => {
+		const ambiguous = importCandidate(emptyTeam(), sheet([
+			sourceRow(2, "QCI ME Owner", "Synthetic Ambiguous", "ambiguous@example.test"),
+		]), deterministicFactory());
+		const blankEmail = importCandidate(emptyTeam(), sheet([
+			sourceRow(2, "QCI-ME-Owner", "Synthetic Unknown", null),
+			sourceRow(3, "QCI-ME-Owner", "Synthetic Unknown", null),
+		]), deterministicFactory("restricted-custom-id"));
+		const unresolved: TeamEditCandidate = {
+			...ambiguous,
+			rows: [{ ...ambiguous.rows[0]!, possibleRestricted: false, functionRef: null }],
+		};
+
+		expect(validateTeamEditCandidate(ambiguous, standardDefinitions)).toContainEqual(
+			expect.objectContaining({ code: "team.data.restricted-role-ambiguous", severity: "blocking" }),
+		);
+		expect(validateTeamEditCandidate(blankEmail, standardDefinitions)).toContainEqual(
+			expect.objectContaining({ code: "team.data.restricted-role-identity-unresolved", severity: "blocking" }),
+		);
+		expect(validateTeamEditCandidate(unresolved, standardDefinitions)).toContainEqual(
+			expect.objectContaining({ code: "team.data.function-unresolved", severity: "blocking" }),
+		);
+		expect(materializeProjectTeam(unresolved, standardDefinitions)).toMatchObject({ ok: false });
+	});
+
+	it("keeps Project Role slots and one shared preallocated custom Function identity", () => {
+		const customId = toTeamFunctionId("shared-save-custom-id");
+		const candidate: TeamEditCandidate = {
+			projectId,
+			origin: "import",
+			fileName: "synthetic.xlsx",
+			baseTeam: emptyTeam(),
+			rows: [
+				{
+					rowId: "saved-qci-pm", functionText: "QCI-PM-Owner", functionRef: null,
+					assignmentId: toPersonAssignmentId("saved-qci-pm"),
+					parsedRole: "unclassified", restrictedKey: "qciPm", possibleRestricted: false,
+					restrictedRoleDecision: "unresolved", roleText: "QCI-PM-Owner",
+					name: "Synthetic PM", email: "pm@example.test", extraCells: [], sourceRows: [], applicability: null,
+				},
+				...(["One", "Two"] as const).map((suffix) => ({
+					rowId: `saved-custom-${suffix}`, functionText: "Original Shared-Owner",
+					assignmentId: toPersonAssignmentId(`saved-custom-${suffix}`),
+					functionRef: { kind: "custom" as const, functionId: customId, displayName: "Renamed Shared" },
+					parsedRole: "owner" as const, restrictedKey: null, possibleRestricted: false,
+					restrictedRoleDecision: "unresolved" as const, roleText: "owner",
+					name: `Synthetic ${suffix}`, email: `${suffix.toLowerCase()}@example.test`,
+					extraCells: [], sourceRows: [], applicability: "applicable" as const,
+				})),
+			],
+			excludedSourceRowIds: [],
+		};
+
+		const result = materializeProjectTeam(candidate, standardDefinitions);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.team.projectRoles.qciPm).toMatchObject({
+			assignmentId: toPersonAssignmentId("saved-qci-pm"),
+			name: "Synthetic PM",
+		});
+		expect(result.team.functions).toEqual([
+			expect.objectContaining({
+				function: { kind: "custom", functionId: customId, displayName: "Renamed Shared" },
+				assignments: [
+					expect.objectContaining({ functionText: "Original Shared-Owner" }),
+					expect.objectContaining({ functionText: "Original Shared-Owner" }),
+				],
+			}),
+		]);
+		const reopened = createEditCandidate(projectId, result.team, standardDefinitions);
+		expect(reopened.rows.filter(({ functionRef }) => functionRef?.functionId === customId)).toHaveLength(2);
+		expect(reopened.rows.find(({ restrictedKey }) => restrictedKey === "qciPm")?.functionRef).toBeNull();
+	});
+
+	it("rejects an unknown standard ref and blocks people under explicit N/A until applicability changes", () => {
+		const unknownId = toTeamFunctionId("unknown-standard-id");
+		const row: TeamCandidateRow = {
+			rowId: "unknown-standard-row", functionText: "Unknown Standard", functionRef: { kind: "standard", functionId: unknownId },
+			assignmentId: toPersonAssignmentId("unknown-standard-assignment"),
+			parsedRole: "member", restrictedKey: null, possibleRestricted: false, restrictedRoleDecision: "unresolved",
+			roleText: "member", name: "Synthetic Person", email: "person@example.test", extraCells: [], sourceRows: [], applicability: "notApplicable",
+		};
+		const unknownCandidate: TeamEditCandidate = {
+			projectId, origin: "manual", fileName: null, baseTeam: emptyTeam(), rows: [row], excludedSourceRowIds: [],
+		};
+		expect(validateTeamEditCandidate(unknownCandidate, standardDefinitions)).toContainEqual(
+			expect.objectContaining({ code: "team.data.standard-function-unknown", severity: "blocking" }),
+		);
+
+		const nAId = standardThermalId;
+		const nABase: ProjectTeam = {
+			...emptyTeam(),
+			functions: [{ function: { kind: "standard", functionId: nAId }, applicability: "notApplicable", assignments: [] }],
+		};
+		const nACandidate: TeamEditCandidate = {
+			...unknownCandidate,
+			baseTeam: nABase,
+			rows: [{ ...row, rowId: "n-a-row", functionText: "Synthetic Thermal", functionRef: { kind: "standard", functionId: nAId } }],
+		};
+		const blocked = materializeProjectTeam(nACandidate, standardDefinitions);
+		expect(blocked).toMatchObject({ ok: false });
+		if (blocked.ok) return;
+		expect(blocked.issues).toContainEqual(expect.objectContaining({ code: "team.data.not-applicable-with-people" }));
+		const applicable = editTeamCandidate(nACandidate, "n-a-row", { applicability: "applicable" }, standardDefinitions);
+		const saved = materializeProjectTeam(applicable, standardDefinitions);
+		expect(saved.ok).toBe(true);
+		if (!saved.ok) return;
+		expect(saved.team.functions[0]).toMatchObject({
+			function: { kind: "standard", functionId: nAId },
+			applicability: "applicable",
+		});
+	});
+
+	it("blocks stale derived classification instead of trusting a manipulated candidate", () => {
+		const stale: TeamEditCandidate = {
+			projectId,
+			origin: "manual",
+			fileName: null,
+			baseTeam: emptyTeam(),
+			rows: [{
+				rowId: "stale-classification-row",
+				assignmentId: toPersonAssignmentId("stale-classification-assignment"),
+				functionText: "QCI-ME-Owner",
+				functionRef: { kind: "standard", functionId: standardMeId },
+				parsedRole: "unclassified",
+				restrictedKey: null,
+				possibleRestricted: false,
+				restrictedRoleDecision: "confirmedNoncritical",
+				roleText: "",
+				name: "Synthetic Stale",
+				email: "stale@example.test",
+				extraCells: [],
+				sourceRows: [],
+				applicability: "applicable",
+			}],
+			excludedSourceRowIds: [],
+		};
+
+		expect(validateTeamEditCandidate(stale, standardDefinitions)).toContainEqual(
+			expect.objectContaining({ code: "team.data.classification-stale", severity: "blocking" }),
+		);
+		expect(materializeProjectTeam(stale, standardDefinitions)).toMatchObject({ ok: false });
+	});
+
+	it("blocks conflicting rows that reuse one candidate identity", () => {
+		const functionRef = {
+			kind: "custom" as const,
+			functionId: toTeamFunctionId("identity-conflict-function"),
+			displayName: "Synthetic Conflict-Member",
+		};
+		const baseRow: TeamCandidateRow = {
+			rowId: "reused-row-id", functionText: "Synthetic Conflict-Member", functionRef,
+			assignmentId: toPersonAssignmentId("reused-assignment-id"),
+			parsedRole: "member", restrictedKey: null, possibleRestricted: false,
+			restrictedRoleDecision: "unresolved", roleText: "member", name: "Synthetic One",
+			email: "one@example.test", extraCells: [], sourceRows: [], applicability: "applicable",
+		};
+		const candidate: TeamEditCandidate = {
+			projectId, origin: "manual", fileName: null, baseTeam: emptyTeam(),
+			rows: [baseRow, { ...baseRow, name: "Synthetic Two", email: "two@example.test" }],
+			excludedSourceRowIds: [],
+		};
+
+		expect(validateTeamEditCandidate(candidate, standardDefinitions)).toContainEqual(
+			expect.objectContaining({ code: "team.data.row-identity-conflict", severity: "blocking" }),
+		);
+	});
+
+	it("moves a corrected preserved row into one formal assignment with its evidence", () => {
+		const functionId = toTeamFunctionId("corrected-preserved-function");
+		const evidence = sourceRow(12, "Synthetic Unit", "Synthetic Corrected", "corrected@example.test");
+		const savedTeam: ProjectTeam = {
+			...emptyTeam(),
+			functions: [{
+				function: { kind: "custom", functionId, displayName: "Synthetic Unit" },
+				applicability: "applicable",
+				assignments: [],
+			}],
+			preservedUnclassifiedEntries: [{
+				entryId: toPersonAssignmentId("corrected-preserved-row"),
+				function: { kind: "custom", functionId, displayName: "Synthetic Unit" },
+				functionText: "Synthetic Unit",
+				roleText: "Coordinator",
+				name: "Synthetic Corrected",
+				email: "corrected@example.test",
+				extraCells: [],
+				sourceRows: [evidence],
+				restrictedRoleExclusion: null,
+			}],
+		};
+		const opened = createEditCandidate(projectId, savedTeam, standardDefinitions);
+		const corrected = editTeamCandidate(
+			opened,
+			opened.rows[0]!.rowId,
+			{ roleText: "member" },
+			standardDefinitions,
+		);
+		const result = materializeProjectTeam(corrected, standardDefinitions);
+
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.team.preservedUnclassifiedEntries).toEqual([]);
+		expect(result.team.functions[0]?.assignments).toEqual([
+			expect.objectContaining({
+				assignmentId: toPersonAssignmentId("corrected-preserved-row"),
+				role: "member",
+				sourceRows: [evidence],
+			}),
+		]);
+	});
+});
+
 describe("saved Team editing", () => {
 	it("exposes roleText as the only editable role source", () => {
 		expectTypeOf<TeamCandidateEditablePatch>().toEqualTypeOf<Partial<Pick<
@@ -422,6 +761,7 @@ describe("saved Team editing", () => {
 		};
 		const row: TeamCandidateRow = {
 			rowId: "reassign-standard-row", functionText: "Function A", functionRef: { kind: "custom", functionId: functionA, displayName: "Function A" },
+			assignmentId: toPersonAssignmentId("reassign-standard-assignment"),
 			parsedRole: "member", restrictedKey: null, possibleRestricted: false, restrictedRoleDecision: "unresolved",
 			roleText: "member", name: "Synthetic Person", email: null, extraCells: [], sourceRows: [], applicability: "applicable",
 		};
@@ -454,6 +794,7 @@ describe("saved Team editing", () => {
 			},
 			rows: [{
 				rowId: "new-custom-target-row", functionText: "Old Function", functionRef: { kind: "custom", functionId: oldFunctionId, displayName: "Old Function" },
+				assignmentId: toPersonAssignmentId("new-custom-target-assignment"),
 				parsedRole: "member", restrictedKey: null, possibleRestricted: false, restrictedRoleDecision: "unresolved",
 				roleText: "member", name: "Synthetic Person", email: null, extraCells: [], sourceRows: [], applicability: "pending",
 			}],
@@ -510,6 +851,7 @@ describe("saved Team editing", () => {
 		const functionId = toTeamFunctionId("ambiguity-function-id");
 		const originalRow: TeamCandidateRow = {
 			rowId: "ambiguity-row", functionText: "Original Source", functionRef: { kind: "custom", functionId, displayName: "QCI ME Owner" },
+			assignmentId: toPersonAssignmentId("ambiguity-assignment"),
 			parsedRole: "unclassified", restrictedKey: null, possibleRestricted: true, restrictedRoleDecision: "unresolved",
 			roleText: "unclear", name: "Synthetic Person", email: null, extraCells: [], sourceRows: [], applicability: "applicable",
 		};
@@ -533,6 +875,7 @@ describe("saved Team editing", () => {
 		};
 		const row: TeamCandidateRow = {
 			rowId: "confirmed-row", functionText: "QCI ME Owner", functionRef: null,
+			assignmentId: toPersonAssignmentId("confirmed-assignment"),
 			parsedRole: "unclassified", restrictedKey: null, possibleRestricted: true,
 			restrictedRoleDecision: "confirmedNoncritical", roleText: "", name: "Synthetic Before", email: null,
 			extraCells: [], sourceRows: [], applicability: null,
@@ -559,6 +902,7 @@ describe("saved Team editing", () => {
 		const functionId = toTeamFunctionId("normalized-confirmation-id");
 		const row: TeamCandidateRow = {
 			rowId: "normalized-confirmation-row", functionText: "Original Source", functionRef: { kind: "custom", functionId, displayName: "QCI ME Owner" },
+			assignmentId: toPersonAssignmentId("normalized-confirmation-assignment"),
 			parsedRole: "unclassified", restrictedKey: null, possibleRestricted: true, restrictedRoleDecision: "unresolved",
 			roleText: " Coordinator ", name: "Synthetic Person", email: null, extraCells: [], sourceRows: [], applicability: "applicable",
 		};
@@ -584,20 +928,322 @@ describe("saved Team editing", () => {
 		const base = emptyTeam();
 		const candidate: TeamEditCandidate = Object.freeze({ projectId, origin: "manual", fileName: null, baseTeam: base, rows: Object.freeze([]), excludedSourceRowIds: Object.freeze([]) });
 		const functionRef = createCustomCandidateFunctionRef(candidate, "Synthetic Added", deterministicFactory("added-function-id"));
-		const row: TeamCandidateRow = {
-			rowId: "added-row", functionText: "Synthetic Added", functionRef: null, parsedRole: "unclassified", restrictedKey: null,
+		const row: NewTeamCandidateRow = {
+			functionText: "Synthetic Added", functionRef: null, parsedRole: "unclassified", restrictedKey: null,
 			possibleRestricted: false, restrictedRoleDecision: "unresolved", roleText: "Coordinator", name: "Synthetic Added Person", email: null,
 			extraCells: [], sourceRows: [], applicability: "applicable",
 		};
-		const added = addTeamCandidateRow(candidate, row);
-		const assigned = assignCandidateFunction(added, row.rowId, functionRef, standardDefinitions);
-		const removed = removeTeamCandidateRow(assigned, row.rowId);
+		const createAssignmentId = deterministicAssignmentFactory("added-assignment-id");
+		const added = addTeamCandidateRow(candidate, row, createAssignmentId);
+		const addedRow = added.rows[0]!;
+		const assigned = assignCandidateFunction(added, addedRow.rowId, functionRef, standardDefinitions);
+		const removed = removeTeamCandidateRow(assigned, addedRow.rowId);
 
 		expect(functionRef).toEqual({ kind: "custom", functionId: toTeamFunctionId("added-function-id"), displayName: "Synthetic Added" });
 		expect(candidate.rows).toEqual([]);
+		expect(addedRow.assignmentId).toBe(toPersonAssignmentId("added-assignment-id"));
+		expect(addedRow.rowId).not.toBe(addedRow.assignmentId);
+		expect(createAssignmentId).toHaveBeenCalledTimes(1);
 		expect(added.rows[0]?.functionRef).toBeNull();
 		expect(assigned.rows[0]?.functionRef).toEqual(functionRef);
 		expect(removed.rows).toEqual([]);
 		expect(base).toEqual(emptyTeam());
+	});
+});
+
+
+describe("Slice 4 corrected identity regressions", () => {
+	it("folds exact duplicate Project Role rows without losing evidence or survivor identity", () => {
+		const firstId = toPersonAssignmentId("project-role-survivor");
+		const secondId = toPersonAssignmentId("project-role-duplicate");
+		const createAssignmentId = vi.fn()
+			.mockReturnValueOnce(firstId)
+			.mockReturnValueOnce(secondId);
+		const candidate = createImportCandidate(
+			projectId,
+			emptyTeam(),
+			sheet([
+				sourceRow(2, "QCI-PM-Owner", "Synthetic PM", "pm@example.test"),
+				sourceRow(9, "QCI-PM-Owner", "Synthetic PM", "pm@example.test"),
+			]),
+			"project-role-duplicates",
+			standardDefinitions,
+			deterministicFactory(),
+			createAssignmentId,
+		);
+
+		expect(candidate.rows.map(({ assignmentId }) => assignmentId)).toEqual([firstId, secondId]);
+		const result = materializeProjectTeam(candidate, standardDefinitions);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.team.projectRoles.qciPm).toMatchObject({
+			assignmentId: firstId,
+			sourceRows: [
+				expect.objectContaining({ rowNumber: 2 }),
+				expect.objectContaining({ rowNumber: 9 }),
+			],
+		});
+		const reopened = createEditCandidate(projectId, result.team, standardDefinitions);
+		expect(reopened.rows).toHaveLength(1);
+		expect(reopened.rows[0]).toMatchObject({ assignmentId: firstId, restrictedKey: "qciPm" });
+		expect(reopened.rows[0]?.sourceRows).toHaveLength(2);
+
+		const conflicting = {
+			...candidate,
+			rows: [candidate.rows[0]!, { ...candidate.rows[1]!, name: "Synthetic Other PM" }],
+		};
+		expect(materializeProjectTeam(conflicting, standardDefinitions)).toMatchObject({ ok: false });
+	});
+
+	it("folds a saved Project Role and reassigned Function duplicate despite applicability metadata", () => {
+		const functionId = toTeamFunctionId("reassigned-qci-pm-function");
+		const definitions: readonly TeamFunctionDefinition[] = [
+			{ id: functionId, displayName: "QCI-PM-Owner", active: true },
+		];
+		const firstId = toPersonAssignmentId("saved-project-role-first");
+		const secondId = toPersonAssignmentId("reassigned-function-second");
+		const firstSource = sourceRow(2, "QCI-PM-Owner", "Synthetic PM", "pm@example.test");
+		const secondSource = sourceRow(9, "Historical Function", "Synthetic PM", "pm@example.test");
+		const savedTeam: ProjectTeam = {
+			...emptyTeam(),
+			projectRoles: {
+				qciPm: {
+					assignmentId: firstId,
+					name: "Synthetic PM",
+					email: "pm@example.test",
+					functionText: "QCI-PM-Owner",
+					extraCells: [],
+					sourceRows: [firstSource],
+				},
+				qciPjm: null,
+				acerPm: null,
+			},
+			functions: [{
+				function: { kind: "standard", functionId },
+				applicability: "applicable",
+				assignments: [{
+					assignmentId: secondId,
+					role: "owner",
+					functionText: "Historical Function",
+					name: "Synthetic PM",
+					email: "pm@example.test",
+					extraCells: [],
+					sourceRows: [secondSource],
+				}],
+			}],
+		};
+
+		const candidate = createEditCandidate(projectId, savedTeam, definitions);
+		expect(countBlocking(validateTeamEditCandidate(candidate, definitions))).toBe(0);
+		const result = materializeProjectTeam(candidate, definitions);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.team.projectRoles.qciPm).toMatchObject({
+			assignmentId: firstId,
+			sourceRows: [firstSource, secondSource],
+		});
+	});
+
+	it("blocks retained empty Function identity conflicts before grouping", () => {
+		const conflictingCustomId = toTeamFunctionId("empty-conflicting-custom");
+		const collidingId = toTeamFunctionId("empty-standard-custom-collision");
+		const definitions: readonly TeamFunctionDefinition[] = [
+			{ id: collidingId, displayName: "Synthetic Standard", active: true },
+		];
+		const customFirst = { kind: "custom" as const, functionId: conflictingCustomId, displayName: "Synthetic First" };
+		const customSecond = { kind: "custom" as const, functionId: conflictingCustomId, displayName: "Synthetic Second" };
+		const standardRef = { kind: "standard" as const, functionId: collidingId };
+		const collidingCustomRef = { kind: "custom" as const, functionId: collidingId, displayName: "Synthetic Collision" };
+		const functionTeam = (functionRef: typeof customFirst | typeof standardRef) => ({
+			function: functionRef,
+			applicability: "notApplicable" as const,
+			assignments: [],
+		});
+		const teams: readonly ProjectTeam[] = [
+			{ ...emptyTeam(), functions: [functionTeam(customFirst), functionTeam(customSecond)] },
+			{ ...emptyTeam(), functions: [functionTeam(standardRef), functionTeam(collidingCustomRef)] },
+			{ ...emptyTeam(), functions: [functionTeam(collidingCustomRef), functionTeam(standardRef)] },
+		];
+
+		for (const team of teams) {
+			const candidate = createEditCandidate(projectId, team, definitions);
+			const result = materializeProjectTeam(candidate, definitions);
+			expect(result.ok).toBe(false);
+			if (result.ok) continue;
+			expect(result.issues).toContainEqual(expect.objectContaining({
+				code: "team.data.function-identity-conflict",
+				severity: "blocking",
+			}));
+		}
+	});
+
+	it("keeps candidate row identity separate when canonical assignment IDs repeat across Functions", () => {
+		const sharedAssignmentId = toPersonAssignmentId("shared-cross-function-assignment");
+		const firstFunctionId = toTeamFunctionId("cross-function-a");
+		const secondFunctionId = toTeamFunctionId("cross-function-b");
+		const savedTeam: ProjectTeam = {
+			...emptyTeam(),
+			functions: [
+				{
+					function: { kind: "custom", functionId: firstFunctionId, displayName: "Synthetic A-Member" },
+					applicability: "applicable",
+					assignments: [{ assignmentId: sharedAssignmentId, role: "member", name: "Synthetic A", email: "a@example.test" }],
+				},
+				{
+					function: { kind: "custom", functionId: secondFunctionId, displayName: "Synthetic B-Member" },
+					applicability: "applicable",
+					assignments: [{ assignmentId: sharedAssignmentId, role: "member", name: "Synthetic B", email: "b@example.test" }],
+				},
+			],
+		};
+
+		const opened = createEditCandidate(projectId, savedTeam, standardDefinitions);
+		expect(opened.rows.map(({ assignmentId }) => assignmentId)).toEqual([
+			sharedAssignmentId,
+			sharedAssignmentId,
+		]);
+		expect(new Set(opened.rows.map(({ rowId }) => rowId)).size).toBe(2);
+		expect(opened.rows.every(({ rowId }) => rowId !== sharedAssignmentId)).toBe(true);
+
+		const edited = editTeamCandidate(opened, opened.rows[0]!.rowId, { name: "Synthetic A Edited" }, standardDefinitions);
+		expect(edited.rows.map(({ name }) => name)).toEqual(["Synthetic A Edited", "Synthetic B"]);
+		const removed = removeTeamCandidateRow(opened, opened.rows[0]!.rowId);
+		expect(removed.rows).toHaveLength(1);
+		expect(removed.rows[0]?.functionRef?.functionId).toBe(secondFunctionId);
+
+		const saved = materializeProjectTeam(opened, standardDefinitions);
+		expect(saved.ok).toBe(true);
+		if (!saved.ok) return;
+		expect(saved.team.functions.flatMap(({ assignments }) => assignments.map(({ assignmentId }) => assignmentId))).toEqual([
+			sharedAssignmentId,
+			sharedAssignmentId,
+		]);
+		const reopened = createEditCandidate(projectId, saved.team, standardDefinitions);
+		expect(new Set(reopened.rows.map(({ rowId }) => rowId)).size).toBe(2);
+		expect(reopened.rows.every(({ assignmentId }) => assignmentId === sharedAssignmentId)).toBe(true);
+	});
+
+	it("reopens a definition-derived Project Role without reviving its historical Function label", () => {
+		const functionId = toTeamFunctionId("synthetic-qci-pm-standard");
+		const assignmentId = toPersonAssignmentId("reassigned-project-role");
+		const definitions: readonly TeamFunctionDefinition[] = [
+			{ id: functionId, displayName: "QCI-PM-Owner", active: true },
+		];
+		const historicalSource = sourceRow(14, "Historical Lab-Owner", "Synthetic PM", "pm@example.test");
+		const savedTeam: ProjectTeam = {
+			...emptyTeam(),
+			functions: [{
+				function: { kind: "standard", functionId },
+				applicability: "applicable",
+				assignments: [{
+					assignmentId,
+					role: "owner",
+					functionText: "Historical Lab-Owner",
+					name: "Synthetic PM",
+					email: "pm@example.test",
+					extraCells: [],
+					sourceRows: [historicalSource],
+				}],
+			}],
+		};
+
+		const reassigned = createEditCandidate(projectId, savedTeam, definitions);
+		expect(reassigned.rows[0]?.restrictedKey).toBe("qciPm");
+		const result = materializeProjectTeam(reassigned, definitions);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.team.projectRoles.qciPm).toMatchObject({
+			assignmentId,
+			functionText: "QCI-PM-Owner",
+			sourceRows: [historicalSource],
+		});
+		const reopened = createEditCandidate(projectId, result.team, definitions);
+		expect(reopened.rows[0]).toMatchObject({
+			assignmentId,
+			functionText: "QCI-PM-Owner",
+			restrictedKey: "qciPm",
+		});
+		expect(reopened.rows[0]?.rowId).not.toBe(assignmentId);
+		expect(validateTeamEditCandidate(reopened, definitions)).not.toContainEqual(
+			expect.objectContaining({ code: "team.data.classification-stale" }),
+		);
+	});
+
+	it("reports partial missing-email N/A and pending diagnostics without dropping rows", () => {
+		const phone: TeamSourceCell = {
+			columnIndex: 4,
+			headerText: "Tel. No.",
+			rawType: "n",
+			rawValue: 24680,
+			formattedText: "24680",
+			hidden: true,
+		};
+		const makeRow = (
+			rowId: string,
+			name: string | null,
+			email: string | null,
+			applicability: "applicable" | "notApplicable" | "pending",
+			extraCells: readonly TeamSourceCell[] = [],
+		): TeamCandidateRow => ({
+			rowId,
+			assignmentId: toPersonAssignmentId(`${rowId}-assignment`),
+			functionText: `${rowId}-Member`,
+			functionRef: { kind: "custom", functionId: toTeamFunctionId(`${rowId}-function`), displayName: `${rowId}-Member` },
+			parsedRole: "member",
+			restrictedKey: null,
+			possibleRestricted: false,
+			restrictedRoleDecision: "unresolved",
+			roleText: "member",
+			name,
+			email,
+			extraCells,
+			sourceRows: [],
+			applicability,
+		});
+		const partial = makeRow("partial-row", null, "partial@example.test", "applicable", [phone]);
+		const missingEmail = makeRow("missing-email-row", "Synthetic Missing", null, "applicable");
+		const notApplicable = makeRow("not-applicable-row", "Synthetic N/A", "na@example.test", "notApplicable");
+		const pending = makeRow("pending-row", "Synthetic Pending", "pending@example.test", "pending");
+		const candidate: TeamEditCandidate = {
+			projectId,
+			origin: "manual",
+			fileName: null,
+			baseTeam: emptyTeam(),
+			rows: [partial, missingEmail, notApplicable, pending],
+			excludedSourceRowIds: [],
+		};
+
+		const issues = validateTeamEditCandidate(candidate, standardDefinitions);
+		expect(issues).toEqual(expect.arrayContaining([
+			expect.objectContaining({ code: "team.data.partial-person", severity: "advisory", target: expect.objectContaining({ entityId: partial.rowId }) }),
+			expect.objectContaining({ code: "team.data.missing-email", severity: "advisory", target: expect.objectContaining({ entityId: missingEmail.rowId, field: "email" }) }),
+			expect.objectContaining({ code: "team.data.not-applicable-with-people", severity: "blocking", target: expect.objectContaining({ entityId: notApplicable.rowId }) }),
+			expect.objectContaining({ code: "team.data.pending-applicability", severity: "advisory", target: expect.objectContaining({ entityId: pending.rowId }) }),
+		]));
+		expect(candidate.rows).toHaveLength(4);
+
+		const excluded = excludeImportSourceRow(candidate, partial.rowId);
+		expect(excluded.excludedSourceRowIds).toContain(partial.rowId);
+		expect(excluded.rows).not.toContainEqual(expect.objectContaining({ rowId: partial.rowId }));
+		expect(validateTeamEditCandidate(excluded, standardDefinitions)).not.toContainEqual(
+			expect.objectContaining({ target: expect.objectContaining({ entityId: partial.rowId }) }),
+		);
+	});
+
+	it("does not emit an unclassified Advisory for an exact Project Role", () => {
+		const candidate = createImportCandidate(
+			projectId,
+			emptyTeam(),
+			sheet([sourceRow(2, "QCI-PM-Owner", "Synthetic PM", "pm@example.test")]),
+			"exact-project-role",
+			standardDefinitions,
+			deterministicFactory(),
+			vi.fn(() => toPersonAssignmentId("exact-project-role-assignment")),
+		);
+
+		expect(candidate.rows[0]).toMatchObject({ parsedRole: "unclassified", restrictedKey: "qciPm" });
+		expect(validateTeamEditCandidate(candidate, standardDefinitions)).not.toContainEqual(
+			expect.objectContaining({ code: "team.data.unclassified-role", target: expect.objectContaining({ entityId: candidate.rows[0]!.rowId }) }),
+		);
 	});
 });

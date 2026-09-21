@@ -10,6 +10,7 @@ import {
 } from "../../fixtures/v2/teamCandidateFixtures";
 import {
 	devMeTeamFunctionDefinition,
+	devTeamFunctionDefinitions,
 	devTeamTemplateV2,
 } from "../../fixtures/v2/teamTemplateFixtures";
 import {
@@ -26,7 +27,7 @@ import {
 } from "./teamValidation";
 
 function summaries(team: ProjectTeam) {
-	return validateProjectTeam(team).map(({ code, source, severity }) => ({
+	return validateProjectTeam(team, devTeamFunctionDefinitions).map(({ code, source, severity }) => ({
 		code,
 		source,
 		severity,
@@ -139,6 +140,7 @@ describe("Project Team validation", () => {
 				],
 				appliedTemplate: null,
 			},
+			devTeamFunctionDefinitions,
 			{ importProblems },
 		);
 
@@ -195,13 +197,13 @@ describe("Project Team validation", () => {
 		};
 
 		expect(
-			validateProjectTeam(team).filter((issue) => issue.severity === "blocking"),
+			validateProjectTeam(team, devTeamFunctionDefinitions).filter((issue) => issue.severity === "blocking"),
 		).toEqual([]);
 	});
 
 	it("returns only Advisories for canonical Project 005", () => {
 		expect(devProject005.team).not.toBeNull();
-		const issues = validateProjectTeam(devProject005.team!);
+		const issues = validateProjectTeam(devProject005.team!, devTeamFunctionDefinitions);
 
 		expect(issues).toContainEqual(
 			expect.objectContaining({
@@ -241,7 +243,7 @@ describe("Project Team validation", () => {
 			appliedTemplate: null,
 		};
 
-		expect(validateProjectTeam(team)).toContainEqual(
+		expect(validateProjectTeam(team, devTeamFunctionDefinitions)).toContainEqual(
 			expect.objectContaining({
 				code: "team.data.not-applicable-with-people",
 				severity: "blocking",
@@ -282,7 +284,7 @@ describe("Project Team validation", () => {
 			appliedTemplate: null,
 		};
 
-		expect(validateProjectTeam(team)).toEqual(
+		expect(validateProjectTeam(team, devTeamFunctionDefinitions)).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({
 					code: "team.data.restricted-role-multiple",
@@ -318,7 +320,7 @@ describe("Project Team validation", () => {
 			appliedTemplate: null,
 		};
 
-		expect(validateProjectTeam(team)).toContainEqual(
+		expect(validateProjectTeam(team, devTeamFunctionDefinitions)).toContainEqual(
 			expect.objectContaining({
 				code: "team.data.restricted-role-missing",
 				target: expect.objectContaining({ entityId: "qciEeOwner" }),
@@ -368,7 +370,7 @@ describe("Project Team validation", () => {
 			appliedTemplate: null,
 		};
 
-		expect(validateProjectTeam(team)).toContainEqual(
+		expect(validateProjectTeam(team, devTeamFunctionDefinitions)).toContainEqual(
 			expect.objectContaining({
 				code: "team.data.restricted-role-ambiguous",
 				severity: "blocking",
@@ -420,7 +422,7 @@ describe("Project Team validation", () => {
 			appliedTemplate: null,
 		};
 
-		expect(validateProjectTeam(team)).toEqual(
+		expect(validateProjectTeam(team, devTeamFunctionDefinitions)).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({
 					code: "team.data.identity-conflict",
@@ -661,7 +663,7 @@ describe("exact duplicate Member normalization", () => {
 		]);
 		expect(team.functions[0]?.assignments).toHaveLength(4);
 		expect(
-			validateProjectTeam(normalized).filter((issue) => issue.severity === "blocking"),
+			validateProjectTeam(normalized, devTeamFunctionDefinitions).filter((issue) => issue.severity === "blocking"),
 		).toEqual([]);
 	});
 
@@ -694,5 +696,135 @@ describe("exact duplicate Member normalization", () => {
 		expect(deduplicateExactMemberAssignments(team).functions[0]?.assignments).toHaveLength(
 			3,
 		);
+	});
+});
+
+
+describe("Slice 4 canonical Function identity validation", () => {
+	it("classifies a standard Function from its current definition instead of historical evidence", () => {
+		const functionId = toTeamFunctionId("current-definition-function");
+		const definition = { id: functionId, displayName: "Synthetic Neutral-Member", active: true } as const;
+		const team: ProjectTeam = {
+			projectRoles: { qciPm: null, qciPjm: null, acerPm: null },
+			functions: [{
+				function: { kind: "standard", functionId },
+				applicability: "applicable",
+				assignments: [{
+					assignmentId: toPersonAssignmentId("historical-restricted-label"),
+					role: "member",
+					functionText: "QCI-EE-Owner",
+					name: "Synthetic Member",
+					email: "member@example.test",
+				}],
+			}],
+			appliedTemplate: null,
+		};
+
+		const issues = validateProjectTeam(team, [definition]);
+		expect(issues).toContainEqual(expect.objectContaining({
+			code: "team.data.restricted-role-missing",
+			target: expect.objectContaining({ entityId: "qciEeOwner" }),
+		}));
+		expect(issues).not.toContainEqual(expect.objectContaining({
+			code: "team.data.restricted-role-multiple",
+			target: expect.objectContaining({ entityId: "historical-restricted-label" }),
+		}));
+	});
+
+	it("blocks missing and duplicate standard definitions including zero-person N/A Functions", () => {
+		const functionId = toTeamFunctionId("zero-person-standard");
+		const team: ProjectTeam = {
+			projectRoles: { qciPm: null, qciPjm: null, acerPm: null },
+			functions: [{
+				function: { kind: "standard", functionId },
+				applicability: "notApplicable",
+				assignments: [],
+			}],
+			appliedTemplate: null,
+		};
+		const definition = { id: functionId, displayName: "Synthetic Standard", active: true } as const;
+
+		expect(validateProjectTeam(team, [])).toContainEqual(expect.objectContaining({
+			code: "team.data.standard-function-definition-missing",
+			severity: "blocking",
+			target: expect.objectContaining({ entityId: functionId }),
+		}));
+		expect(validateProjectTeam(team, [definition, { ...definition }])).toContainEqual(expect.objectContaining({
+			code: "team.data.standard-function-definition-duplicate",
+			severity: "blocking",
+			target: expect.objectContaining({ entityId: functionId }),
+		}));
+	});
+
+	it("blocks standard-custom ID collisions and inconsistent custom identities", () => {
+		const collidingId = toTeamFunctionId("colliding-function-id");
+		const customId = toTeamFunctionId("inconsistent-custom-id");
+		const definition = { id: collidingId, displayName: "Synthetic Standard", active: true } as const;
+		const team: ProjectTeam = {
+			projectRoles: { qciPm: null, qciPjm: null, acerPm: null },
+			functions: [
+				{ function: { kind: "standard", functionId: collidingId }, applicability: "notApplicable", assignments: [] },
+				{ function: { kind: "custom", functionId: collidingId, displayName: "Synthetic Collision" }, applicability: "notApplicable", assignments: [] },
+				{ function: { kind: "custom", functionId: customId, displayName: "Synthetic First" }, applicability: "notApplicable", assignments: [] },
+				{ function: { kind: "custom", functionId: customId, displayName: "Synthetic Second" }, applicability: "notApplicable", assignments: [] },
+			],
+			appliedTemplate: null,
+		};
+
+		const issues = validateProjectTeam(team, [definition]);
+		expect(issues.filter(({ code }) => code === "team.data.function-identity-conflict")).toHaveLength(3);
+		expect(issues.every((issue) => issue.code !== "team.data.function-id-repaired")).toBe(true);
+	});
+
+	it("includes preserved custom references in Function identity validation", () => {
+		const collidingId = toTeamFunctionId("preserved-standard-custom-collision");
+		const inconsistentId = toTeamFunctionId("preserved-inconsistent-custom");
+		const definition = { id: collidingId, displayName: "Synthetic Standard", active: true } as const;
+		const preserved = (
+			entryId: string,
+			functionId: ReturnType<typeof toTeamFunctionId>,
+			displayName: string,
+		) => ({
+			entryId: toPersonAssignmentId(entryId),
+			function: { kind: "custom" as const, functionId, displayName },
+			functionText: displayName,
+			roleText: "Coordinator",
+			name: "Synthetic Preserved",
+			email: "preserved@example.test",
+			extraCells: [],
+			sourceRows: [],
+			restrictedRoleExclusion: null,
+		});
+		const team: ProjectTeam = {
+			projectRoles: { qciPm: null, qciPjm: null, acerPm: null },
+			functions: [
+				{ function: { kind: "standard", functionId: collidingId }, applicability: "notApplicable", assignments: [] },
+				{ function: { kind: "custom", functionId: inconsistentId, displayName: "Synthetic First" }, applicability: "notApplicable", assignments: [] },
+			],
+			preservedUnclassifiedEntries: [
+				preserved("preserved-collision", collidingId, "Synthetic Collision"),
+				preserved("preserved-inconsistent", inconsistentId, "Synthetic Second"),
+			],
+			appliedTemplate: null,
+		};
+
+		const issues = validateProjectTeam(team, [definition]);
+		expect(issues.filter(({ code }) => code === "team.data.function-identity-conflict")).toHaveLength(3);
+	});
+
+	it("does not mutate the supplied standard definitions", () => {
+		const functionId = toTeamFunctionId("immutable-definition");
+		const definition = Object.freeze({ id: functionId, displayName: "Synthetic Immutable-Member", active: true });
+		const definitions = Object.freeze([definition]);
+		const team: ProjectTeam = {
+			projectRoles: { qciPm: null, qciPjm: null, acerPm: null },
+			functions: [{ function: { kind: "standard", functionId }, applicability: "notApplicable", assignments: [] }],
+			appliedTemplate: null,
+		};
+
+		validateProjectTeam(team, definitions);
+		expect(definitions).toEqual([definition]);
+		expect(Object.isFrozen(definitions)).toBe(true);
+		expect(Object.isFrozen(definition)).toBe(true);
 	});
 });

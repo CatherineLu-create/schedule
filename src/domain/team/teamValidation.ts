@@ -10,6 +10,7 @@ import {
 	classifyTeamLabel,
 	type RestrictedTeamRole,
 } from "./teamRoleMapping";
+import type { TeamFunctionDefinition } from "./teamTemplate";
 
 export interface RestrictedCountRow {
 	readonly rowId: string;
@@ -119,12 +120,18 @@ function sameCountIdentity(
 	left: RestrictedCountRow,
 	right: RestrictedCountRow,
 ): boolean {
+	const sameProjectRole =
+		left.key !== null &&
+		left.key === right.key &&
+		(left.key === "qciPm" || left.key === "qciPjm" || left.key === "acerPm");
 	return (
 		left.normalizedEmail !== null &&
 		left.normalizedEmail !== "" &&
 		left.normalizedEmail === right.normalizedEmail &&
-		left.functionText === right.functionText &&
-		left.roleText === right.roleText &&
+		(sameProjectRole || (
+			left.functionText === right.functionText &&
+			left.roleText === right.roleText
+		)) &&
 		left.name === right.name &&
 		sameExtraCells(left.extraCells, right.extraCells)
 	);
@@ -315,10 +322,107 @@ function importProblemIssue(problem: TeamImportProblem): ValidationIssue {
 	};
 }
 
+function functionIdentityIssue(
+	code: string,
+	message: string,
+	functionId: string,
+): ValidationIssue {
+	return {
+		code,
+		domain: "team",
+		source: "data",
+		severity: "blocking",
+		message,
+		target: { section: "team.functions", entityId: functionId },
+	};
+}
+
+function definitionsById(
+	standardFunctionDefinitions: readonly TeamFunctionDefinition[],
+): Map<string, readonly TeamFunctionDefinition[]> {
+	const result = new Map<string, TeamFunctionDefinition[]>();
+	for (const definition of standardFunctionDefinitions) {
+		result.set(definition.id, [...(result.get(definition.id) ?? []), definition]);
+	}
+	return result;
+}
+
+function validateFunctionIdentity(
+	team: ProjectTeam,
+	standardFunctionDefinitions: readonly TeamFunctionDefinition[],
+): readonly ValidationIssue[] {
+	const issues: ValidationIssue[] = [];
+	const definitions = definitionsById(standardFunctionDefinitions);
+	const standardRefIds = new Set<string>();
+	for (const functionTeam of team.functions) {
+		if (functionTeam.function.kind === "standard") {
+			standardRefIds.add(functionTeam.function.functionId);
+		}
+	}
+	for (const entry of team.preservedUnclassifiedEntries ?? []) {
+		if (entry.function.kind === "standard") standardRefIds.add(entry.function.functionId);
+	}
+
+	for (const functionId of standardRefIds) {
+		const matches = definitions.get(functionId) ?? [];
+		if (matches.length === 0) {
+			issues.push(functionIdentityIssue(
+				"team.data.standard-function-definition-missing",
+				"Standard Function reference is absent from the supplied definitions.",
+				functionId,
+			));
+		} else if (matches.length > 1) {
+			issues.push(functionIdentityIssue(
+				"team.data.standard-function-definition-duplicate",
+				"Standard Function ID resolves to more than one supplied definition.",
+				functionId,
+			));
+		}
+	}
+
+	const customRefs = [
+		...team.functions.flatMap((functionTeam) =>
+			functionTeam.function.kind === "custom" ? [functionTeam.function] : [],
+		),
+		...(team.preservedUnclassifiedEntries ?? []).flatMap((entry) =>
+			entry.function.kind === "custom" ? [entry.function] : [],
+		),
+	];
+	for (const customRef of customRefs) {
+		if (definitions.has(customRef.functionId) || standardRefIds.has(customRef.functionId)) {
+			issues.push(functionIdentityIssue(
+				"team.data.function-identity-conflict",
+				"Custom Function ID collides with a standard Function identity.",
+				customRef.functionId,
+			));
+		}
+	}
+	const customRefsById = new Map<string, typeof customRefs>();
+	for (const customRef of customRefs) {
+		customRefsById.set(customRef.functionId, [
+			...(customRefsById.get(customRef.functionId) ?? []),
+			customRef,
+		]);
+	}
+	for (const [functionId, refs] of customRefsById) {
+		if (new Set(refs.map(({ displayName }) => displayName)).size <= 1) continue;
+		for (const _ref of refs) {
+			issues.push(functionIdentityIssue(
+				"team.data.function-identity-conflict",
+				"One custom Function ID represents inconsistent display names.",
+				functionId,
+			));
+		}
+	}
+	return issues;
+}
+
 export function validateProjectTeam(
 	team: ProjectTeam,
+	standardFunctionDefinitions: readonly TeamFunctionDefinition[],
 	context: TeamValidationContext = {},
 ): readonly ValidationIssue[] {
+	const definitions = definitionsById(standardFunctionDefinitions);
 	const projectRoleIssues = Object.values(team.projectRoles).flatMap(
 		(assignment) => {
 			if (assignment === null) {
@@ -361,7 +465,9 @@ export function validateProjectTeam(
 				const functionText =
 					functionTeam.function.kind === "custom"
 						? functionTeam.function.displayName
-						: (assignment.functionText ?? "");
+						: ((definitions.get(functionTeam.function.functionId)?.length === 1
+							? definitions.get(functionTeam.function.functionId)?.[0]?.displayName
+							: null) ?? "");
 				const classification = classifyTeamLabel(functionText, assignment.role);
 				return {
 					rowId: assignment.assignmentId,
@@ -384,7 +490,9 @@ export function validateProjectTeam(
 		const functionText =
 			entry.function.kind === "custom"
 				? entry.function.displayName
-				: entry.functionText;
+				: ((definitions.get(entry.function.functionId)?.length === 1
+					? definitions.get(entry.function.functionId)?.[0]?.displayName
+					: null) ?? "");
 		const classification = classifyTeamLabel(functionText, entry.roleText);
 		const exclusionMatches =
 			entry.restrictedRoleExclusion?.functionText === functionText &&
@@ -416,6 +524,7 @@ export function validateProjectTeam(
 
 	return [
 		...(context.importProblems ?? []).map(importProblemIssue),
+		...validateFunctionIdentity(team, standardFunctionDefinitions),
 		...projectRoleIssues,
 		...preservedEmailIssues,
 		...team.functions.flatMap((functionTeam) =>
