@@ -24,6 +24,13 @@ const restrictedLabels = new Map<string, RestrictedTeamRole>([
 	["QCI-BIOS-OWNER", "qciBiosOwner"],
 ]);
 
+const restrictedOwnerFunctions = new Map<string, RestrictedTeamRole>([
+	["QCI-ME", "qciMeOwner"],
+	["QCI-EE", "qciEeOwner"],
+	["QCI-THERMAL", "qciThermalOwner"],
+	["QCI-BIOS", "qciBiosOwner"],
+]);
+
 function normalizeLabel(value: string): string {
 	return value.trim().replace(/\s+/g, " ").toUpperCase();
 }
@@ -80,6 +87,12 @@ export function classifyTeamLabel(
 	const restricted = restrictedLabels.get(normalizeLabel(functionText));
 	if (restricted !== undefined) {
 		return { kind: "restricted", key: restricted };
+	}
+	if (normalizeLabel(roleText) === "OWNER") {
+		const restrictedOwner = restrictedOwnerFunctions.get(normalizeLabel(functionText));
+		if (restrictedOwner !== undefined) {
+			return { kind: "restricted", key: restrictedOwner };
+		}
 	}
 
 	if (isPossibleRestrictedLabel(functionText)) {

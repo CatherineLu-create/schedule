@@ -782,6 +782,171 @@ describe("saved Team editing", () => {
 		expect(baseTeam.functions[1]?.applicability).toBe("notApplicable");
 	});
 
+	it("keeps a buffered Mark Applicable decision through Add and reassignment", () => {
+		const targetId = toTeamFunctionId("buffered-applicability-target");
+		const sourceId = toTeamFunctionId("buffered-applicability-source");
+		const targetRef = { kind: "custom" as const, functionId: targetId, displayName: "Target Function" };
+		const baseTeam: ProjectTeam = {
+			...emptyTeam(),
+			functions: [
+				{
+					function: targetRef,
+					applicability: "notApplicable",
+					assignments: [{
+						assignmentId: toPersonAssignmentId("buffered-target-person"),
+						role: "member",
+						name: "Synthetic Target",
+						email: "target@example.test",
+					}],
+				},
+				{
+					function: { kind: "custom", functionId: sourceId, displayName: "Source Function" },
+					applicability: "applicable",
+					assignments: [{
+						assignmentId: toPersonAssignmentId("buffered-source-person"),
+						role: "member",
+						name: "Synthetic Source",
+						email: "source@example.test",
+					}],
+				},
+			],
+		};
+		const opened = createEditCandidate(projectId, baseTeam, standardDefinitions);
+		const targetRow = opened.rows.find(({ functionRef }) => functionRef?.functionId === targetId)!;
+		const sourceRow = opened.rows.find(({ functionRef }) => functionRef?.functionId === sourceId)!;
+		const markedApplicable = editTeamCandidate(
+			opened,
+			targetRow.rowId,
+			{ applicability: "applicable" },
+			standardDefinitions,
+		);
+		const { rowId: _rowId, assignmentId: _assignmentId, ...newRow } = targetRow;
+		const added = addTeamCandidateRow(
+			markedApplicable,
+			{
+				...newRow,
+				name: "Synthetic Added",
+				email: "added@example.test",
+				applicability: "notApplicable",
+			},
+			deterministicAssignmentFactory("buffered-added-person"),
+		);
+		const reassigned = assignCandidateFunction(
+			added,
+			sourceRow.rowId,
+			targetRef,
+			standardDefinitions,
+		);
+
+		expect(
+			reassigned.rows
+				.filter(({ functionRef }) => functionRef?.functionId === targetId)
+				.map(({ applicability }) => applicability),
+		).toEqual(["applicable", "applicable", "applicable"]);
+		expect(baseTeam.functions[0]?.applicability).toBe("notApplicable");
+	});
+
+	it("uses the one candidate-current non-null applicability instead of stale base metadata", () => {
+		const targetId = toTeamFunctionId("mixed-current-applicability-target");
+		const sourceId = toTeamFunctionId("mixed-current-applicability-source");
+		const targetRef = { kind: "custom" as const, functionId: targetId, displayName: "Mixed Target" };
+		const makeRow = (
+			rowId: string,
+			functionRef: TeamCandidateRow["functionRef"],
+			applicability: TeamCandidateRow["applicability"],
+		): TeamCandidateRow => ({
+			rowId,
+			assignmentId: toPersonAssignmentId(`${rowId}-assignment`),
+			functionText: functionRef?.kind === "custom" ? functionRef.displayName : "",
+			functionRef,
+			parsedRole: "member",
+			restrictedKey: null,
+			possibleRestricted: false,
+			restrictedRoleDecision: "unresolved",
+			roleText: "member",
+			name: rowId,
+			email: `${rowId}@example.test`,
+			extraCells: [],
+			sourceRows: [],
+			applicability,
+		});
+		const sourceRef = { kind: "custom" as const, functionId: sourceId, displayName: "Mixed Source" };
+		const candidate: TeamEditCandidate = {
+			projectId,
+			origin: "manual",
+			fileName: null,
+			baseTeam: {
+				...emptyTeam(),
+				functions: [{ function: targetRef, applicability: "notApplicable", assignments: [] }],
+			},
+			rows: [
+				makeRow("mixed-current-applicable", targetRef, "applicable"),
+				makeRow("mixed-current-null", targetRef, null),
+				makeRow("mixed-current-source", sourceRef, "applicable"),
+			],
+			excludedSourceRowIds: [],
+		};
+
+		const assigned = assignCandidateFunction(
+			candidate,
+			"mixed-current-source",
+			targetRef,
+			standardDefinitions,
+		);
+
+		expect(assigned.rows.find(({ rowId }) => rowId === "mixed-current-source")?.applicability).toBe("applicable");
+	});
+
+	it("keeps conflicting candidate-current applicability Blocking without falling back to base", () => {
+		const targetId = toTeamFunctionId("conflicting-current-applicability-target");
+		const sourceId = toTeamFunctionId("conflicting-current-applicability-source");
+		const targetRef = { kind: "custom" as const, functionId: targetId, displayName: "Conflict Target" };
+		const sourceRef = { kind: "custom" as const, functionId: sourceId, displayName: "Conflict Source" };
+		const row = (rowId: string, functionRef: typeof targetRef, applicability: "applicable" | "notApplicable"): TeamCandidateRow => ({
+			rowId,
+			assignmentId: toPersonAssignmentId(`${rowId}-assignment`),
+			functionText: functionRef.displayName,
+			functionRef,
+			parsedRole: "member",
+			restrictedKey: null,
+			possibleRestricted: false,
+			restrictedRoleDecision: "unresolved",
+			roleText: "member",
+			name: rowId,
+			email: `${rowId}@example.test`,
+			extraCells: [],
+			sourceRows: [],
+			applicability,
+		});
+		const candidate: TeamEditCandidate = {
+			projectId,
+			origin: "manual",
+			fileName: null,
+			baseTeam: {
+				...emptyTeam(),
+				functions: [{ function: targetRef, applicability: "notApplicable", assignments: [] }],
+			},
+			rows: [
+				row("conflicting-current-applicable", targetRef, "applicable"),
+				row("conflicting-current-not-applicable", targetRef, "notApplicable"),
+				row("conflicting-current-source", sourceRef, "applicable"),
+			],
+			excludedSourceRowIds: [],
+		};
+
+		const assigned = assignCandidateFunction(
+			candidate,
+			"conflicting-current-source",
+			targetRef,
+			standardDefinitions,
+		);
+
+		expect(assigned.rows.find(({ rowId }) => rowId === "conflicting-current-source")?.applicability).toBeNull();
+		expect(validateTeamEditCandidate(assigned, standardDefinitions)).toContainEqual(
+			expect.objectContaining({ code: "team.data.applicability-conflict", severity: "blocking" }),
+		);
+	});
+
 	it("clears source applicability when reassigned to a new custom Function", () => {
 		const oldFunctionId = toTeamFunctionId("old-function");
 		const candidate: TeamEditCandidate = {

@@ -18,6 +18,32 @@ describe("Team role mapping", () => {
 		});
 	});
 
+	it.each([
+		["QCI-ME", "qciMeOwner"],
+		["QCI-EE", "qciEeOwner"],
+		["QCI-Thermal", "qciThermalOwner"],
+		["QCI-BIOS", "qciBiosOwner"],
+	] as const)("maps the canonical Function and owner pair %s", (functionText, key) => {
+		expect(classifyTeamLabel(functionText, " owner ")).toEqual({
+			kind: "restricted",
+			key,
+		});
+	});
+
+	it.each([
+		["QCI-ME", "leader"],
+		["QCI-ME", "member"],
+		["QCMC", "owner"],
+		["EE ERD", "owner"],
+		["EE IQC", "owner"],
+		["QCI-ME Chrome", "owner"],
+		["QCI-ME Windows", "owner"],
+	] as const)("does not map the non-restricted Function/role pair %s + %s", (functionText, roleText) => {
+		expect(classifyTeamLabel(functionText, roleText)).not.toEqual(
+			expect.objectContaining({ kind: "restricted" }),
+		);
+	});
+
 	it("keeps QCI-PM-Leader as a general Leader", () => {
 		expect(classifyTeamLabel("QCI-PM-Leader", "")).toEqual({
 			kind: "functionRole",

@@ -26,6 +26,9 @@ import {
 } from "./application/commands/canonicalScheduleCommands";
 import { prototypeReducer } from "./application/state/prototypeReducer";
 import type { PrototypeState } from "./application/state/prototypeState";
+import { saveProjectTeamForState, type ProjectMismatchResult } from "./application/commands/teamSaveState";
+import type { SaveProjectTeamResult } from "./application/commands/teamCommands";
+import type { TeamEditCandidate } from "./application/teamImport/teamCandidate";
 import {
   selectDashboardProjectRow,
   selectDashboardProjectRows,
@@ -44,7 +47,7 @@ import {
   type CreateProjectInterpretation,
   type DuplicateProjectDecisionRequest,
 } from "./application/workflow/workflowInterpretation";
-import { milestoneDefinitions, statusCatalog } from "./config/v2/referenceData";
+import { milestoneDefinitions, statusCatalog, teamFunctionCatalog } from "./config/v2/referenceData";
 import type { Project } from "./domain/project/project";
 import {
   createEmptyCanonicalProjectSchedule,
@@ -54,7 +57,9 @@ import type { CatalogItem } from "./domain/reference-data/catalog";
 import {
   toCatalogItemId,
   toMilestoneId,
+  toPersonAssignmentId,
   toProjectId,
+  toTeamFunctionId,
   type CatalogItemId,
   type MilestoneDefinitionId,
   type MilestoneId,
@@ -81,6 +86,7 @@ import {
   type ProjectMasterForm,
 } from "./projectMasterForm";
 import { ScheduleWorkspace, type ScheduleWorkspaceProps } from "./scheduleWorkspace";
+import { TeamMemberWorkspace, type TeamMemberWorkspaceProps } from "./teamMemberWorkspace";
 import {
   defaultTeamMemberFields,
   type TeamMembersState,
@@ -171,6 +177,8 @@ export function App({
     initialSelectedProjectId === null ? "dashboard" : "workspace",
   );
   const [state, dispatch] = React.useReducer(prototypeReducer, initialState);
+  const stateRef = React.useRef(state);
+  stateRef.current = state;
   const [selectedProjectId, setSelectedProjectId] =
     React.useState<ProjectId | null>(initialSelectedProjectId);
   const [isCreateProjectOpen, setIsCreateProjectOpen] = React.useState(false);
@@ -203,6 +211,34 @@ export function App({
   const selectedScheduleOwner = selectedProjectId === null
     ? null
     : resolveCanonicalScheduleOwner(state, selectedProjectId);
+
+  const saveTeam = (
+    projectId: ProjectId,
+    candidate: TeamEditCandidate,
+  ): SaveProjectTeamResult | ProjectMismatchResult => {
+    if (selectedProjectId !== projectId || candidate.projectId !== projectId) {
+      return {
+        ok: false,
+        reason: "projectMismatch",
+        issues: [{
+          code: "team.data.project-mismatch",
+          domain: "team",
+          source: "data",
+          severity: "blocking",
+          message: "Team candidate belongs to a different selected Project.",
+          target: { section: "team", entityId: projectId },
+        }],
+      };
+    }
+    const result = saveProjectTeamForState(
+      stateRef.current,
+      projectId,
+      candidate,
+      teamFunctionCatalog,
+    );
+    if (result.ok) dispatch({ type: "projectReplaced", project: result.project });
+    return result;
+  };
 
   const dispatchScheduleReplacement = (
     projectId: ProjectId,
@@ -523,6 +559,12 @@ export function App({
           project={selectedCanonicalProject}
           row={selectedDashboardRow}
           scheduleWorkspaceProps={scheduleWorkspaceProps}
+          teamMemberWorkspaceProps={{
+            createAssignmentId: () => toPersonAssignmentId(globalThis.crypto.randomUUID()),
+            createFunctionId: () => toTeamFunctionId(globalThis.crypto.randomUUID()),
+            onSave: saveTeam,
+            standardFunctionDefinitions: teamFunctionCatalog,
+          }}
         />
       )}
       {isCreateProjectOpen && (
@@ -770,6 +812,7 @@ export interface ProjectWorkspaceProps {
   readonly project: Project;
   readonly row: DashboardProjectRow;
   readonly scheduleWorkspaceProps: ScheduleWorkspaceProps;
+  readonly teamMemberWorkspaceProps?: Omit<TeamMemberWorkspaceProps, "project" | "onBack">;
 }
 
 export function ProjectWorkspace({
@@ -779,7 +822,24 @@ export function ProjectWorkspace({
   project,
   row,
   scheduleWorkspaceProps,
+  teamMemberWorkspaceProps,
 }: ProjectWorkspaceProps): React.ReactElement {
+  const [openTeam, setOpenTeam] = React.useState(false);
+
+  React.useEffect(() => {
+    setOpenTeam(false);
+  }, [project.id]);
+
+  if (openTeam && teamMemberWorkspaceProps !== undefined) {
+    return (
+      <TeamMemberWorkspace
+        {...teamMemberWorkspaceProps}
+        onBack={() => setOpenTeam(false)}
+        project={project}
+      />
+    );
+  }
+
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5 px-6 py-6">
       <button className="w-fit text-sm text-slate-600 underline" onClick={onBack}>
@@ -852,10 +912,11 @@ export function ProjectWorkspace({
           </div>
           <div className="rounded-md border border-slate-300 p-4">
             <h3 className="font-semibold">Team Member</h3>
-            <div className="mt-2 text-sm text-slate-600">Migration pending</div>
+            <div className="mt-2 text-sm text-slate-600">View and edit the canonical Team</div>
             <button
               className="mt-3 rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-              disabled
+              disabled={teamMemberWorkspaceProps === undefined}
+              onClick={() => setOpenTeam(true)}
               type="button"
             >
               Open Team Member

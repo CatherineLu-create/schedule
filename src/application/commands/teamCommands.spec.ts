@@ -4,10 +4,10 @@ import {
 	devProject002,
 	devProject005,
 } from "../../fixtures/v2/canonicalProjectFixtures";
+import { teamFunctionCatalog } from "../../config/v2/referenceData";
 import {
 	applicableWithoutOwnerTeamCandidate,
 	missingEmailTeamCandidate,
-	multipleOwnerTeamCandidate,
 	multipleRestrictedOwnerTeamCandidate,
 } from "../../fixtures/v2/teamCandidateFixtures";
 import {
@@ -37,6 +37,43 @@ function saveTeam(
 }
 
 describe("Team Save command", () => {
+	it("blocks two canonical QCI-ME owner assignments without a raw Excel label", () => {
+		const qciMe = teamFunctionCatalog[0]!;
+		const team: ProjectTeam = {
+			projectRoles: { qciPm: null, qciPjm: null, acerPm: null },
+			functions: [{
+				function: { kind: "standard", functionId: qciMe.id },
+				applicability: "applicable",
+				assignments: [
+					{
+						assignmentId: toPersonAssignmentId("canonical-qci-me-owner-one"),
+						role: "owner",
+						name: "Synthetic Owner One",
+						email: "owner.one@example.test",
+					},
+					{
+						assignmentId: toPersonAssignmentId("canonical-qci-me-owner-two"),
+						role: "owner",
+						name: "Synthetic Owner Two",
+						email: "owner.two@example.test",
+					},
+				],
+			}],
+			preservedUnclassifiedEntries: [],
+			appliedTemplate: null,
+		};
+
+		const result = saveTeam(devProject002, team, teamFunctionCatalog);
+
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.issues).toContainEqual(expect.objectContaining({
+			code: "team.data.restricted-role-multiple",
+			severity: "blocking",
+		}));
+		expect(result).not.toHaveProperty("project");
+	});
+
 	it("rejects a Team containing Blocking issues", () => {
 		const restrictedDefinitions = devTeamFunctionDefinitions.map((definition) =>
 			definition.id === devMeTeamFunctionDefinition.id
@@ -62,7 +99,34 @@ describe("Team Save command", () => {
 	});
 
 	it("allows multiple nonrestricted Owners without a count issue", () => {
-		const result = saveTeam(devProject002, multipleOwnerTeamCandidate);
+		const team: ProjectTeam = {
+			projectRoles: { qciPm: null, qciPjm: null, acerPm: null },
+			functions: [{
+				function: {
+					kind: "custom",
+					functionId: toTeamFunctionId("nonrestricted-multiple-owner"),
+					displayName: "Synthetic Support",
+				},
+				applicability: "applicable",
+				assignments: [
+					{
+						assignmentId: toPersonAssignmentId("nonrestricted-owner-one"),
+						role: "owner",
+						name: "Synthetic Owner One",
+						email: "nonrestricted.one@example.test",
+					},
+					{
+						assignmentId: toPersonAssignmentId("nonrestricted-owner-two"),
+						role: "owner",
+						name: "Synthetic Owner Two",
+						email: "nonrestricted.two@example.test",
+					},
+				],
+			}],
+			preservedUnclassifiedEntries: [],
+			appliedTemplate: null,
+		};
+		const result = saveTeam(devProject002, team);
 
 		expect(result.ok).toBe(true);
 		expect(result.issues).not.toEqual(

@@ -24,8 +24,16 @@ import type { Project } from "../../domain/project/project";
 import type { CanonicalProjectSchedule } from "../../domain/schedule/officialSchedule";
 import type { ScheduleVersionNumber } from "../../domain/schedule/schedule";
 import { toMilestoneDefinitionId } from "../../domain/shared/ids";
-import { devProject001, devProject003 } from "../../fixtures/v2/canonicalProjectFixtures";
-import { devSchedule001 } from "../../fixtures/v2/canonicalScheduleFixtures";
+import {
+  canonicalProjectFixtures,
+  devProject001,
+  devProject002,
+  devProject003,
+} from "../../fixtures/v2/canonicalProjectFixtures";
+import {
+  canonicalScheduleFixtures,
+  devSchedule001,
+} from "../../fixtures/v2/canonicalScheduleFixtures";
 import type { ScheduleWorkspaceProps } from "../../scheduleWorkspace";
 import {
   App,
@@ -275,8 +283,9 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
       .map((heading) => heading.textContent)).toEqual([
         "Schedule", "Team Member", "Weekly Report", "AVL",
       ]);
-    expect(within(resources).getAllByText("Migration pending")).toHaveLength(3);
-    for (const name of ["Open Team Member", "Open Weekly Report", "Open AVL"]) {
+    expect(within(resources).getAllByText("Migration pending")).toHaveLength(2);
+    expect(within(resources).getByRole("button", { name: "Open Team Member" })).toBeEnabled();
+    for (const name of ["Open Weekly Report", "Open AVL"]) {
       expect(within(resources).getByRole("button", { name })).toBeDisabled();
     }
   });
@@ -983,7 +992,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(screen.getByRole("heading", { name: "Project Master" })).toBeInTheDocument();
   }, 10_000);
 
-  it("shows Manta's canonical Current Published Schedule by ProjectId while keeping Team Member gated", () => {
+  it("shows Manta's canonical Current Published Schedule by ProjectId and opens Team Member", () => {
     render(<App />);
     openProjectByName("Manta");
 
@@ -994,13 +1003,13 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
       "Schedule", "Team Member", "Weekly Report", "AVL",
     ]);
     expect(within(resources).queryByText("Project Master")).not.toBeInTheDocument();
-    expect(within(resources).getAllByText("Migration pending")).toHaveLength(3);
+    expect(within(resources).getAllByText("Migration pending")).toHaveLength(2);
     expect(within(resources).getByText("Shown below")).toBeInTheDocument();
     expect(within(resources).queryByRole("button", { name: "Open Schedule" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open Team Member" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Open Team Member" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Open Weekly Report" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Open AVL" })).toBeDisabled();
-    expect(screen.getAllByText("Migration pending")).toHaveLength(3);
+    expect(screen.getAllByText("Migration pending")).toHaveLength(2);
 
     const scheduleView = screen.getByRole("region", { name: "Current Schedule" });
     expect(within(scheduleView).getByText("Published v01")).toBeInTheDocument();
@@ -1008,8 +1017,10 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(projectHeader()).toHaveAttribute("data-project-id", "dev-project-001");
 
     fireEvent.click(screen.getByRole("button", { name: "Open Team Member" }));
-    expect(screen.queryByRole("heading", { name: "Team Members" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Team Member" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Current Schedule" })).not.toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
     fireEvent.click(screen.getByRole("button", { name: "← Dashboard" }));
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
     openProjectByName("Nautilus");
@@ -1019,6 +1030,40 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(within(nextScheduleView).getByText("-")).toBeInTheDocument();
     expect(within(nextScheduleView).queryByText("No published schedule")).not.toBeInTheDocument();
     expect(within(nextScheduleView).queryByText(/^Published v/)).not.toBeInTheDocument();
+  });
+
+  it("saves only the selected Project Team through one projectReplaced transition", () => {
+    render(<App initialSelectedProjectId={devProject002.id} />);
+    const initialSchedule = devSchedule001;
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Team Member" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit Team" }));
+    fireEvent.change(screen.getByDisplayValue("DEV ME Owner"), {
+      target: { value: "Saved ME Owner" },
+    });
+    vi.mocked(prototypeReducer).mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Save Team" }));
+
+    const replacements = vi.mocked(prototypeReducer).mock.calls.filter(
+      ([, action]) => action.type === "projectReplaced",
+    );
+    expect(replacements).toHaveLength(1);
+    expect(replacements[0]?.[1]).toMatchObject({
+      type: "projectReplaced",
+      project: { id: devProject002.id },
+    });
+    const reduced = lastReducedState();
+    const saved = reduced.projects.find(({ id }) => id === devProject002.id)!;
+    expect(saved.team?.functions.flatMap(({ assignments }) => assignments)
+      .find(({ assignmentId }) => assignmentId === "dev-saved-team-me-owner")?.name)
+      .toBe("Saved ME Owner");
+    expect(saved.master).toEqual(devProject002.master);
+    expect(saved.identityAliases).toEqual(devProject002.identityAliases);
+    expect(reduced.projects.filter(({ id }) => id !== devProject002.id))
+      .toEqual(canonicalProjectFixtures.filter(({ id }) => id !== devProject002.id));
+    expect(reduced.schedules).toEqual(canonicalScheduleFixtures);
+    expect(reduced.schedules.find(({ projectId }) => projectId === initialSchedule.projectId))
+      .toEqual(initialSchedule);
   });
 
   it("shows the valid no-Published Schedule state", () => {

@@ -431,15 +431,16 @@ export function renameCustomCandidateFunction(
 
 function targetApplicability(
 	candidate: TeamEditCandidate,
-	rowId: string,
+	rowId: string | null,
 	functionRef: ProjectFunctionRef,
 ): FunctionApplicability | null {
-	const bufferedValues = new Set(
+	const bufferedValues = new Set<FunctionApplicability>(
 		candidate.rows
 			.filter((row) => row.rowId !== rowId && row.functionRef !== null && sameFunctionRef(row.functionRef, functionRef))
-			.map(({ applicability }) => applicability),
+			.flatMap(({ applicability }) => applicability === null ? [] : [applicability]),
 	);
 	if (bufferedValues.size === 1) return [...bufferedValues][0]!;
+	if (bufferedValues.size > 1) return null;
 	return applicabilityFor(candidate.baseTeam, functionRef);
 }
 
@@ -519,9 +520,12 @@ export function addTeamCandidateRow(
 		rowId = `${rowIdBase}::${suffix}`;
 		suffix += 1;
 	}
+	const applicability = row.functionRef === null
+		? row.applicability
+		: targetApplicability(candidate, null, row.functionRef);
 	return {
 		...candidate,
-		rows: [...candidate.rows, { ...row, rowId, assignmentId }],
+		rows: [...candidate.rows, { ...row, applicability, rowId, assignmentId }],
 	};
 }
 

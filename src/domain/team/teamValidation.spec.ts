@@ -5,7 +5,6 @@ import {
 	applicableWithoutOwnerTeamCandidate,
 	missingEmailTeamCandidate,
 	multipleLeaderTeamCandidate,
-	multipleOwnerTeamCandidate,
 	notApplicableWithPeopleTeamCandidate,
 } from "../../fixtures/v2/teamCandidateFixtures";
 import {
@@ -36,7 +35,34 @@ function summaries(team: ProjectTeam) {
 
 describe("Project Team validation", () => {
 	it("does not emit a count issue for multiple nonrestricted Owners", () => {
-		const issues = summaries(multipleOwnerTeamCandidate);
+		const team: ProjectTeam = {
+			projectRoles: { qciPm: null, qciPjm: null, acerPm: null },
+			functions: [{
+				function: {
+					kind: "custom",
+					functionId: toTeamFunctionId("validation-nonrestricted-owner"),
+					displayName: "Synthetic Support",
+				},
+				applicability: "applicable",
+				assignments: [
+					{
+						assignmentId: toPersonAssignmentId("validation-nonrestricted-owner-one"),
+						role: "owner",
+						name: "Synthetic Owner One",
+						email: "validation.owner.one@example.test",
+					},
+					{
+						assignmentId: toPersonAssignmentId("validation-nonrestricted-owner-two"),
+						role: "owner",
+						name: "Synthetic Owner Two",
+						email: "validation.owner.two@example.test",
+					},
+				],
+			}],
+			preservedUnclassifiedEntries: [],
+			appliedTemplate: null,
+		};
+		const issues = summaries(team);
 		expect(issues).not.toContainEqual(
 			expect.objectContaining({ code: "team.data.multiple-owners" }),
 		);
