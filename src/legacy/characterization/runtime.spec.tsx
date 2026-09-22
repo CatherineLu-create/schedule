@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import React from "react";
 import * as XLSX from "xlsx";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -19,6 +19,7 @@ import {
 } from "../../application/selectors/scheduleSelectors";
 import { prototypeReducer } from "../../application/state/prototypeReducer";
 import type { PrototypeState } from "../../application/state/prototypeState";
+import { inspectTeamImport } from "../../application/teamImport/teamImport";
 import { milestoneDefinitions } from "../../config/v2/referenceData";
 import type { Project } from "../../domain/project/project";
 import type { CanonicalProjectSchedule } from "../../domain/schedule/officialSchedule";
@@ -50,16 +51,17 @@ vi.mock("../../application/state/prototypeReducer", async (importOriginal) => {
   return { ...actual, prototypeReducer: vi.fn(actual.prototypeReducer) };
 });
 
-vi.mock("xlsx", () => ({
-  utils: {
-    json_to_sheet: vi.fn(() => ({})),
-    book_new: vi.fn(() => ({})),
-    book_append_sheet: vi.fn(),
-    sheet_to_json: vi.fn(() => []),
-  },
-  writeFile: vi.fn(),
-  read: vi.fn(),
-}));
+vi.mock("xlsx", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("xlsx")>();
+  return {
+    ...actual,
+    utils: {
+      ...actual.utils,
+      json_to_sheet: vi.fn(actual.utils.json_to_sheet),
+    },
+    writeFile: vi.fn(),
+  };
+});
 
 const fixedUuid = "11111111-1111-4111-8111-111111111111";
 
@@ -1066,6 +1068,53 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
       .toEqual(initialSchedule);
   });
 
+  it("atomically replaces only the selected Project Team after imported Save confirmation", async () => {
+    render(<App initialSelectedProjectId={devProject002.id} />);
+    fireEvent.click(screen.getByRole("button", { name: "Open Team Member" }));
+    const encoded = new TextEncoder().encode([
+      "Function,Member,email",
+      "Custom Lab-Member,Runtime Imported,runtime-imported@example.test",
+    ].join("\n"));
+    const file = {
+      name: "runtime-team.csv",
+      arrayBuffer: vi.fn(async () => encoded.buffer.slice(
+        encoded.byteOffset,
+        encoded.byteOffset + encoded.byteLength,
+      ) as ArrayBuffer),
+    } as unknown as File;
+
+    fireEvent.change(screen.getByLabelText("Import Team Member file"), {
+      target: { files: [file] },
+    });
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Import Team preview" })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Save imported Team" }));
+    expect(screen.getByRole("dialog", { name: "Confirm whole Team replacement" })).toBeInTheDocument();
+
+    vi.mocked(prototypeReducer).mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Replace & Save" }));
+
+    const replacements = vi.mocked(prototypeReducer).mock.calls.filter(
+      ([, action]) => action.type === "projectReplaced",
+    );
+    expect(replacements).toHaveLength(1);
+    expect(replacements[0]?.[1]).toMatchObject({
+      type: "projectReplaced",
+      project: { id: devProject002.id },
+    });
+    const reduced = lastReducedState();
+    const saved = reduced.projects.find(({ id }) => id === devProject002.id)!;
+    expect(saved.team?.functions.flatMap(({ assignments }) => assignments).map(({ name }) => name))
+      .toEqual(["Runtime Imported"]);
+    expect(saved.master).toEqual(devProject002.master);
+    expect(saved.identityAliases).toEqual(devProject002.identityAliases);
+    expect(reduced.projects.filter(({ id }) => id !== devProject002.id))
+      .toEqual(canonicalProjectFixtures.filter(({ id }) => id !== devProject002.id));
+    expect(reduced.schedules).toEqual(canonicalScheduleFixtures);
+    expect(screen.getByRole("heading", { name: "Team Member" })).toBeInTheDocument();
+    expect(screen.getAllByText("Runtime Imported").length).toBeGreaterThan(0);
+    expect(screen.queryByText("DEV ME Owner")).not.toBeInTheDocument();
+  });
+
   it("shows the valid no-Published Schedule state", () => {
     render(<App />);
     openProjectByName("Nautilus");
@@ -1140,6 +1189,32 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     for (const row of exportedRows) expect(Object.keys(row)).toEqual([
       "Year", "Customer", "Product Line", "Project Name", "QCI Model Name", "Acer Model Name", "Acer Marketing Name", "Panel Size", "CPU", "GPU", "SSID", "RMN", "Project Status", "Current Stage", "MDRR",
     ]);
+  });
+
+  it("keeps real XLSX workbook parsing available beside Project export spies", () => {
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet([
+        ["Function", "Member", "email"],
+        ["QCI-ME-Owner", "Runtime Import", "runtime-import@example.test"],
+      ]),
+      "Roster",
+    );
+    const bytes = XLSX.write(workbook, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
+
+    const result = inspectTeamImport({
+      fileName: "runtime.xlsx",
+      extension: "xlsx",
+      bytes,
+    });
+
+    expect(result.kind).toBe("ready");
+    if (result.kind !== "ready") return;
+    expect(result.sheet.rows[0]?.cells).toContainEqual(expect.objectContaining({
+      headerText: "Member",
+      rawValue: "Runtime Import",
+    }));
   });
 
   it("rejects missing Create fields without adding a Project", () => {

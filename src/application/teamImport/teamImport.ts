@@ -9,6 +9,25 @@ export interface TeamImportFile {
 	readonly bytes: ArrayBuffer;
 }
 
+const supportedExtensions = new Set<TeamImportFile["extension"]>([
+	"csv",
+	"xls",
+	"xlsx",
+]);
+
+export async function readTeamImportFile(file: File): Promise<TeamImportFile> {
+	const separator = file.name.lastIndexOf(".");
+	const extension = separator > 0 ? file.name.slice(separator + 1).toLowerCase() : undefined;
+	if (!supportedExtensions.has(extension as TeamImportFile["extension"])) {
+		throw new Error("Only CSV, XLS, and XLSX Team files are supported.");
+	}
+	return {
+		fileName: file.name,
+		extension: extension as TeamImportFile["extension"],
+		bytes: await file.arrayBuffer(),
+	};
+}
+
 export interface TeamParsedSheet {
 	readonly fileName: string;
 	readonly sheetName: string;

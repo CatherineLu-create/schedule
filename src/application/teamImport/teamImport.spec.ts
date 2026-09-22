@@ -15,6 +15,7 @@ vi.mock("xlsx", async (importOriginal) => {
 
 import {
 	inspectTeamImport,
+	readTeamImportFile,
 	selectTeamImportSheet,
 	type TeamImportFile,
 } from "./teamImport";
@@ -114,6 +115,41 @@ afterEach(() => {
 });
 
 describe("Team roster file inspection", () => {
+	it.each([
+		["team.csv", "csv"],
+		["team.XLS", "xls"],
+		["team.xlsx", "xlsx"],
+	] as const)("reads supported browser file bytes for %s", async (fileName, extension) => {
+		const bytes = new Uint8Array([1, 2, 3]).buffer;
+		const file = { fileName, name: fileName, arrayBuffer: vi.fn(async () => bytes) } as unknown as File;
+
+		await expect(readTeamImportFile(file)).resolves.toEqual({ fileName, extension, bytes });
+		expect(file.arrayBuffer).toHaveBeenCalledTimes(1);
+	});
+
+	it("rejects an unsupported extension before reading the browser file", async () => {
+		const file = { name: "team.txt", arrayBuffer: vi.fn(async () => new ArrayBuffer(0)) } as unknown as File;
+
+		await expect(readTeamImportFile(file)).rejects.toThrow(/Only CSV, XLS, and XLSX/);
+		expect(file.arrayBuffer).not.toHaveBeenCalled();
+	});
+
+	it.each(["csv", "xls", "xlsx"])("rejects the extensionless filename %s before reading bytes", async (fileName) => {
+		const file = { name: fileName, arrayBuffer: vi.fn(async () => new ArrayBuffer(0)) } as unknown as File;
+
+		await expect(readTeamImportFile(file)).rejects.toThrow(/Only CSV, XLS, and XLSX/);
+		expect(file.arrayBuffer).not.toHaveBeenCalled();
+	});
+
+	it("reports an unreadable supported browser file without parsing it", async () => {
+		const file = {
+			name: "broken.csv",
+			arrayBuffer: vi.fn(async () => { throw new Error("Synthetic byte read failure"); }),
+		} as unknown as File;
+
+		await expect(readTeamImportFile(file)).rejects.toThrow("Synthetic byte read failure");
+	});
+
 	it.each([
 		["B3:E3-like", [[], [], [null, "Function", "Member", "email", "Tel. No."], [null, "QCI-ME-Owner", "Synthetic Owner", "owner@example.test", 123456]], 3],
 		["shifted", [[], [], [], [], ["email", "Function", "Member"], ["shifted@example.test", "Custom Shifted-Owner", "Synthetic Shifted"]], 5],

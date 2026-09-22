@@ -1,11 +1,13 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import React from "react";
+import * as XLSX from "xlsx";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { saveProjectTeamForState } from "./application/commands/teamSaveState";
 import { teamFunctionCatalog } from "./config/v2/referenceData";
 import type { Project } from "./domain/project/project";
 import {
   toPersonAssignmentId,
+  toProjectId,
   toTeamFunctionId,
   type PersonAssignmentId,
   type TeamFunctionId,
@@ -104,6 +106,88 @@ function onePersonTeam(overrides: Partial<ProjectTeam> = {}): ProjectTeam {
     appliedTemplate: null,
     ...overrides,
   };
+}
+
+function browserFile(fileName: string, bytes: ArrayBuffer): File {
+  return {
+    name: fileName,
+    arrayBuffer: vi.fn(async () => bytes),
+  } as unknown as File;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+function deferredBrowserFile(fileName: string) {
+  const bytes = deferred<ArrayBuffer>();
+  const file = {
+    name: fileName,
+    arrayBuffer: vi.fn(() => bytes.promise),
+  } as unknown as File;
+  return { file, bytes };
+}
+
+function csvBytes(name: string): ArrayBuffer {
+  const encoded = new TextEncoder().encode([
+    "Function,Member,email",
+    `Custom Lab-Member,${name},${name.toLowerCase().replaceAll(" ", "-")}@example.test`,
+  ].join("\n"));
+  return encoded.buffer.slice(encoded.byteOffset, encoded.byteOffset + encoded.byteLength) as ArrayBuffer;
+}
+
+async function resolveFile(
+  pending: ReturnType<typeof deferredBrowserFile>,
+  name: string,
+): Promise<void> {
+  await act(async () => {
+    pending.bytes.resolve(csvBytes(name));
+    await pending.bytes.promise;
+  });
+}
+
+function csvImportFile(fileName: string, rows: readonly string[]): File {
+  const bytes = new TextEncoder().encode(rows.join("\n"));
+  return browserFile(
+    fileName,
+    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+  );
+}
+
+function workbookImportFile(
+  fileName: string,
+  bookType: "xls" | "xlsx",
+  sheets: readonly { readonly name: string; readonly rows: readonly (readonly unknown[])[] }[],
+): File {
+  const workbook = XLSX.utils.book_new();
+  for (const definition of sheets) {
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.aoa_to_sheet(definition.rows.map((row) => [...row])),
+      definition.name,
+    );
+  }
+  const written = XLSX.write(workbook, { type: "array", bookType });
+  const bytes = written instanceof ArrayBuffer
+    ? written
+    : new Uint8Array(written).buffer;
+  return browserFile(fileName, bytes);
+}
+
+function selectImportFile(file: File): void {
+  fireEvent.change(screen.getByLabelText("Import Team Member file"), {
+    target: { files: [file] },
+  });
+}
+
+async function waitForImportPreview(): Promise<HTMLElement> {
+  return screen.findByRole("heading", { name: "Import Team preview" });
 }
 
 describe("Team Member workspace", () => {
@@ -682,5 +766,420 @@ describe("Team Member workspace", () => {
     );
     expect(screen.queryByRole("heading", { name: "Edit Team" })).not.toBeInTheDocument();
     expect(screen.getByText("No Team members saved.")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["csv", () => csvImportFile("team.csv", ["Function,Member,email", "QCI-ME-Owner,CSV Person,csv@example.test"])],
+    ["xls", () => workbookImportFile("team.xls", "xls", [{ name: "Roster", rows: [["Function", "Member", "email"], ["QCI-ME-Owner", "XLS Person", "xls@example.test"]] }])],
+    ["xlsx", () => workbookImportFile("team.xlsx", "xlsx", [{ name: "Roster", rows: [["Function", "Member", "email"], ["QCI-ME-Owner", "XLSX Person", "xlsx@example.test"]] }])],
+  ] as const)("accepts a real %s file and enters an unsaved import preview", async (extension, makeFile) => {
+    const project = projectWithTeam(null);
+    const onSave = vi.fn(successfulSave(project));
+    renderWorkspace({ project, onSave });
+
+    selectImportFile(makeFile());
+
+    await waitForImportPreview();
+    expect(screen.getAllByText(`File: team.${extension}`).length).toBeGreaterThan(0);
+    expect(screen.getByDisplayValue(new RegExp(`${extension.toUpperCase()} Person`, "i"))).toBeInTheDocument();
+    expect(project.team).toBeNull();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unsupported extension before reading bytes", async () => {
+    const file = browserFile("team.txt", new ArrayBuffer(4));
+    renderWorkspace({ project: projectWithTeam(null) });
+
+    selectImportFile(file);
+
+    expect(await screen.findByText(/Only CSV, XLS, and XLSX Team files are supported/)).toBeInTheDocument();
+    expect(file.arrayBuffer).not.toHaveBeenCalled();
+  });
+
+  it("preserves an exact dirty manual edit when import reading fails", async () => {
+    const file = {
+      name: "broken.csv",
+      arrayBuffer: vi.fn(async () => { throw new Error("Synthetic read failure"); }),
+    } as unknown as File;
+    renderWorkspace();
+    startEditing();
+    fireEvent.change(screen.getByDisplayValue("DEV ME Owner"), { target: { value: "Unsaved exact edit" } });
+
+    selectImportFile(file);
+    const consent = screen.getByRole("dialog", { name: "Replace unsaved Team edits" });
+    fireEvent.click(within(consent).getByRole("button", { name: "Continue with import" }));
+
+    expect(await screen.findByText(/Synthetic read failure/)).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Unsaved exact edit")).toBeInTheDocument();
+  });
+
+  it("requires explicit sheet selection and never merges matching sheets", async () => {
+    renderWorkspace({ project: projectWithTeam(null) });
+    selectImportFile(workbookImportFile("two-sheets.xlsx", "xlsx", [
+      { name: "Roster A", rows: [["Function", "Member", "email"], ["QCI-ME-Owner", "Sheet A Person", "a@example.test"]] },
+      { name: "Roster B", rows: [["Function", "Member", "email"], ["QCI-EE-Owner", "Sheet B Person", "b@example.test"]] },
+    ]));
+
+    const choice = await screen.findByRole("region", { name: "Choose Team import sheet" });
+    expect(within(choice).getByText(/Roster A.*1 person row/)).toBeInTheDocument();
+    expect(within(choice).getByText(/Roster B.*1 person row/)).toBeInTheDocument();
+    expect(screen.queryByText("Sheet A Person")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sheet B Person")).not.toBeInTheDocument();
+    fireEvent.click(within(choice).getByRole("button", { name: "Use Roster B" }));
+
+    await waitForImportPreview();
+    expect(screen.getByDisplayValue("Sheet B Person")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Sheet A Person")).not.toBeInTheDocument();
+  });
+
+  it("asks before superseding a dirty manual edit and Cancel Import restores it exactly", async () => {
+    renderWorkspace();
+    startEditing();
+    fireEvent.change(screen.getByDisplayValue("DEV ME Owner"), { target: { value: "Preserved manual edit" } });
+    const file = csvImportFile("replacement.csv", [
+      "Function,Member,email",
+      "QCI-ME-Owner,Imported Replacement,replacement@example.test",
+    ]);
+
+    selectImportFile(file);
+    let consent = screen.getByRole("dialog", { name: "Replace unsaved Team edits" });
+    fireEvent.click(within(consent).getByRole("button", { name: "Keep current edit" }));
+    expect(screen.getByDisplayValue("Preserved manual edit")).toBeInTheDocument();
+    expect(file.arrayBuffer).not.toHaveBeenCalled();
+
+    selectImportFile(file);
+    consent = screen.getByRole("dialog", { name: "Replace unsaved Team edits" });
+    fireEvent.click(within(consent).getByRole("button", { name: "Continue with import" }));
+    await waitForImportPreview();
+    expect(screen.getByDisplayValue("Imported Replacement")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel Import" }));
+    expect(screen.getByDisplayValue("Preserved manual edit")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Import Team preview" })).not.toBeInTheDocument();
+  });
+
+  it("keeps import preview corrections and explicit exclusions local", async () => {
+    const project = projectWithTeam(onePersonTeam());
+    const onSave = vi.fn(successfulSave(project));
+    renderWorkspace({ project, onSave });
+    selectImportFile(csvImportFile("preview.csv", [
+      "Function,Member,email,Note",
+      "QCI-ME-Owner,Imported One,one-import@example.test,Original note",
+      "QCI-EE-Owner,Imported Two,two-import@example.test,Exclude me",
+    ]));
+    await waitForImportPreview();
+
+    fireEvent.change(screen.getByDisplayValue("Imported One"), { target: { value: "Corrected Imported One" } });
+    const secondRow = screen.getByDisplayValue("Imported Two").closest<HTMLElement>('[data-testid="team-candidate-row"]')!;
+    fireEvent.click(within(secondRow).getByRole("button", { name: "Exclude imported row" }));
+
+    expect(screen.getByDisplayValue("Corrected Imported One")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Imported Two")).not.toBeInTheDocument();
+    expect(screen.getByText("Excluded imported rows: 1")).toBeInTheDocument();
+    const excluded = screen.getByRole("region", { name: "Excluded imported rows" });
+    expect(excluded).toHaveTextContent("Name: Imported Two");
+    expect(excluded).toHaveTextContent("Original Function: QCI-EE-Owner");
+    expect(excluded).toHaveTextContent("File: preview.csv");
+    expect(excluded).toHaveTextContent("Row: 3");
+    expect(screen.getByText("Original Function: QCI-ME-Owner")).toBeInTheDocument();
+    expect(project.team).toEqual(onePersonTeam());
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("blocks a zero-effective-row import without invoking manual clear or replacement", async () => {
+    const project = projectWithTeam(onePersonTeam());
+    const onSave = vi.fn(successfulSave(project));
+    renderWorkspace({ project, onSave });
+    selectImportFile(csvImportFile("empty.csv", ["Function,Member,email"]));
+    await waitForImportPreview();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save imported Team" }));
+
+    expect(screen.getByText(/Import must contain at least one effective roster row/)).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Confirm manual clear" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Confirm whole Team replacement" })).not.toBeInTheDocument();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("shows exact whole-replace context and saves the import rather than merging", async () => {
+    const project = projectWithTeam(onePersonTeam());
+    const onSave = vi.fn(successfulSave(project));
+    renderWorkspace({ project, onSave });
+    selectImportFile(csvImportFile("replacement.csv", [
+      "Function,Member,email",
+      "Custom Lab-Member,Imported Same,same@example.test",
+      "Custom Lab-Member,Imported Same,same@example.test",
+      "Custom Lab-Member,Imported Same,other@example.test",
+    ]));
+    await waitForImportPreview();
+    expect(screen.getByText("Raw parsed rows: 3")).toBeInTheDocument();
+    expect(screen.getByText("Effective roster rows: 2")).toBeInTheDocument();
+    expect(project.team?.functions[0]?.assignments[0]?.name).toBe("One Person");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save imported Team" }));
+    let dialog = screen.getByRole("dialog", { name: "Confirm whole Team replacement" });
+    expect(within(dialog).getByText("Project: Nautilus")).toBeInTheDocument();
+    expect(within(dialog).getByText("File: replacement.csv")).toBeInTheDocument();
+    expect(within(dialog).getByText("Existing roster rows: 1")).toBeInTheDocument();
+    expect(within(dialog).getByText("Incoming roster rows: 2")).toBeInTheDocument();
+    expect(within(dialog).getByText(/People absent from the incoming import will disappear/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Existing system and manual edits do not merge automatically/)).toBeInTheDocument();
+    expect(onSave).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Back to preview" }));
+    expect(screen.getAllByDisplayValue("Imported Same")).toHaveLength(3);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save imported Team" }));
+    dialog = screen.getByRole("dialog", { name: "Confirm whole Team replacement" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Replace & Save" }));
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave.mock.calls[0]![1].origin).toBe("import");
+    const result = onSave.mock.results[0]!.value as ReturnType<TeamMemberWorkspaceProps["onSave"]>;
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.project.team?.functions.flatMap(({ assignments }) => assignments).map(({ name }) => name)).toEqual([
+      "Imported Same",
+      "Imported Same",
+    ]);
+    expect(result.project.team?.functions.flatMap(({ assignments }) => assignments).some(({ name }) => name === "One Person")).toBe(false);
+  });
+
+  it("imports directly into an empty Team without a fake replacement confirmation", async () => {
+    const project = projectWithTeam(null);
+    const onSave = vi.fn(successfulSave(project));
+    renderWorkspace({ project, onSave });
+    selectImportFile(csvImportFile("first.csv", [
+      "Function,Member,email",
+      "QCI-ME-Owner,First Imported,first@example.test",
+    ]));
+    await waitForImportPreview();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save imported Team" }));
+
+    expect(screen.queryByRole("dialog", { name: "Confirm whole Team replacement" })).not.toBeInTheDocument();
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats an empty browser picker result as no state change", () => {
+    renderWorkspace({ project: projectWithTeam(null) });
+    fireEvent.change(screen.getByLabelText("Import Team Member file"), {
+      target: { files: [] },
+    });
+
+    expect(screen.getByText("No Team members saved.")).toBeInTheDocument();
+    expect(screen.queryByText(/Reading Team import/)).not.toBeInTheDocument();
+  });
+
+  it("ignores a late file completion after Cancel Import", async () => {
+    const pending = deferredBrowserFile("late.csv");
+    const onSave = vi.fn(successfulSave(projectWithTeam(null)));
+    renderWorkspace({ project: projectWithTeam(null), onSave });
+    selectImportFile(pending.file);
+    expect(screen.getByRole("heading", { name: "Reading Team import" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel Import" }));
+
+    await resolveFile(pending, "Late Person");
+
+    expect(screen.getByText("No Team members saved.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Import Team preview" })).not.toBeInTheDocument();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("keeps the import discard guard open while a pending read completes", async () => {
+    const pending = deferredBrowserFile("guard-pending.csv");
+    renderWorkspace({ project: projectWithTeam(null) });
+    selectImportFile(pending.file);
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("dialog", { name: "Discard unsaved Team import" })).toBeInTheDocument();
+
+    await resolveFile(pending, "Buffered Person");
+
+    const dialog = screen.getByRole("dialog", { name: "Discard unsaved Team import" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Stay" }));
+    expect(await screen.findByDisplayValue("Buffered Person")).toBeInTheDocument();
+  });
+
+  it("keeps the import discard guard open while a pending read fails", async () => {
+    const pending = deferredBrowserFile("guard-failure.csv");
+    renderWorkspace({ project: projectWithTeam(null) });
+    selectImportFile(pending.file);
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+
+    await act(async () => {
+      pending.bytes.reject(new Error("Buffered read failure"));
+      await expect(pending.bytes.promise).rejects.toThrow("Buffered read failure");
+    });
+
+    const dialog = screen.getByRole("dialog", { name: "Discard unsaved Team import" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Stay" }));
+    expect(await screen.findByText("Buffered read failure")).toBeInTheDocument();
+    expect(screen.getByText("No Team members saved.")).toBeInTheDocument();
+  });
+
+  it("accepts the live import completion under React StrictMode effect rehearsal", async () => {
+    const project = projectWithTeam(null);
+    render(
+      <React.StrictMode>
+        <TeamMemberWorkspace
+          createAssignmentId={() => toPersonAssignmentId("strict-assignment")}
+          createFunctionId={() => toTeamFunctionId("strict-function")}
+          onBack={() => undefined}
+          onSave={successfulSave(project)}
+          project={project}
+          standardFunctionDefinitions={teamFunctionCatalog}
+        />
+      </React.StrictMode>,
+    );
+    selectImportFile(csvImportFile("strict.csv", [
+      "Function,Member,email",
+      "Custom Lab-Member,Strict Person,strict@example.test",
+    ]));
+
+    await waitFor(() => expect(screen.getByDisplayValue("Strict Person")).toBeInTheDocument());
+  });
+
+  it("ignores a Project A completion after the workspace opens Project B", async () => {
+    const pending = deferredBrowserFile("project-a.csv");
+    const projectA = projectWithTeam(null);
+    const projectB = { ...projectA, id: toProjectId("project-b"), team: null };
+    const onSave = vi.fn(successfulSave(projectA));
+    const view = renderWorkspace({ project: projectA, onSave });
+    selectImportFile(pending.file);
+    view.rerender(
+      <TeamMemberWorkspace
+        createAssignmentId={() => toPersonAssignmentId("project-b-assignment")}
+        createFunctionId={() => toTeamFunctionId("project-b-function")}
+        onBack={() => undefined}
+        onSave={onSave}
+        project={projectB}
+        standardFunctionDefinitions={teamFunctionCatalog}
+      />,
+    );
+
+    await resolveFile(pending, "Project A Person");
+
+    expect(screen.getByText("No Team members saved.")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Project A Person")).not.toBeInTheDocument();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("keeps a newer selection when an older read resolves later", async () => {
+    const older = deferredBrowserFile("older.csv");
+    renderWorkspace({ project: projectWithTeam(null) });
+    selectImportFile(older.file);
+    selectImportFile(csvImportFile("newer.csv", [
+      "Function,Member,email",
+      "Custom Lab-Member,Newer Person,newer@example.test",
+    ]));
+    await waitForImportPreview();
+    expect(screen.getByDisplayValue("Newer Person")).toBeInTheDocument();
+
+    await resolveFile(older, "Older Person");
+
+    expect(screen.getByDisplayValue("Newer Person")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Older Person")).not.toBeInTheDocument();
+  });
+
+  it("ignores request A after request B starts and is then cancelled", async () => {
+    const first = deferredBrowserFile("first.csv");
+    const second = deferredBrowserFile("second.csv");
+    const onSave = vi.fn(successfulSave(projectWithTeam(null)));
+    renderWorkspace({ project: projectWithTeam(null), onSave });
+    selectImportFile(first.file);
+    selectImportFile(second.file);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel Import" }));
+
+    await resolveFile(second, "Second Person");
+    await resolveFile(first, "First Person");
+
+    expect(screen.getByText("No Team members saved.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Import Team preview" })).not.toBeInTheDocument();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("ignores an old editor read after Save and reopening the editor", async () => {
+    const pending = deferredBrowserFile("old-editor.csv");
+    const onSave = vi.fn(successfulSave(devProject002));
+    renderWorkspace({ onSave });
+    startEditing();
+    fireEvent.change(screen.getByDisplayValue("DEV ME Owner"), { target: { value: "Saved before late read" } });
+    selectImportFile(pending.file);
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Replace unsaved Team edits" })).getByRole("button", { name: "Continue with import" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel Import" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Team" }));
+    expect(onSave).toHaveBeenCalledTimes(1);
+    startEditing();
+
+    await resolveFile(pending, "Old Editor Person");
+
+    expect(screen.getByRole("heading", { name: "Edit Team" })).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Old Editor Person")).not.toBeInTheDocument();
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it("requires consent before file reselection discards corrected import preview", async () => {
+    renderWorkspace({ project: projectWithTeam(null) });
+    selectImportFile(csvImportFile("first.csv", [
+      "Function,Member,email",
+      "Custom Lab-Member,First Preview,first@example.test",
+    ]));
+    await waitForImportPreview();
+    fireEvent.change(screen.getByDisplayValue("First Preview"), { target: { value: "Corrected First Preview" } });
+
+    selectImportFile(csvImportFile("second.csv", [
+      "Function,Member,email",
+      "Custom Lab-Member,Second Preview,second@example.test",
+    ]));
+    let consent = screen.getByRole("dialog", { name: "Replace unsaved Team edits" });
+    fireEvent.click(within(consent).getByRole("button", { name: "Keep current edit" }));
+    expect(screen.getByDisplayValue("Corrected First Preview")).toBeInTheDocument();
+
+    selectImportFile(csvImportFile("second.csv", [
+      "Function,Member,email",
+      "Custom Lab-Member,Second Preview,second@example.test",
+    ]));
+    consent = screen.getByRole("dialog", { name: "Replace unsaved Team edits" });
+    fireEvent.click(within(consent).getByRole("button", { name: "Continue with import" }));
+    await waitFor(() => expect(screen.getByDisplayValue("Second Preview")).toBeInTheDocument());
+    expect(screen.queryByDisplayValue("Corrected First Preview")).not.toBeInTheDocument();
+  });
+
+  it("uses a fresh import session after unmounting and reopening the same Project", async () => {
+    const file = () => csvImportFile("same.csv", [
+      "Function,Member,email",
+      "Custom Lab-Member,Same Person,same@example.test",
+    ]);
+    const first = renderWorkspace({ project: projectWithTeam(null) });
+    selectImportFile(file());
+    await waitForImportPreview();
+    const firstRowId = screen.getByTestId("team-candidate-row").dataset.rowId;
+    first.unmount();
+    renderWorkspace({ project: projectWithTeam(null) });
+    selectImportFile(file());
+    await waitForImportPreview();
+    const secondRowId = screen.getByTestId("team-candidate-row").dataset.rowId;
+
+    expect(firstRowId).toBeTruthy();
+    expect(secondRowId).toBeTruthy();
+    expect(secondRowId).not.toBe(firstRowId);
+  });
+
+  it("guards Back from import preview and never sends a stale candidate to Save", async () => {
+    const onBack = vi.fn();
+    const onSave = vi.fn(successfulSave(projectWithTeam(null)));
+    renderWorkspace({ project: projectWithTeam(null), onBack, onSave });
+    selectImportFile(csvImportFile("guarded.csv", [
+      "Function,Member,email",
+      "Custom Lab-Member,Guarded Person,guarded@example.test",
+    ]));
+    await waitForImportPreview();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    const dialog = screen.getByRole("dialog", { name: "Discard unsaved Team import" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Stay" }));
+    expect(screen.getByDisplayValue("Guarded Person")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Discard unsaved Team import" })).getByRole("button", { name: "Discard & Leave" }));
+
+    expect(onBack).toHaveBeenCalledTimes(1);
+    expect(onSave).not.toHaveBeenCalled();
   });
 });
