@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import * as XLSX from "xlsx";
 import { PortfolioDashboardView } from "./portfolioDashboardView";
+import { selectDashboardAttention } from "./application/selectors/dashboardAttention";
 import { selectPortfolioDashboardRows } from "./application/selectors/portfolioDashboardRows";
 import {
   createProject,
@@ -54,6 +55,7 @@ import {
   type CanonicalProjectSchedule,
 } from "./domain/schedule/officialSchedule";
 import type { CatalogItem } from "./domain/reference-data/catalog";
+import { toLocalDateOnly, type DateOnly } from "./domain/shared/dateOnly";
 import {
   toCatalogItemId,
   toMilestoneId,
@@ -167,16 +169,21 @@ function exportDashboardProjectListToExcel(projects: readonly DashboardProjectRo
 export interface AppProps {
   readonly initialState?: PrototypeState;
   readonly initialSelectedProjectId?: ProjectId | null;
+  readonly referenceDate?: DateOnly;
 }
 
 export function App({
   initialState = initialPrototypeState,
   initialSelectedProjectId = null,
+  referenceDate,
 }: AppProps = {}): React.ReactElement {
   const [page, setPage] = React.useState<Page>(
     initialSelectedProjectId === null ? "dashboard" : "workspace",
   );
   const [state, dispatch] = React.useReducer(prototypeReducer, initialState);
+  const [dashboardReferenceDate] = React.useState<DateOnly>(
+    () => referenceDate ?? toLocalDateOnly(new Date()),
+  );
   const stateRef = React.useRef(state);
   stateRef.current = state;
   const [selectedProjectId, setSelectedProjectId] =
@@ -199,6 +206,10 @@ export function App({
     selectedProjectId === null ? null : getProjectById(state, selectedProjectId);
   const dashboardRows = selectDashboardProjectRows(state);
   const portfolioDashboardRows = selectPortfolioDashboardRows(state);
+  const dashboardAttention = selectDashboardAttention(
+    state,
+    dashboardReferenceDate,
+  );
   const selectedDashboardRow =
     selectedProjectId === null ? null : selectDashboardProjectRow(state, selectedProjectId);
   const selectedScheduleRead =
@@ -545,6 +556,7 @@ export function App({
     <main className="min-h-screen overflow-x-hidden bg-slate-100 text-slate-950">
       {!renderWorkspace && (
         <PortfolioDashboardView
+          attention={dashboardAttention}
           onCreateProject={openCreate}
           onExport={() => exportDashboardProjectListToExcel(dashboardRows)}
           onOpenProject={openProject}

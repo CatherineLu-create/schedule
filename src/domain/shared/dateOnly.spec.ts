@@ -5,6 +5,7 @@ import {
   compareDateOnly,
   formatDateOnly,
   parseDateOnly,
+  toLocalDateOnly,
   type DateOnly,
 } from "./dateOnly";
 
@@ -75,5 +76,41 @@ describe("DateOnly", () => {
 
   it("formats dates for UI without browser locale behavior", () => {
     expect(formatDateOnly(dateOnly("2026-09-02"))).toBe("2026/09/02");
+  });
+
+  it("converts local calendar components without UTC semantics", () => {
+    expect(toLocalDateOnly(new Date(2026, 8, 23, 23, 59, 59))).toBe(
+      "2026-09-23",
+    );
+  });
+
+  it("uses local calendar getters rather than UTC serialization", () => {
+    class DateWithDifferentLocalAndUtcDays extends Date {
+      override getFullYear(): number {
+        return 2026;
+      }
+
+      override getMonth(): number {
+        return 8;
+      }
+
+      override getDate(): number {
+        return 23;
+      }
+
+      override toISOString(): string {
+        return "2026-09-22T16:30:00.000Z";
+      }
+    }
+
+    expect(toLocalDateOnly(new DateWithDifferentLocalAndUtcDays(0))).toBe(
+      "2026-09-23",
+    );
+  });
+
+  it("rejects an invalid local Date", () => {
+    expect(() => toLocalDateOnly(new Date(Number.NaN))).toThrow(
+      "Date must contain a supported local calendar date",
+    );
   });
 });

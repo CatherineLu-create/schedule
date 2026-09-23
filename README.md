@@ -29,7 +29,7 @@ Weekly Report、PPT、Excel、PDF、Email 等文件可以是 Evidence、Import S
 | 功能 | 狀態 | 說明 |
 | --- | --- | --- |
 | Dashboard | 已實作 | 顯示 Header、Needs Attention、Search、Filters、Project List、Create Project、Export to Excel |
-| Needs Attention | 僅限 Prototype | 固定以 Project Name 尋找幾個專案顯示 Import Warning 與 Milestone Due |
+| Needs Attention | 已實作 | Blocking Issues 維持未啟用；Milestone Due 與 Overdue 由 Current Published Schedule 計算唯一 Project 數量 |
 | Project Search | 已實作 | 搜尋 Project Name、QCI Model Name、Product Line、Customer、CPU、GPU |
 | Dashboard Filters | 已實作 | Year、Product Line、Panel Size、CPU、Customer；AND logic；chips 可移除；Clear All 可清空 |
 | Project List | 已實作 | 使用 `src/dashboardProjectRows.json` 產生 Project；支援水平捲動與欄寬拖曳 |
@@ -88,12 +88,13 @@ Dashboard 目前包含：
 - `Export to Excel`
 - `Create Project`
 
-`Needs Attention` 目前有兩組固定項目：
+`Needs Attention` 目前有三張卡片：
 
-- `Import Warning`
-- `Milestone Due`
+- `Blocking Issues`：計算尚未啟用
+- `Milestone Due`：Current Published Schedule 未來 14 天內到期的唯一 Project 數量
+- `Overdue`：Current Published Schedule 已逾期的唯一 Project 數量
 
-目前沒有顯示 `Working Draft Exists`。
+Due / Overdue 不讀取 Working Draft；成功 Publish 後才會反映新的 Current Published Schedule。
 
 Dashboard Filters 實際包含：
 

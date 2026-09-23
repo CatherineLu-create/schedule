@@ -111,8 +111,9 @@ MDRR is an additional valid Milestone Catalog item with:
 - `showInPortfolio = false`
 
 This MDRR definition is a deliberate V2 development catalog decision and is
-not inferred from legacy fixture data. Milestone Due and Overdue calculations
-are not active in the current Dashboard.
+not inferred from legacy fixture data. MDRR remains hidden from Portfolio
+Schedule columns, but its stable Milestone Type ID participates in Dashboard
+Due and Overdue derivation from Current Published Schedule.
 
 Workspace Add selects an existing PIP `MilestoneDefinitionId`; it does not
 create a definition. The future input boundary is:

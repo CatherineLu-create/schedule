@@ -87,3 +87,16 @@ export function addDays(value: DateOnly, days: number): DateOnly {
 export function formatDateOnly(value: DateOnly): string {
   return `${value.slice(0, 4)}/${value.slice(5, 7)}/${value.slice(8, 10)}`;
 }
+
+export function toLocalDateOnly(value: Date): DateOnly {
+  const year = String(value.getFullYear()).padStart(4, "0");
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  const parsed = parseDateOnly(`${year}-${month}-${day}`);
+
+  if (parsed === null) {
+    throw new RangeError("Date must contain a supported local calendar date");
+  }
+
+  return parsed;
+}

@@ -1,4 +1,5 @@
 import React from "react";
+import type { DashboardAttentionRead } from "./application/selectors/dashboardAttention";
 import type { PortfolioDashboardRow } from "./application/selectors/portfolioDashboardRows";
 import type { ProjectId } from "./domain/shared/ids";
 import {
@@ -11,6 +12,7 @@ import {
 import { PortfolioDashboardTable } from "./portfolioDashboardTable";
 
 export interface PortfolioDashboardViewProps {
+  readonly attention: DashboardAttentionRead;
   readonly rows: readonly PortfolioDashboardRow[];
   readonly onCreateProject: () => void;
   readonly onExport: () => void;
@@ -31,20 +33,30 @@ const controls: readonly (
   { key: "gpu", label: "GPU" },
   { key: "qciPm", label: "QCI PM", disabled: true, explanation: "Migration pending" },
 ];
-const attentionCards = [
-  { title: "Blocking Issues", supporting: "Calculation not active", tone: "border-rose-100 bg-rose-50/60 text-rose-800" },
-  { title: "Milestone Due", supporting: "Next 14 days · calculation not active", tone: "border-amber-100 bg-amber-50/60 text-amber-800" },
-  { title: "Overdue", supporting: "Past due · calculation not active", tone: "border-orange-100 bg-orange-50/60 text-orange-800" },
-] as const;
 const focus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600";
 
-export function PortfolioDashboardView({ rows, onCreateProject, onExport, onOpenProject }: PortfolioDashboardViewProps): React.ReactElement {
+export function PortfolioDashboardView({ attention, rows, onCreateProject, onExport, onOpenProject }: PortfolioDashboardViewProps): React.ReactElement {
   const [searchTerm, setSearchTerm] = React.useState("");
   const [filters, setFilters] = React.useState(emptyPortfolioDashboardFilters);
   const id = React.useId();
   const options = portfolioDashboardFilterOptions(rows);
   const filteredRows = filterPortfolioDashboardRows(rows, searchTerm, filters);
   const chips = portfolioDashboardFilterChips(filters);
+  const attentionCards = [
+    { title: "Blocking Issues", value: "—", supporting: "Calculation not active", tone: "border-rose-100 bg-rose-50/60 text-rose-800" },
+    {
+      title: "Milestone Due",
+      value: attention.kind === "available" ? String(attention.due.projectCount) : "—",
+      supporting: attention.kind === "available" ? "Next 14 days · unique projects" : "Calculation unavailable",
+      tone: "border-amber-100 bg-amber-50/60 text-amber-800",
+    },
+    {
+      title: "Overdue",
+      value: attention.kind === "available" ? String(attention.overdue.projectCount) : "—",
+      supporting: attention.kind === "available" ? "Past due · unique projects" : "Calculation unavailable",
+      tone: "border-orange-100 bg-orange-50/60 text-orange-800",
+    },
+  ] as const;
 
   return <section aria-label="Portfolio Dashboard" style={{ isolation: "isolate" }} className="flex w-full min-w-0 flex-col gap-5 bg-slate-100 px-4 py-5 sm:px-6">
     <header className="flex flex-wrap items-center justify-between gap-4">
@@ -60,11 +72,11 @@ export function PortfolioDashboardView({ rows, onCreateProject, onExport, onOpen
 
     <section aria-labelledby={`${id}-attention`} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
       <h2 id={`${id}-attention`} className="text-base font-semibold text-slate-900">Needs Attention</h2>
-      <p className="mt-1 text-xs text-slate-500">Portfolio indicators await approved business rules.</p>
+      <p className="mt-1 text-xs text-slate-500">Due and Overdue use Current Published Schedule.</p>
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
         {attentionCards.map((card) => <div key={card.title} role="group" aria-label={card.title} className={`rounded-lg border p-4 ${card.tone}`}>
           <h3 className="text-sm font-medium">{card.title}</h3>
-          <div className="mt-2 text-2xl font-semibold">—</div>
+          <div className="mt-2 text-2xl font-semibold">{card.value}</div>
           <p className="mt-1 text-xs">{card.supporting}</p>
         </div>)}
       </div>

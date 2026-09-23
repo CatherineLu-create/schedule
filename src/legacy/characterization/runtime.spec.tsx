@@ -25,6 +25,7 @@ import { milestoneDefinitions } from "../../config/v2/referenceData";
 import type { Project } from "../../domain/project/project";
 import type { CanonicalProjectSchedule } from "../../domain/schedule/officialSchedule";
 import type { ScheduleVersionNumber } from "../../domain/schedule/schedule";
+import { parseDateOnly, type DateOnly } from "../../domain/shared/dateOnly";
 import { toMilestoneDefinitionId } from "../../domain/shared/ids";
 import {
   canonicalProjectFixtures,
@@ -66,8 +67,17 @@ vi.mock("xlsx", async (importOriginal) => {
 
 const fixedUuid = "11111111-1111-4111-8111-111111111111";
 
+function dateOnly(value: string): DateOnly {
+  const parsed = parseDateOnly(value);
+  if (parsed === null) throw new Error(`Invalid test DateOnly: ${value}`);
+  return parsed;
+}
+
+const dashboardReferenceDate = dateOnly("2026-09-23");
+
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.clearAllMocks();
   vi.restoreAllMocks();
 });
@@ -728,18 +738,22 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
   });
 
   it("keeps Portfolio Published-only while editing, then reflects Publish", () => {
-    render(<App />);
+    render(<App referenceDate={dashboardReferenceDate} />);
+    const dueCard = () => within(screen.getByRole("region", { name: "Needs Attention" }))
+      .getByRole("group", { name: "Milestone Due" });
+    expect(within(dueCard()).getByText("0")).toBeVisible();
     const initialCell = dashboardRow("dev-project-001")
-      .querySelector('[data-column-key="schedule:design:kickoff"]');
-    expect(initialCell).toHaveTextContent("P: 2026/09/18");
+      .querySelector('[data-column-key="schedule:a1-stage:a-g-o"]');
+    expect(initialCell).toHaveTextContent("P: 2026/10/15");
     openProjectByName("Manta");
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    applyDateInput(screen.getByLabelText(/^Plan for Kickoff occurrence/), "2034-04-05");
+    applyDateInput(screen.getByLabelText(/^Plan for A G\/O occurrence/), "2026-09-28");
     fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
     expect(dashboardRow("dev-project-001")
-      .querySelector('[data-column-key="schedule:design:kickoff"]'))
-      .toHaveTextContent("P: 2026/09/18");
-    expect(dashboardRow("dev-project-001")).not.toHaveTextContent("2034/04/05");
+      .querySelector('[data-column-key="schedule:a1-stage:a-g-o"]'))
+      .toHaveTextContent("P: 2026/10/15");
+    expect(dashboardRow("dev-project-001")).not.toHaveTextContent("2026/09/28");
+    expect(within(dueCard()).getByText("0")).toBeVisible();
     expect(screen.queryByRole("columnheader", { name: "A2" })).not.toBeInTheDocument();
     openProjectByName("Manta");
     fireEvent.click(screen.getByRole("button", { name: "Publish" }));
@@ -747,9 +761,26 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
       .getByRole("button", { name: "Publish" }));
     fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
     expect(dashboardRow("dev-project-001")
-      .querySelector('[data-column-key="schedule:design:kickoff"]'))
-      .toHaveTextContent("P: 2034/04/05");
+      .querySelector('[data-column-key="schedule:a1-stage:a-g-o"]'))
+      .toHaveTextContent("P: 2026/09/28");
+    expect(within(dueCard()).getByText("1")).toBeVisible();
     expect(screen.queryByRole("columnheader", { name: "A2" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the runtime reference date fixed for the browser session", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 8, 30, 12));
+    render(<App />);
+    const dueCard = () => within(screen.getByRole("region", { name: "Needs Attention" }))
+      .getByRole("group", { name: "Milestone Due" });
+
+    expect(within(dueCard()).getByText("0")).toBeVisible();
+
+    vi.setSystemTime(new Date(2026, 9, 1, 12));
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+
+    expect(within(dueCard()).getByText("0")).toBeVisible();
   });
 
   it("keeps ID fix's Published null Actual until its applicable Draft date is published", () => {
@@ -885,9 +916,9 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
       .not.toBeInTheDocument();
   });
   it("integrates the canonical Portfolio shell, Current Published grouped table, search, and seven filters", () => {
-    render(<App />);
+    render(<App referenceDate={dashboardReferenceDate} />);
 
-    // Detects the obsolete inline Dashboard and invented attention calculations.
+    // Detects obsolete inline Dashboard rendering or attention disconnected from canonical state.
     expect(screen.getByRole("heading", { name: "Project Information", level: 1 })).toBeInTheDocument();
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
     expect(screen.queryByText("Portfolio overview")).not.toBeInTheDocument();
@@ -896,14 +927,21 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     const attention = screen.getByRole("region", { name: "Needs Attention" });
     for (const [title, supporting] of [
       ["Blocking Issues", "Calculation not active"],
-      ["Milestone Due", "Next 14 days · calculation not active"],
-      ["Overdue", "Past due · calculation not active"],
     ]) {
       const card = within(attention).getByRole("group", { name: title });
       expect(within(card).getByText("—")).toBeVisible();
       expect(within(card).getByText(supporting)).toBeVisible();
       expect(within(card).queryByText(/^\d+$/)).not.toBeInTheDocument();
     }
+    const due = within(attention).getByRole("group", { name: "Milestone Due" });
+    expect(within(due).getByText("0")).toBeVisible();
+    expect(within(due).getByText("Next 14 days · unique projects")).toBeVisible();
+    const overdue = within(attention).getByRole("group", { name: "Overdue" });
+    expect(within(overdue).getByText("0")).toBeVisible();
+    expect(within(overdue).getByText("Past due · unique projects")).toBeVisible();
+    expect(within(attention).getByText("Due and Overdue use Current Published Schedule.")).toBeVisible();
+    expect(within(attention).queryByText("Next 14 days · calculation not active")).not.toBeInTheDocument();
+    expect(within(attention).queryByText("Past due · calculation not active")).not.toBeInTheDocument();
     expect(screen.queryByText("No items requiring attention.")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Projects", level: 2 })).toBeInTheDocument();
     expect(screen.getByText("Showing 5 of 5 projects")).toBeInTheDocument();

@@ -1,17 +1,43 @@
 import React from "react";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { DashboardAttentionRead } from "./application/selectors/dashboardAttention";
 import { selectPortfolioDashboardRows } from "./application/selectors/portfolioDashboardRows";
 import { canonicalProjectFixtures } from "./fixtures/v2/canonicalProjectFixtures";
 import { canonicalScheduleFixtures } from "./fixtures/v2/canonicalScheduleFixtures";
-import { toMilestoneDefinitionId, toMilestoneId } from "./domain/shared/ids";
+import { parseDateOnly, type DateOnly } from "./domain/shared/dateOnly";
+import { toMilestoneDefinitionId, toMilestoneId, toProjectId } from "./domain/shared/ids";
 import { PortfolioDashboardView } from "./portfolioDashboardView";
 
 afterEach(cleanup);
 const rows = selectPortfolioDashboardRows({ projects: canonicalProjectFixtures, schedules: canonicalScheduleFixtures });
-function setup() {
+function dateOnly(value: string): DateOnly {
+  const parsed = parseDateOnly(value);
+  if (parsed === null) throw new Error(`Invalid test DateOnly: ${value}`);
+  return parsed;
+}
+const referenceDate = dateOnly("2026-09-23");
+const zeroAttention: DashboardAttentionRead = {
+  kind: "available",
+  referenceDate,
+  due: { projectIds: [], projectCount: 0, matches: [] },
+  overdue: { projectIds: [], projectCount: 0, matches: [] },
+};
+function availableAttention(dueCount: number, overdueCount: number): DashboardAttentionRead {
+  const dueProjectIds = Array.from({ length: dueCount }, (_, index) =>
+    toProjectId(`view-due-${String(index + 1)}`));
+  const overdueProjectIds = Array.from({ length: overdueCount }, (_, index) =>
+    toProjectId(`view-overdue-${String(index + 1)}`));
+  return {
+    kind: "available",
+    referenceDate,
+    due: { projectIds: dueProjectIds, projectCount: dueProjectIds.length, matches: [] },
+    overdue: { projectIds: overdueProjectIds, projectCount: overdueProjectIds.length, matches: [] },
+  };
+}
+function setup(attention: DashboardAttentionRead = zeroAttention) {
   const callbacks = { onCreateProject: vi.fn(), onExport: vi.fn(), onOpenProject: vi.fn() };
-  render(<PortfolioDashboardView rows={rows} {...callbacks} />);
+  render(<PortfolioDashboardView attention={attention} rows={rows} {...callbacks} />);
   return callbacks;
 }
 function visibleIds() {
@@ -32,7 +58,7 @@ describe("Portfolio Dashboard shell", () => {
     expect(getComputedStyle(dashboard).isolation).toBe("isolate");
   });
 
-  it("keeps approved heading/actions and three truthful attention cards instead of fake counts", () => {
+  it("keeps approved heading/actions and activates only Due and Overdue counts", () => {
     setup();
     expect(screen.getByRole("heading", { name: "Project Information", level: 1 })).toBeInTheDocument();
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
@@ -47,21 +73,54 @@ describe("Portfolio Dashboard shell", () => {
       expect(cards[index]).toHaveAccessibleName(title);
     });
     expect(within(attention).getByRole("heading", { name: "Needs Attention" })).toBeInTheDocument();
-    expect(within(attention).getByText("Portfolio indicators await approved business rules.")).toBeInTheDocument();
+    expect(within(attention).getByText("Due and Overdue use Current Published Schedule.")).toBeInTheDocument();
     for (const [title, supporting] of [
       ["Blocking Issues", "Calculation not active"],
-      ["Milestone Due", "Next 14 days · calculation not active"],
-      ["Overdue", "Past due · calculation not active"],
     ]) {
       const card = within(attention).getByRole("group", { name: title });
       expect(within(card).getByText("—")).toBeVisible();
       expect(within(card).getByText(supporting)).toBeVisible();
       expect(within(card).queryByText(/^\d+$/)).not.toBeInTheDocument();
     }
+    const due = within(attention).getByRole("group", { name: "Milestone Due" });
+    expect(within(due).getByText("0")).toBeVisible();
+    expect(within(due).getByText("Next 14 days · unique projects")).toBeVisible();
+    const overdue = within(attention).getByRole("group", { name: "Overdue" });
+    expect(within(overdue).getByText("0")).toBeVisible();
+    expect(within(overdue).getByText("Past due · unique projects")).toBeVisible();
+    expect(within(attention).queryByText("Next 14 days · calculation not active")).not.toBeInTheDocument();
+    expect(within(attention).queryByText("Past due · calculation not active")).not.toBeInTheDocument();
     expect(screen.queryByText("No items requiring attention.")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Working Draft|Publish|warning|Edit Team|Import Team/ })).not.toBeInTheDocument();
     expect(screen.queryByText("DEV Project 003 QCI PM")).not.toBeInTheDocument();
     expect(screen.getByText("Scroll horizontally to view Schedule and Team Member")).toBeInTheDocument();
+  });
+
+  it("renders positive unique-Project counts independently of table search", () => {
+    setup(availableAttention(2, 1));
+    const attention = screen.getByRole("region", { name: "Needs Attention" });
+    const due = within(attention).getByRole("group", { name: "Milestone Due" });
+    const overdue = within(attention).getByRole("group", { name: "Overdue" });
+    expect(within(due).getByText("2")).toBeVisible();
+    expect(within(overdue).getByText("1")).toBeVisible();
+
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "not-a-project" },
+    });
+    expect(screen.getByText("Showing 0 of 5 projects")).toBeInTheDocument();
+    expect(within(due).getByText("2")).toBeVisible();
+    expect(within(overdue).getByText("1")).toBeVisible();
+  });
+
+  it("renders unavailable attention without a misleading numeric zero", () => {
+    setup({ kind: "unavailable", referenceDate, issues: [] });
+    const attention = screen.getByRole("region", { name: "Needs Attention" });
+    for (const title of ["Milestone Due", "Overdue"]) {
+      const card = within(attention).getByRole("group", { name: title });
+      expect(within(card).getByText("—")).toBeVisible();
+      expect(within(card).getByText("Calculation unavailable")).toBeVisible();
+      expect(within(card).queryByText("0")).not.toBeInTheDocument();
+    }
   });
 
   it("exposes only seven canonical filters in visual order and explains both disabled controls", () => {
@@ -160,6 +219,7 @@ describe("Portfolio Dashboard shell", () => {
 
     render(
       <PortfolioDashboardView
+        attention={zeroAttention}
         rows={[a2Row, rows[1]!]}
         onCreateProject={() => {}}
         onExport={() => {}}

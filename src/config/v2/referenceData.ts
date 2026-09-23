@@ -87,6 +87,13 @@ const milestoneTypeIds = {
   mdrr: toMilestoneTypeId("type-mdrr"),
 } as const;
 
+export const dashboardAttentionMilestoneTypeIds: readonly MilestoneTypeId[] = [
+  milestoneTypeIds.go,
+  milestoneTypeIds.smt,
+  milestoneTypeIds.close,
+  milestoneTypeIds.mdrr,
+];
+
 export const statusCatalog: readonly CatalogItem<CatalogItemId>[] = [
   {
     id: toCatalogItemId("status-rfq"),
