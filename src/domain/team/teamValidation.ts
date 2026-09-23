@@ -8,6 +8,8 @@ import type {
 } from "./team";
 import {
 	classifyTeamLabel,
+	isInvalidApplicabilityFunctionLabel,
+	isInvalidNotApplicableMemberName,
 	type RestrictedTeamRole,
 } from "./teamRoleMapping";
 import type { TeamFunctionDefinition } from "./teamTemplate";
@@ -199,7 +201,32 @@ export function validateRestrictedRoleRows(
 	rows: readonly RestrictedCountRow[],
 ): readonly ValidationIssue[] {
 	const issues: ValidationIssue[] = rows
-		.filter((row) => row.key === null && row.possibleRestricted)
+		.filter((row) => isInvalidApplicabilityFunctionLabel(row.functionText))
+		.map((row) =>
+			restrictedIssue(
+				"team.data.invalid-applicability-function-label",
+				"blocking",
+				"NA / N/A represents applicability and cannot be used as a Function name.",
+				row.rowId,
+			),
+		);
+	issues.push(...rows
+		.filter((row) => isInvalidNotApplicableMemberName(row.name))
+		.map((row) =>
+			restrictedIssue(
+				"team.data.invalid-applicability-member-name",
+				"blocking",
+				"NA / N/A cannot be used as a member name. Leave Member blank if no person is assigned.",
+				row.rowId,
+			),
+		));
+	issues.push(...rows
+		.filter(
+			(row) =>
+				!isInvalidApplicabilityFunctionLabel(row.functionText) &&
+				row.key === null &&
+				row.possibleRestricted,
+		)
 		.map((row) =>
 			restrictedIssue(
 				"team.data.restricted-role-ambiguous",
@@ -207,7 +234,7 @@ export function validateRestrictedRoleRows(
 				"Role label may identify a restricted Team role and must be resolved.",
 				row.rowId,
 			),
-		);
+		));
 
 	for (const key of restrictedTeamRoles) {
 		const keyedRows = rows.filter((row) => row.key === key);
@@ -521,12 +548,27 @@ export function validateProjectTeam(
 			return issue === null ? [] : [issue];
 		},
 	);
+	const emptyInvalidFunctionIssues = team.functions.flatMap((functionTeam) =>
+		functionTeam.function.kind === "custom" &&
+		functionTeam.assignments.length === 0 &&
+		!(team.preservedUnclassifiedEntries ?? []).some(
+			(entry) => entry.function.functionId === functionTeam.function.functionId,
+		) &&
+		isInvalidApplicabilityFunctionLabel(functionTeam.function.displayName)
+			? [functionIssue(functionTeam, {
+					code: "team.data.invalid-applicability-function-label",
+					severity: "blocking",
+					message: "NA / N/A represents applicability and cannot be used as a Function name.",
+				})]
+			: [],
+	);
 
 	return [
 		...(context.importProblems ?? []).map(importProblemIssue),
 		...validateFunctionIdentity(team, standardFunctionDefinitions),
 		...projectRoleIssues,
 		...preservedEmailIssues,
+		...emptyInvalidFunctionIssues,
 		...team.functions.flatMap((functionTeam) =>
 			validateFunctionTeam(
 				functionTeam,

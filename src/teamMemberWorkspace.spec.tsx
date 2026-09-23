@@ -198,8 +198,783 @@ describe("Team Member workspace", () => {
     fireEvent.click(openTeam);
     expect(screen.getByRole("heading", { name: "Team Member" })).toBeInTheDocument();
     expect(screen.getByText("DEV QCI PM")).toBeInTheDocument();
-    expect(screen.getByText("QCI-ME")).toBeInTheDocument();
+    expect(screen.getByText("QCI-ME-Owner")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Current Schedule" })).not.toBeInTheDocument();
+  });
+
+  it("renders the read-only roster as the four-column Excel mental model", () => {
+    renderWorkspace({ project: projectWithTeam(onePersonTeam()) });
+
+    const actionContent = screen.getByTestId("team-action-content");
+    const mainContent = screen.getByTestId("team-main-content");
+    expect(actionContent).toHaveAttribute("data-content-alignment", "team-roster");
+    expect(mainContent).toHaveAttribute("data-content-alignment", "team-roster");
+    expect(actionContent).toHaveClass("px-4");
+    expect(mainContent).toHaveClass("px-4");
+    const table = screen.getByRole("table", { name: "Team roster" });
+    expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+      "Function",
+      "Member",
+      "email",
+      "Tel. No.",
+    ]);
+    expect(within(table).getByRole("cell", { name: "QCI-ME-Member" })).toBeInTheDocument();
+    expect(within(table).getByRole("cell", { name: "One Person" })).toBeInTheDocument();
+    expect(within(table).getByRole("cell", { name: "one@example.test" })).toBeInTheDocument();
+    expect(within(table).getByRole("cell", { name: "1234" })).toBeInTheDocument();
+    expect(within(table).queryByRole("columnheader", { name: "Role" })).not.toBeInTheDocument();
+    expect(within(table).queryByRole("columnheader", { name: "Details" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Source details")).not.toBeInTheDocument();
+    expect(within(table).getByTestId("team-read-row")).toHaveClass("leading-6");
+  });
+
+  it("groups the saved roster as QCI then QCMC then OTHER without hiding or duplicating rows", () => {
+    const team: ProjectTeam = {
+      projectRoles: {
+        qciPm: { assignmentId: toPersonAssignmentId("group-qci-pm"), name: "QCI PM Person", email: "qci.pm@example.test" },
+        qciPjm: { assignmentId: toPersonAssignmentId("group-qci-pjm"), name: "QCI PjM Person", email: "qci.pjm@example.test" },
+        acerPm: { assignmentId: toPersonAssignmentId("group-acer-pm"), name: "Customer PM Person", email: "customer.pm@example.test" },
+      },
+      functions: [
+        {
+          function: { kind: "standard", functionId: teamFunctionCatalog[0]!.id },
+          applicability: "applicable",
+          assignments: [{ assignmentId: toPersonAssignmentId("group-qci-function"), role: "member", name: "QCI Function Person", email: "qci.function@example.test" }],
+        },
+        {
+          function: { kind: "custom", functionId: toTeamFunctionId("group-qcmc"), displayName: "QCMC-EE IQC" },
+          applicability: "applicable",
+          assignments: [{ assignmentId: toPersonAssignmentId("group-qcmc-person"), role: "owner", name: "QCMC Person", email: "qcmc@example.test" }],
+        },
+        {
+          function: { kind: "custom", functionId: toTeamFunctionId("group-not-prefix"), displayName: "Supplier QCI Lab" },
+          applicability: "applicable",
+          assignments: [{ assignmentId: toPersonAssignmentId("group-not-prefix-person"), role: "member", name: "Non-prefix Person", email: "non-prefix@example.test" }],
+        },
+      ],
+      preservedUnclassifiedEntries: [{
+        entryId: toPersonAssignmentId("group-unknown-preserved"),
+        function: { kind: "custom", functionId: toTeamFunctionId("group-unknown"), displayName: "Mystery Lab" },
+        functionText: "Mystery Lab",
+        roleText: "Coordinator",
+        name: "Unknown Preserved Person",
+        email: "unknown@example.test",
+        extraCells: [],
+        sourceRows: [sourceEvidence],
+        restrictedRoleExclusion: null,
+      }],
+      appliedTemplate: null,
+    };
+    renderWorkspace({ project: projectWithTeam(team) });
+
+    const table = screen.getByRole("table", { name: "Team roster" });
+    const qci = within(table).getByRole("rowgroup", { name: "QCI" });
+    const qcmc = within(table).getByRole("rowgroup", { name: "QCMC" });
+    const other = within(table).getByRole("rowgroup", { name: "OTHER" });
+    expect(qci.compareDocumentPosition(qcmc) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(qcmc.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(qci).getByText("QCI PM Person")).toBeInTheDocument();
+    expect(within(qci).getByText("QCI PjM Person")).toBeInTheDocument();
+    expect(within(qci).getByText("QCI Function Person")).toBeInTheDocument();
+    expect(within(qcmc).getByText("QCMC Person")).toBeInTheDocument();
+    expect(within(other).getByText("Customer PM Person")).toBeInTheDocument();
+    expect(within(other).getByText("Non-prefix Person")).toBeInTheDocument();
+    expect(within(other).getByText("Unknown Preserved Person")).toBeInTheDocument();
+    for (const name of [
+      "QCI PM Person",
+      "QCI PjM Person",
+      "QCI Function Person",
+      "QCMC Person",
+      "Customer PM Person",
+      "Non-prefix Person",
+      "Unknown Preserved Person",
+    ]) {
+      expect(within(table).getAllByText(name)).toHaveLength(1);
+    }
+  });
+
+  it("reopens added people beside an existing base Function and puts only unseen Functions at the site tail", async () => {
+    const baseTeam: ProjectTeam = {
+      projectRoles: { qciPm: null, qciPjm: null, acerPm: null },
+      functions: [
+        {
+          function: { kind: "standard", functionId: teamFunctionCatalog[0]!.id },
+          applicability: "applicable",
+          assignments: [
+            { assignmentId: toPersonAssignmentId("me-member"), role: "member", name: "ME Existing Member", email: "me.member@example.test" },
+            { assignmentId: toPersonAssignmentId("me-owner"), role: "owner", name: "ME Owner", email: "me.owner@example.test" },
+            { assignmentId: toPersonAssignmentId("me-leader"), role: "leader", name: "ME Leader", email: "me.leader@example.test" },
+          ],
+        },
+        {
+          function: { kind: "custom", functionId: toTeamFunctionId("qci-packing"), displayName: "QCI-Packing" },
+          applicability: "applicable",
+          assignments: [
+            { assignmentId: toPersonAssignmentId("packing-member"), role: "member", name: "Packing Existing Member", email: "packing.member@example.test" },
+            { assignmentId: toPersonAssignmentId("packing-owner"), role: "owner", name: "Packing Owner", email: "packing.owner@example.test" },
+            { assignmentId: toPersonAssignmentId("packing-leader"), role: "leader", name: "Packing Leader", email: "packing.leader@example.test" },
+          ],
+        },
+        {
+          function: { kind: "custom", functionId: toTeamFunctionId("qcmc-lab"), displayName: "QCMC-Lab" },
+          applicability: "applicable",
+          assignments: [{ assignmentId: toPersonAssignmentId("qcmc-owner"), role: "owner", name: "QCMC Owner", email: "qcmc.owner@example.test" }],
+        },
+      ],
+      preservedUnclassifiedEntries: [],
+      appliedTemplate: null,
+    };
+    const initialProject = projectWithTeam(baseTeam);
+    const assignmentIds = ["new-me", "new-packing", "new-qci-function", "new-qcmc"];
+    let assignmentIndex = 0;
+    let functionIndex = 0;
+    function StatefulOrderingWorkspace(): React.ReactElement {
+      const [project, setProject] = React.useState(initialProject);
+      return (
+        <TeamMemberWorkspace
+          createAssignmentId={() => toPersonAssignmentId(assignmentIds[assignmentIndex++]!)}
+          createFunctionId={() => toTeamFunctionId(`new-function-${functionIndex++}`)}
+          onBack={() => undefined}
+          onSave={(projectId, candidate) => {
+            const result = saveProjectTeamForState(
+              { projects: [project], schedules: [] },
+              projectId,
+              candidate,
+              teamFunctionCatalog,
+            );
+            if (result.ok) setProject(result.project);
+            return result;
+          }}
+          project={project}
+          standardFunctionDefinitions={teamFunctionCatalog}
+        />
+      );
+    }
+    render(<StatefulOrderingWorkspace />);
+    startEditing();
+    for (const [functionText, name] of [
+      ["QCI-ME-Member", "ME Added Member"],
+      ["QCI-Packing-Member", "Packing Added Member"],
+      ["QCI-NewThing-Member", "New Function Member"],
+      ["QCMC-Lab-Member", "QCMC Added Member"],
+    ] as const) {
+      fireEvent.click(screen.getByRole("button", { name: "Add person" }));
+      const row = screen.getAllByTestId("team-candidate-row").find(
+        (candidateRow) => candidateRow.getAttribute("data-assignment-id") === assignmentIds[assignmentIndex - 1],
+      )!;
+      fireEvent.change(within(row).getByLabelText("Function"), { target: { value: functionText } });
+      fireEvent.change(within(row).getByLabelText("Name"), { target: { value: name } });
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Save Team" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Team Member" })).toBeInTheDocument());
+
+    const table = screen.getByRole("table", { name: "Team roster" });
+    const qciRows = within(within(table).getByRole("rowgroup", { name: "QCI" }))
+      .getAllByTestId("team-read-row").map((row) => row.textContent);
+    expect(qciRows).toEqual([
+      expect.stringContaining("ME Leader"),
+      expect.stringContaining("ME Owner"),
+      expect.stringContaining("ME Existing Member"),
+      expect.stringContaining("ME Added Member"),
+      expect.stringContaining("Packing Leader"),
+      expect.stringContaining("Packing Owner"),
+      expect.stringContaining("Packing Existing Member"),
+      expect.stringContaining("Packing Added Member"),
+      expect.stringContaining("New Function Member"),
+    ]);
+    const qcmcRows = within(within(table).getByRole("rowgroup", { name: "QCMC" }))
+      .getAllByTestId("team-read-row").map((row) => row.textContent);
+    expect(qcmcRows).toEqual([
+      expect.stringContaining("QCMC Owner"),
+      expect.stringContaining("QCMC Added Member"),
+    ]);
+    expect(within(table).getAllByTestId("team-read-row")).toHaveLength(11);
+  });
+
+  it("keeps a new Function after an older preserved-only Function when Save reopens read-only", async () => {
+    const baseTeam: ProjectTeam = {
+      projectRoles: { qciPm: null, qciPjm: null, acerPm: null },
+      functions: [{
+        function: { kind: "custom", functionId: toTeamFunctionId("qci-alpha"), displayName: "QCI-Alpha" },
+        applicability: "applicable",
+        assignments: [{
+          assignmentId: toPersonAssignmentId("old-alpha"),
+          role: "member",
+          name: "Old Alpha",
+          email: "old.alpha@example.test",
+        }],
+      }],
+      preservedUnclassifiedEntries: [{
+        entryId: toPersonAssignmentId("old-zeta"),
+        function: { kind: "custom", functionId: toTeamFunctionId("qci-zeta"), displayName: "QCI-Zeta" },
+        functionText: "QCI-Zeta",
+        roleText: "Coordinator",
+        name: "Old Zeta",
+        email: "old.zeta@example.test",
+        extraCells: [],
+        sourceRows: [sourceEvidence],
+        restrictedRoleExclusion: null,
+      }],
+      appliedTemplate: null,
+    };
+    const initialProject = projectWithTeam(baseTeam);
+    const savedProjectRef: { current?: Project } = {};
+    const assignmentIds = ["first-added-unknown", "second-added-formal"];
+    const functionIds = ["qci-unknown", "qci-newest"];
+    let assignmentIndex = 0;
+    let functionIndex = 0;
+    function StatefulPreservedOrderingWorkspace(): React.ReactElement {
+      const [project, setProject] = React.useState(initialProject);
+      return (
+        <TeamMemberWorkspace
+          createAssignmentId={() => toPersonAssignmentId(assignmentIds[assignmentIndex++]!)}
+          createFunctionId={() => toTeamFunctionId(functionIds[functionIndex++]!)}
+          onBack={() => undefined}
+          onSave={(projectId, candidate) => {
+            const result = saveProjectTeamForState(
+              { projects: [project], schedules: [] },
+              projectId,
+              candidate,
+              teamFunctionCatalog,
+            );
+            if (result.ok) {
+              savedProjectRef.current = result.project;
+              setProject(result.project);
+            }
+            return result;
+          }}
+          project={project}
+          standardFunctionDefinitions={teamFunctionCatalog}
+        />
+      );
+    }
+    render(<StatefulPreservedOrderingWorkspace />);
+    startEditing();
+    fireEvent.click(screen.getByRole("button", { name: "Add person" }));
+    const added = screen.getAllByTestId("team-candidate-row").find(
+      (row) => row.getAttribute("data-assignment-id") === "first-added-unknown",
+    )!;
+    fireEvent.change(within(added).getByLabelText("Function"), { target: { value: "QCI-Unknown" } });
+    fireEvent.change(within(added).getByLabelText("Name"), { target: { value: "First Added Unknown" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Team" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Team Member" })).toBeInTheDocument());
+
+    const qci = within(screen.getByRole("table", { name: "Team roster" }))
+      .getByRole("rowgroup", { name: "QCI" });
+    expect(within(qci).getAllByTestId("team-read-row").map((row) => row.textContent)).toEqual([
+      expect.stringContaining("Old Alpha"),
+      expect.stringContaining("Old Zeta"),
+      expect.stringContaining("First Added Unknown"),
+    ]);
+
+    startEditing();
+    fireEvent.click(screen.getByRole("button", { name: "Add person" }));
+    const secondAdded = screen.getAllByTestId("team-candidate-row").find(
+      (row) => row.getAttribute("data-assignment-id") === "second-added-formal",
+    )!;
+    fireEvent.change(within(secondAdded).getByLabelText("Function"), { target: { value: "QCI-Newest-Member" } });
+    fireEvent.change(within(secondAdded).getByLabelText("Name"), { target: { value: "Second Added Formal" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Team" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Team Member" })).toBeInTheDocument());
+
+    const secondQci = within(screen.getByRole("table", { name: "Team roster" }))
+      .getByRole("rowgroup", { name: "QCI" });
+    expect(within(secondQci).getAllByTestId("team-read-row").map((row) => row.textContent)).toEqual([
+      expect.stringContaining("Old Alpha"),
+      expect.stringContaining("Old Zeta"),
+      expect.stringContaining("First Added Unknown"),
+      expect.stringContaining("Second Added Formal"),
+    ]);
+
+    cleanup();
+    expect(savedProjectRef.current).toBeDefined();
+    renderWorkspace({ project: savedProjectRef.current! });
+    const reopenedQci = within(screen.getByRole("table", { name: "Team roster" }))
+      .getByRole("rowgroup", { name: "QCI" });
+    expect(within(reopenedQci).getAllByTestId("team-read-row").map((row) => row.textContent)).toEqual([
+      expect.stringContaining("Old Alpha"),
+      expect.stringContaining("Old Zeta"),
+      expect.stringContaining("First Added Unknown"),
+      expect.stringContaining("Second Added Formal"),
+    ]);
+  });
+
+  it("keeps stable canonical Function order when an existing custom Function is renamed", async () => {
+    const initialProject = projectWithTeam({
+      projectRoles: { qciPm: null, qciPjm: null, acerPm: null },
+      functions: [
+        {
+          function: { kind: "custom", functionId: toTeamFunctionId("rename-alpha"), displayName: "QCI-Alpha" },
+          applicability: "applicable",
+          assignments: [{ assignmentId: toPersonAssignmentId("rename-alpha-person"), role: "member", name: "Old Alpha", email: "alpha@example.test" }],
+        },
+        {
+          function: { kind: "custom", functionId: toTeamFunctionId("rename-zeta"), displayName: "QCI-Zeta" },
+          applicability: "applicable",
+          assignments: [{ assignmentId: toPersonAssignmentId("rename-zeta-person"), role: "member", name: "Old Zeta", email: "zeta@example.test" }],
+        },
+      ],
+      preservedUnclassifiedEntries: [],
+      appliedTemplate: null,
+    });
+    const savedProjectRef: { current?: Project } = {};
+    function StatefulRenameWorkspace(): React.ReactElement {
+      const [project, setProject] = React.useState(initialProject);
+      return (
+        <TeamMemberWorkspace
+          createAssignmentId={() => toPersonAssignmentId("unused")}
+          createFunctionId={() => toTeamFunctionId("unused")}
+          onBack={() => undefined}
+          onSave={(projectId, candidate) => {
+            const result = saveProjectTeamForState(
+              { projects: [project], schedules: [] },
+              projectId,
+              candidate,
+              teamFunctionCatalog,
+            );
+            if (result.ok) {
+              savedProjectRef.current = result.project;
+              setProject(result.project);
+            }
+            return result;
+          }}
+          project={project}
+          standardFunctionDefinitions={teamFunctionCatalog}
+        />
+      );
+    }
+    render(<StatefulRenameWorkspace />);
+    startEditing();
+    const alphaRow = screen.getByDisplayValue("Old Alpha").closest<HTMLElement>('[data-testid="team-candidate-row"]')!;
+    fireEvent.change(within(alphaRow).getByLabelText("Function"), { target: { value: "QCI-Renamed-Member" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Team" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Team Member" })).toBeInTheDocument());
+
+    const names = () => within(within(screen.getByRole("table", { name: "Team roster" }))
+      .getByRole("rowgroup", { name: "QCI" }))
+      .getAllByTestId("team-read-row").map((row) => row.textContent);
+    expect(names()).toEqual([
+      expect.stringContaining("Old Alpha"),
+      expect.stringContaining("Old Zeta"),
+    ]);
+    expect(savedProjectRef.current?.team?.functions.map(({ function: ref }) => ref.functionId)).toEqual([
+      toTeamFunctionId("rename-alpha"),
+      toTeamFunctionId("rename-zeta"),
+    ]);
+
+    cleanup();
+    renderWorkspace({ project: savedProjectRef.current! });
+    expect(names()).toEqual([
+      expect.stringContaining("Old Alpha"),
+      expect.stringContaining("Old Zeta"),
+    ]);
+  });
+
+  it("shows current canonical Function identity instead of a conflicting historical label", () => {
+    const team = onePersonTeam({
+      functions: [{
+        function: { kind: "standard", functionId: teamFunctionCatalog[1]!.id },
+        applicability: "applicable",
+        assignments: [{
+          assignmentId: toPersonAssignmentId("historically-reassigned"),
+          role: "owner",
+          functionText: "QCI-ME-Owner",
+          name: "Reassigned Person",
+          email: "reassigned@example.test",
+          extraCells: [],
+          sourceRows: [sourceEvidence],
+        }],
+      }],
+    });
+    renderWorkspace({ project: projectWithTeam(team) });
+
+    const roster = screen.getByRole("table", { name: "Team roster" });
+    expect(within(roster).getByRole("cell", { name: "QCI-EE-Owner" })).toBeInTheDocument();
+    expect(within(roster).queryByRole("cell", { name: "QCI-ME-Owner" })).not.toBeInTheDocument();
+    startEditing();
+    expect(screen.getByLabelText("Function")).toHaveValue("QCI-EE-Owner");
+  });
+
+  it("does not duplicate the role suffix of an already-full custom Function label", () => {
+    const team = onePersonTeam({
+      functions: [{
+        function: {
+          kind: "custom",
+          functionId: toTeamFunctionId("custom-full-label"),
+          displayName: "Custom Lab-Member",
+        },
+        applicability: "applicable",
+        assignments: [{
+          assignmentId: toPersonAssignmentId("custom-full-label-person"),
+          role: "member",
+          functionText: "Custom Lab-Member",
+          name: "Custom Full Label Person",
+          email: "custom.full@example.test",
+        }],
+      }],
+    });
+    renderWorkspace({ project: projectWithTeam(team) });
+
+    expect(screen.getByRole("cell", { name: "Custom Lab-Member" })).toBeInTheDocument();
+    expect(screen.queryByText("Custom Lab-Member-Member")).not.toBeInTheDocument();
+    startEditing();
+    expect(screen.getByLabelText("Function")).toHaveValue("Custom Lab-Member");
+  });
+
+  it("replaces a stale full-label role suffix with the current canonical role", () => {
+    const team = onePersonTeam({
+      functions: [{
+        function: {
+          kind: "custom",
+          functionId: toTeamFunctionId("custom-stale-role-label"),
+          displayName: "Custom Lab-Member",
+        },
+        applicability: "applicable",
+        assignments: [{
+          assignmentId: toPersonAssignmentId("custom-current-owner"),
+          role: "owner",
+          functionText: "Custom Lab-Member",
+          name: "Current Owner",
+          email: "current.owner@example.test",
+        }],
+      }],
+    });
+    renderWorkspace({ project: projectWithTeam(team) });
+
+    expect(screen.getByRole("cell", { name: "Custom Lab-Owner" })).toBeInTheDocument();
+    expect(screen.queryByText("Custom Lab-Member-Owner")).not.toBeInTheDocument();
+    startEditing();
+    expect(screen.getByLabelText("Function")).toHaveValue("Custom Lab-Owner");
+  });
+
+  it("uses one compact manual table with full Function text and no native email gate", () => {
+    const project = projectWithTeam(onePersonTeam());
+    const onSave = vi.fn(successfulSave(project));
+    const { createFunctionId } = renderWorkspace({ project, onSave });
+    startEditing();
+
+    const table = screen.getByRole("table", { name: "Team roster editor" });
+    expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+      "Function",
+      "Member",
+      "email",
+      "Tel. No.",
+      "Actions",
+    ]);
+    const functionInput = within(table).getByLabelText("Function");
+    expect(functionInput).toHaveValue("QCI-ME-Member");
+    expect(functionInput.tagName).toBe("INPUT");
+    expect(functionInput).toHaveAttribute("list");
+    expect(within(table).queryByLabelText("Role")).not.toBeInTheDocument();
+    expect(screen.queryByText("Source details")).not.toBeInTheDocument();
+    const email = within(table).getByLabelText("Email");
+    expect(email).toHaveAttribute("type", "text");
+    expect(email).toHaveAttribute("inputmode", "email");
+
+    fireEvent.change(functionInput, { target: { value: "QCI-ME-Owner" } });
+    expect(createFunctionId).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Save Team" }));
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    const candidate = onSave.mock.calls[0]![1];
+    expect(candidate.rows[0]).toMatchObject({
+      functionText: "QCI-ME-Owner",
+      functionRef: { kind: "standard", functionId: teamFunctionCatalog[0]!.id },
+      roleText: "owner",
+      restrictedKey: "qciMeOwner",
+    });
+  });
+
+  it("clears stale Function identity when a populated row Function is blanked", () => {
+    const project = projectWithTeam(onePersonTeam());
+    const onSave = vi.fn(successfulSave(project));
+    const { createFunctionId } = renderWorkspace({ project, onSave });
+    startEditing();
+    const functionInput = screen.getByLabelText("Function");
+
+    fireEvent.change(functionInput, { target: { value: "" } });
+
+    expect(functionInput).toHaveValue("");
+    expect(screen.getByRole("region", { name: "Blocking issues" })).toHaveTextContent(
+      "Team row must be assigned to one Function before Save.",
+    );
+    expect(screen.getByRole("button", { name: "Save Team" })).toBeDisabled();
+    expect(createFunctionId).not.toHaveBeenCalled();
+    expect(onSave).not.toHaveBeenCalled();
+
+    fireEvent.change(functionInput, { target: { value: "QCI-EE-Member" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Team" }));
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave.mock.calls[0]![1].rows[0]).toMatchObject({
+      functionText: "QCI-EE-Member",
+      functionRef: { kind: "standard", functionId: teamFunctionCatalog[1]!.id },
+      roleText: "member",
+      sourceRows: [sourceEvidence],
+    });
+  });
+
+  it("keeps manual actions and grouped issues before a long roster", () => {
+    const assignments = Array.from({ length: 50 }, (_, index) => ({
+      assignmentId: toPersonAssignmentId(`layout-person-${index}`),
+      role: "member" as const,
+      name: `Layout Person ${index + 1}`,
+      email: null,
+    }));
+    const team = onePersonTeam({
+      functions: [{
+        function: { kind: "standard", functionId: teamFunctionCatalog[0]!.id },
+        applicability: "notApplicable",
+        assignments,
+      }],
+    });
+    renderWorkspace({ project: projectWithTeam(team) });
+    startEditing();
+
+    const save = screen.getByRole("button", { name: "Save Team" });
+    const blocking = screen.getByRole("region", { name: "Blocking issues" });
+    const advisories = screen.getByRole("region", { name: "Advisories" });
+    const table = screen.getByRole("table", { name: "Team roster editor" });
+    expect(save.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(blocking.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(advisories.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(advisories).getByText(/Person has a name but no email address\. \(50\)/)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Save Team" })).toHaveLength(1);
+    const actionBar = screen.getByTestId("team-action-bar");
+    expect(actionBar).toHaveClass(
+      "sticky",
+      "top-0",
+      "z-40",
+      "border-b",
+      "border-slate-200",
+      "bg-white",
+      "shadow-sm",
+    );
+    const actionContent = screen.getByTestId("team-action-content");
+    expect(actionContent).toHaveClass(
+      "px-4",
+      "grid-cols-2",
+      "sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]",
+    );
+    const status = within(actionBar).getByRole("status", { name: "Team issue status" });
+    expect(status).toHaveClass(
+      "col-span-2",
+      "row-start-2",
+      "sm:col-span-1",
+      "sm:col-start-2",
+      "sm:row-start-1",
+    );
+    expect(status).toHaveTextContent("Blocking 50");
+    expect(status).toHaveTextContent("Advisories 57");
+    expect(screen.getAllByTestId("team-action-bar")).toHaveLength(1);
+    expect(actionBar.closest('section[aria-label="Team Member workspace"]')).toHaveClass(
+      "h-dvh",
+      "overflow-y-auto",
+    );
+    expect(blocking).not.toHaveClass("sticky");
+    expect(blocking).not.toHaveClass("fixed");
+    expect(advisories).not.toHaveClass("sticky");
+    expect(advisories).not.toHaveClass("fixed");
+  });
+
+  it("groups repeated Blocking issues into one compact summary with a count", () => {
+    const assignments = Array.from({ length: 50 }, (_, index) => ({
+      assignmentId: toPersonAssignmentId(`invalid-na-person-${index}`),
+      role: "member" as const,
+      functionText: "NA-Member",
+      name: `Invalid NA Person ${index + 1}`,
+      email: `invalid.na.${index + 1}@example.test`,
+      extraCells: [],
+      sourceRows: [],
+    }));
+    const team = onePersonTeam({
+      functions: [{
+        function: {
+          kind: "custom",
+          functionId: toTeamFunctionId("invalid-na-function"),
+          displayName: "NA",
+        },
+        applicability: "applicable",
+        assignments,
+      }],
+    });
+    renderWorkspace({ project: projectWithTeam(team) });
+    startEditing();
+
+    const blocking = screen.getByRole("region", { name: "Blocking issues" });
+    expect(within(blocking).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(blocking).getByText(
+      /NA \/ N\/A represents applicability and cannot be used as a Function name\. \(50\)/,
+    )).toBeInTheDocument();
+    expect(within(blocking).getAllByRole("link", { name: "Go to row" })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Save Team" })).toBeDisabled();
+  });
+
+  it("blocks an NA Function in the manual editor without allocating a custom identity", () => {
+    const project = projectWithTeam(onePersonTeam());
+    const onSave = vi.fn(successfulSave(project));
+    const { createFunctionId } = renderWorkspace({ project, onSave });
+    startEditing();
+    fireEvent.change(screen.getByLabelText("Function"), { target: { value: " N/A-Owner " } });
+
+    expect(screen.getByRole("region", { name: "Blocking issues" })).toHaveTextContent(
+      "NA / N/A represents applicability and cannot be used as a Function name.",
+    );
+    expect(screen.getByRole("button", { name: "Save Team" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Mark Applicable" })).not.toBeInTheDocument();
+    expect(createFunctionId).not.toHaveBeenCalled();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("groups repeated invalid N/A member names while keeping the full Save gate", () => {
+    const team = onePersonTeam({
+      functions: [{
+        function: { kind: "standard", functionId: teamFunctionCatalog[0]!.id },
+        applicability: "applicable",
+        assignments: Array.from({ length: 3 }, (_, index) => ({
+          assignmentId: toPersonAssignmentId(`invalid-member-name-${index}`),
+          role: "member" as const,
+          name: index === 0 ? "NA" : index === 1 ? "n/a" : " N/A ",
+          email: `invalid.member.${index}@example.test`,
+        })),
+      }],
+    });
+    renderWorkspace({ project: projectWithTeam(team) });
+    startEditing();
+
+    const blocking = screen.getByRole("region", { name: "Blocking issues" });
+    expect(within(blocking).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(blocking).getByText(
+      /NA \/ N\/A cannot be used as a member name\. Leave Member blank if no person is assigned\. \(3\)/,
+    )).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save Team" })).toBeDisabled();
+  });
+
+  it("keeps in-progress spaces while typing a free-text custom Function", () => {
+    const project = projectWithTeam(onePersonTeam());
+    const onSave = vi.fn(successfulSave(project));
+    const { createFunctionId } = renderWorkspace({ project, onSave });
+    startEditing();
+    const functionInput = screen.getByLabelText("Function");
+
+    for (const value of ["New", "New ", "New C", "New Custom-Member"]) {
+      fireEvent.change(functionInput, { target: { value } });
+      expect(functionInput).toHaveValue(value);
+    }
+
+    expect(createFunctionId).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Save Team" }));
+    expect(onSave.mock.calls[0]![1].rows[0]).toMatchObject({
+      functionText: "New Custom-Member",
+      functionRef: { kind: "custom", displayName: "New Custom" },
+      roleText: "member",
+    });
+  });
+
+  it("edits Tel. No. without deleting sibling extra cells or immutable source evidence", () => {
+    const noteCell = {
+      columnIndex: 5,
+      headerText: "Note",
+      rawType: "s",
+      rawValue: "keep me",
+      formattedText: "keep me",
+      hidden: false,
+    } as const;
+    const team = onePersonTeam({
+      functions: [{
+        ...onePersonTeam().functions[0]!,
+        assignments: [{
+          ...onePersonTeam().functions[0]!.assignments[0]!,
+          extraCells: [sourceEvidence.cells[0]!, noteCell],
+          sourceRows: [sourceEvidence],
+        }],
+      }],
+    });
+    const project = projectWithTeam(team);
+    const onSave = vi.fn(successfulSave(project));
+    renderWorkspace({ project, onSave });
+    startEditing();
+
+    fireEvent.change(screen.getByLabelText("Tel. No."), { target: { value: "5678" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Team" }));
+
+    const candidate = onSave.mock.calls[0]![1];
+    expect(candidate.rows[0]!.extraCells).toEqual([
+      expect.objectContaining({ headerText: "Tel", rawValue: "5678", formattedText: "5678", hidden: true }),
+      noteCell,
+    ]);
+    expect(candidate.rows[0]!.sourceRows).toEqual([sourceEvidence]);
+  });
+
+  it("reuses the compact table for import preview while retaining source evidence in data", async () => {
+    const onSave = vi.fn(successfulSave(devProject002));
+    renderWorkspace({ onSave });
+    selectImportFile(csvImportFile("compact.csv", [
+      "Function,Member,email,Tel. No.,Hidden Note",
+      "QCI-ME-Owner,Compact Import,compact@example.test,24680,retain-in-data",
+    ]));
+    await waitForImportPreview();
+
+    const table = screen.getByRole("table", { name: "Team roster editor" });
+    expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+      "Function",
+      "Member",
+      "email",
+      "Tel. No.",
+      "Actions",
+    ]);
+    expect(within(table).getByLabelText("Function")).toHaveValue("QCI-ME-Owner");
+    expect(within(table).getByLabelText("Tel. No.")).toHaveValue("24680");
+    expect(within(table).queryByLabelText("Role")).not.toBeInTheDocument();
+    expect(screen.queryByText("Source details")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save imported Team" }));
+    fireEvent.click(screen.getByRole("button", { name: "Replace & Save" }));
+    const candidate = onSave.mock.calls[0]![1];
+    expect(candidate.rows[0]!.sourceRows[0]).toMatchObject({
+      fileName: "compact.csv",
+      sheetName: "Sheet1",
+      rowNumber: 2,
+      cells: expect.arrayContaining([
+        expect.objectContaining({ headerText: "Function", rawValue: "QCI-ME-Owner", rawType: "s" }),
+        expect.objectContaining({ headerText: "Tel. No.", rawValue: "24680", formattedText: "24680" }),
+        expect.objectContaining({ headerText: "Hidden Note", rawValue: "retain-in-data" }),
+      ]),
+    });
+  });
+
+  it("keeps fifty people in one compact row-addressable table", () => {
+    const assignments = Array.from({ length: 50 }, (_, index) => ({
+      assignmentId: toPersonAssignmentId(`person-${index + 1}`),
+      role: "member" as const,
+      name: `Synthetic Person ${index + 1}`,
+      email: `person.${index + 1}@example.test`,
+      extraCells: [],
+      sourceRows: [],
+    }));
+    const team = onePersonTeam({
+      functions: [{
+        function: { kind: "standard", functionId: teamFunctionCatalog[0]!.id },
+        applicability: "applicable",
+        assignments,
+      }],
+    });
+    renderWorkspace({ project: projectWithTeam(team) });
+    startEditing();
+
+    const table = screen.getByRole("table", { name: "Team roster editor" });
+    expect(within(table).getAllByTestId("team-candidate-row")).toHaveLength(50);
+    expect(within(table).getAllByRole("row")).toHaveLength(51);
+    expect(within(table).queryAllByText("Source details")).toHaveLength(0);
+    expect(within(table).queryAllByLabelText("Role")).toHaveLength(0);
+    expect(within(table).getAllByTestId("team-candidate-row")[0]).toHaveClass("leading-6");
+
+    const lastName = within(table).getByDisplayValue("Synthetic Person 50");
+    const lastRow = lastName.closest<HTMLElement>('[data-row-id="manual::function::team-function-qci-me::0::member::49"]')!;
+    fireEvent.change(lastName, { target: { value: "Only last row changed" } });
+    fireEvent.click(within(lastRow).getByRole("button", { name: "Remove person" }));
+    expect(within(table).getAllByTestId("team-candidate-row")).toHaveLength(49);
+    expect(within(table).getByDisplayValue("Synthetic Person 49")).toBeInTheDocument();
   });
 
   it("shows null Team as an empty state and renders preserved rows once", () => {
@@ -231,7 +1006,10 @@ describe("Team Member workspace", () => {
       />,
     );
     expect(screen.getAllByText("Preserved Person")).toHaveLength(1);
-    expect(screen.getByText("QCMC")).toBeInTheDocument();
+    expect(within(screen.getByRole("rowgroup", { name: "QCMC" })).getByRole(
+      "cell",
+      { name: "QCMC" },
+    )).toBeInTheDocument();
   });
 
   it("keeps edits local, uses rowId keys, and allocates separate IDs only on Add/new custom actions", () => {
@@ -246,20 +1024,25 @@ describe("Team Member workspace", () => {
     const meName = screen.getByDisplayValue("DEV ME Owner");
     const meRow = meName.closest<HTMLElement>('[data-testid="team-candidate-row"]')!;
     fireEvent.change(within(meRow).getByLabelText("Function"), {
-      target: { value: teamFunctionCatalog[1]!.id },
+      target: { value: "QCI-EE-Owner" },
     });
-    expect(within(meRow).getByLabelText("Function")).toHaveValue(teamFunctionCatalog[1]!.id);
+    expect(within(meRow).getByLabelText("Function")).toHaveValue("QCI-EE-Owner");
     expect(screen.queryByRole("button", { name: "Confirm noncritical role" })).not.toBeInTheDocument();
     fireEvent.change(meName, { target: { value: "Edited ME Owner" } });
     fireEvent.change(screen.getByDisplayValue("dev.me.owner@example.test"), { target: { value: "edited.me@example.test" } });
     fireEvent.click(screen.getByRole("button", { name: "Add person" }));
     expect(createAssignmentId).toHaveBeenCalledTimes(1);
-    const added = screen.getByTestId("team-candidate-row-new-assignment-1");
+    const added = screen.getAllByTestId("team-candidate-row").find(
+      (row) => row.getAttribute("data-assignment-id") === "new-assignment-1",
+    )!;
     expect(added).toHaveAttribute("data-assignment-id", "new-assignment-1");
     expect(added).toHaveAttribute("data-row-id", "manual::new-assignment-1");
-    fireEvent.change(within(added).getByLabelText("Function"), { target: { value: "__new_custom__" } });
-    fireEvent.change(within(added).getByLabelText("New custom Function name"), { target: { value: "QCMC" } });
-    fireEvent.click(within(added).getByRole("button", { name: "Create custom Function" }));
+    expect(within(added).getByLabelText("Function")).toHaveValue("");
+    expect(within(added).getByLabelText("Name")).toHaveValue("");
+    expect(within(added).getByLabelText("Email")).toHaveValue("");
+    expect(within(added).getByLabelText("Tel. No.")).toHaveValue("");
+    expect(createFunctionId).not.toHaveBeenCalled();
+    fireEvent.change(within(added).getByLabelText("Function"), { target: { value: "QCMC-Member" } });
     expect(createFunctionId).toHaveBeenCalledTimes(1);
     fireEvent.click(within(added).getByRole("button", { name: "Remove person" }));
     expect(JSON.stringify(devProject002.team)).toBe(before);
@@ -286,12 +1069,17 @@ describe("Team Member workspace", () => {
     const advisories = screen.getByRole("region", { name: "Advisories" });
     expect(within(advisories).getByText(/Person has a name but no email address/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save Team" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Mark Applicable" }));
+    const row = screen.getByDisplayValue("N/A Person").closest<HTMLElement>('[data-testid="team-candidate-row"]')!;
+    expect(within(row).getByText("N/A", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Team issue status" })).toHaveTextContent("Blocking 1");
+    fireEvent.click(within(row).getByRole("button", { name: "Mark Applicable" }));
     expect(screen.queryByText(/Not Applicable Function cannot contain assignments/)).not.toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Team issue status" })).toHaveTextContent("Blocking 0");
     expect(project.team?.functions[0]?.applicability).toBe("notApplicable");
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 		fireEvent.click(within(screen.getByRole("dialog", { name: "Discard unsaved Team edits" })).getByRole("button", { name: "Discard changes" }));
-    expect(screen.getByText("Not Applicable")).toBeInTheDocument();
+    expect(project.team?.functions[0]?.applicability).toBe("notApplicable");
+    expect(screen.getByRole("table", { name: "Team roster" })).toBeInTheDocument();
     expect(onSave).not.toHaveBeenCalled();
   });
 
@@ -352,7 +1140,7 @@ describe("Team Member workspace", () => {
     renderWorkspace({ project, onSave });
     startEditing();
     fireEvent.click(screen.getByRole("button", { name: "Add person" }));
-    fireEvent.change(screen.getByLabelText("Role"), { target: { value: "owner" } });
+    fireEvent.change(screen.getByLabelText("Function"), { target: { value: "QCI-ME-Owner" } });
 
     fireEvent.click(screen.getByRole("button", { name: "Save Team" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm clear" }));
@@ -378,8 +1166,8 @@ describe("Team Member workspace", () => {
     renderWorkspace({ project, onSave });
     startEditing();
     fireEvent.click(screen.getByRole("button", { name: "Add person" }));
-    const rows = screen.getAllByTestId("team-candidate-row");
-    fireEvent.change(within(rows[1]!).getByLabelText("Role"), { target: { value: "owner" } });
+    const blankRow = screen.getAllByTestId("team-candidate-row")[1]!;
+    fireEvent.change(within(blankRow).getByLabelText("Function"), { target: { value: "QCI-ME-Owner" } });
 
     expect(screen.getByRole("button", { name: "Save Team" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Save Team" }));
@@ -438,6 +1226,35 @@ describe("Team Member workspace", () => {
 		expect(onBack).toHaveBeenCalledTimes(1);
 	});
 
+  it("keeps dirty navigation outside native email validity and presents its guard in the viewport", () => {
+    renderWorkspace();
+    startEditing();
+
+    const email = screen.getAllByLabelText("Email")[0]!;
+    expect(email).toHaveAttribute("type", "text");
+    expect(email).toHaveAttribute("inputmode", "email");
+    fireEvent.change(email, { target: { value: "arbitrary human text" } });
+
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    const back = screen.getByRole("button", { name: "Back" });
+    const save = screen.getByRole("button", { name: "Save Team" });
+    expect(cancel).toHaveAttribute("type", "button");
+    expect(back).toHaveAttribute("type", "button");
+    expect(save).toHaveAttribute("type", "button");
+
+    fireEvent.click(cancel);
+    const dialog = screen.getByRole("dialog", { name: "Discard unsaved Team edits" });
+    expect(dialog).toHaveClass("fixed", "inset-0");
+    expect(within(dialog).getByRole("button", { name: "Stay" })).toHaveAttribute("type", "button");
+    expect(within(dialog).getByRole("button", { name: "Discard changes" })).toHaveAttribute("type", "button");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Stay" }));
+    expect(email).toHaveValue("arbitrary human text");
+    fireEvent.click(back);
+    const backDialog = screen.getByRole("dialog", { name: "Discard unsaved Team edits" });
+    expect(backDialog).toHaveClass("fixed", "inset-0");
+    expect(within(backDialog).getByRole("button", { name: "Discard & Leave" })).toHaveAttribute("type", "button");
+  });
+
   it("offers explicit noncritical confirmation only for a possible restricted row", () => {
     const team: ProjectTeam = {
       ...onePersonTeam(),
@@ -456,14 +1273,16 @@ describe("Team Member workspace", () => {
     };
     renderWorkspace({ project: projectWithTeam(team) });
     startEditing();
-    const row = screen.getByTestId("team-candidate-row-possible-row");
+    const row = screen.getAllByTestId("team-candidate-row").find(
+      (candidateRow) => candidateRow.getAttribute("data-assignment-id") === "possible-row",
+    )!;
     expect(within(row).getByRole("button", { name: "Confirm noncritical role" })).toBeEnabled();
     fireEvent.click(within(row).getByRole("button", { name: "Confirm noncritical role" }));
-    expect(within(row).getByDisplayValue("backup")).toBeInTheDocument();
+    expect(within(row).getByDisplayValue("QCI PM backup Owner")).toBeInTheDocument();
     expect(within(row).queryByRole("button", { name: "Confirm noncritical role" })).not.toBeInTheDocument();
   });
 
-  it("moves a corrected preserved row into one formal assignment with source evidence intact", () => {
+  it("moves a corrected preserved row into one Owner and reopens one roster row with source evidence", async () => {
     const team: ProjectTeam = {
       ...onePersonTeam(),
       functions: [],
@@ -479,22 +1298,55 @@ describe("Team Member workspace", () => {
         restrictedRoleExclusion: null,
       }],
     };
-    const project = projectWithTeam(team);
-    const onSave = vi.fn(successfulSave(project));
-    renderWorkspace({ project, onSave });
+    const initialProject = projectWithTeam(team);
+    let savedProject: Project | null = null;
+    function StatefulPreservedWorkspace(): React.ReactElement {
+      const [project, setProject] = React.useState(initialProject);
+      return (
+        <TeamMemberWorkspace
+          createAssignmentId={() => toPersonAssignmentId("unused")}
+          createFunctionId={() => toTeamFunctionId("unused")}
+          onBack={() => undefined}
+          onSave={(projectId, candidate) => {
+            const result = saveProjectTeamForState(
+              { projects: [project], schedules: [] },
+              projectId,
+              candidate,
+              teamFunctionCatalog,
+            );
+            if (result.ok) {
+              savedProject = result.project;
+              setProject(result.project);
+            }
+            return result;
+          }}
+          project={project}
+          standardFunctionDefinitions={teamFunctionCatalog}
+        />
+      );
+    }
+    render(<StatefulPreservedWorkspace />);
     startEditing();
-    fireEvent.change(screen.getByDisplayValue("Coordinator"), { target: { value: "member" } });
+    fireEvent.change(screen.getByLabelText("Function"), { target: { value: "QCMC-Owner" } });
     fireEvent.click(screen.getByRole("button", { name: "Save Team" }));
-    const result = onSave.mock.results[0]!.value;
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.project.team?.preservedUnclassifiedEntries).toHaveLength(0);
-    expect(result.project.team?.functions[0]?.assignments).toHaveLength(1);
-    expect(result.project.team?.functions[0]?.assignments[0]?.sourceRows).toEqual([sourceEvidence]);
-    expect(result.project.team?.functions[0]?.assignments[0]?.extraCells).toEqual(sourceEvidence.cells);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Team Member" })).toBeInTheDocument());
+    expect(savedProject).not.toBeNull();
+    expect(savedProject!.team?.preservedUnclassifiedEntries).toHaveLength(0);
+    expect(savedProject!.team?.functions[0]?.assignments).toHaveLength(1);
+    expect(savedProject!.team?.functions[0]?.assignments[0]).toMatchObject({
+      role: "owner",
+      sourceRows: [sourceEvidence],
+      extraCells: sourceEvidence.cells,
+    });
+    const roster = screen.getByRole("table");
+    expect(within(roster).getAllByRole("cell")).toHaveLength(4);
+    expect(within(roster).getByRole("cell", { name: "Corrected Person" })).toBeInTheDocument();
+    expect(within(roster).getByRole("cell", { name: "QCMC-Owner" })).toBeInTheDocument();
+    expect(within(roster).getByRole("cell", { name: "1234" })).toBeInTheDocument();
+    expect(screen.queryByText("Source details")).not.toBeInTheDocument();
   });
 
-  it("renames a custom Function without changing its ID or source label", () => {
+  it("edits custom Function full text without changing its stable ID", () => {
     const team = onePersonTeam({
       functions: [{
         function: { kind: "custom", functionId: toTeamFunctionId("custom-stable"), displayName: "Old Custom" },
@@ -512,7 +1364,7 @@ describe("Team Member workspace", () => {
     const onSave = vi.fn(successfulSave(project));
     renderWorkspace({ project, onSave });
     startEditing();
-    fireEvent.change(screen.getByLabelText("Custom Function name"), { target: { value: "Renamed Custom" } });
+    fireEvent.change(screen.getByLabelText("Function"), { target: { value: "Renamed Custom-Member" } });
     fireEvent.click(screen.getByRole("button", { name: "Save Team" }));
     const result = onSave.mock.results[0]!.value;
     expect(result.ok).toBe(true);
@@ -520,15 +1372,14 @@ describe("Team Member workspace", () => {
     expect(result.project.team?.functions[0]?.function).toEqual({
       kind: "custom", functionId: "custom-stable", displayName: "Renamed Custom",
     });
-    expect(result.project.team?.functions[0]?.assignments[0]?.functionText).toBe("Original Excel Label");
+    expect(result.project.team?.functions[0]?.assignments[0]?.functionText).toBe("Renamed Custom-Member");
   });
 
-  it("offers zero-person custom Functions by stable ID without merging equal display names", () => {
+  it("keeps the current stable custom Function ID on a role-only edit when display names collide", () => {
 		const retainedA = toTeamFunctionId("retained-custom-a");
 		const retainedB = toTeamFunctionId("retained-custom-b");
 		const team = onePersonTeam({
 			functions: [
-				...onePersonTeam().functions,
 				{
 					function: { kind: "custom", functionId: retainedA, displayName: "Shared Custom" },
 					applicability: "applicable",
@@ -537,7 +1388,13 @@ describe("Team Member workspace", () => {
 				{
 					function: { kind: "custom", functionId: retainedB, displayName: "Shared Custom" },
 					applicability: "pending",
-					assignments: [],
+					assignments: [{
+            assignmentId: toPersonAssignmentId("shared-custom-person"),
+            role: "member",
+            name: "Shared Custom Person",
+            email: "shared.custom@example.test",
+            functionText: "Shared Custom-Member",
+          }],
 				},
 			],
 		});
@@ -545,21 +1402,129 @@ describe("Team Member workspace", () => {
 		const onSave = vi.fn(successfulSave(project));
 		renderWorkspace({ project, onSave });
 		startEditing();
-		const functionSelect = screen.getByLabelText("Function");
-		const matchingOptions = within(functionSelect).getAllByRole("option", { name: "Shared Custom" });
-		expect(matchingOptions).toHaveLength(2);
-		expect(matchingOptions.map((option) => option.getAttribute("value"))).toEqual([
-			retainedA,
-			retainedB,
-		]);
-		fireEvent.change(functionSelect, { target: { value: retainedA } });
+		const functionInput = screen.getByDisplayValue("Shared Custom-Member");
+    const datalist = document.getElementById(functionInput.getAttribute("list")!)!;
+    expect(datalist.querySelectorAll('option[value="Shared Custom-Member"]')).toHaveLength(1);
+		fireEvent.change(functionInput, { target: { value: "Shared Custom-Owner" } });
 		fireEvent.click(screen.getByRole("button", { name: "Save Team" }));
 		const result = onSave.mock.results[0]!.value as ReturnType<TeamMemberWorkspaceProps["onSave"]>;
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
     expect(
+      result.project.team?.functions.find(({ function: ref }) => ref.functionId === retainedB)?.assignments,
+    ).toEqual([expect.objectContaining({
+      assignmentId: toPersonAssignmentId("shared-custom-person"),
+      role: "owner",
+    })]);
+    expect(
       result.project.team?.functions.find(({ function: ref }) => ref.functionId === retainedA)?.assignments,
-    ).toEqual([expect.objectContaining({ assignmentId: toPersonAssignmentId("one-person") })]);
+    ).toEqual([]);
+  });
+
+  it.each([
+    { selectedId: "retained-custom-a", optionNumber: 1 },
+    { selectedId: "retained-custom-b", optionNumber: 2 },
+  ])("selects same-named zero-person custom Function $selectedId by stable identity", ({ selectedId, optionNumber }) => {
+    const retainedA = toTeamFunctionId("retained-custom-a");
+    const retainedB = toTeamFunctionId("retained-custom-b");
+    const team = onePersonTeam({
+      functions: [
+        ...onePersonTeam().functions,
+        {
+          function: { kind: "custom", functionId: retainedA, displayName: "Shared Custom" },
+          applicability: "applicable",
+          assignments: [],
+        },
+        {
+          function: { kind: "custom", functionId: retainedB, displayName: "Shared Custom" },
+          applicability: "pending",
+          assignments: [],
+        },
+      ],
+    });
+    const project = projectWithTeam(team);
+    const onSave = vi.fn(successfulSave(project));
+    renderWorkspace({ project, onSave });
+    startEditing();
+    fireEvent.click(screen.getByRole("button", { name: "Add person" }));
+    const addedRow = screen.getAllByTestId("team-candidate-row").at(-1)!;
+    fireEvent.change(within(addedRow).getByLabelText("Name"), { target: { value: "New Shared Person" } });
+    fireEvent.change(within(addedRow).getByLabelText("Email"), { target: { value: "new.shared@example.test" } });
+
+    const identitySelect = within(addedRow).getByLabelText("Choose existing Function identity");
+    const option = within(identitySelect).getByRole("option", {
+      name: `Shared Custom-Member (existing Function ${optionNumber})`,
+    });
+    fireEvent.change(identitySelect, { target: { value: option.getAttribute("value") } });
+    expect(within(addedRow).getByLabelText("Function")).toHaveValue("Shared Custom-Member");
+    fireEvent.click(screen.getByRole("button", { name: "Save Team" }));
+
+    const result = onSave.mock.results[0]!.value as ReturnType<TeamMemberWorkspaceProps["onSave"]>;
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(
+      result.project.team?.functions.find(({ function: ref }) => ref.functionId === selectedId)?.assignments,
+    ).toEqual([expect.objectContaining({
+      name: "New Shared Person",
+      role: "member",
+    })]);
+  });
+
+  it("reuses a saved custom Function whose display name is already a full role label", () => {
+    const existingFunctionId = toTeamFunctionId("existing-full-custom");
+    const team = onePersonTeam({
+      functions: [{
+        function: {
+          kind: "custom",
+          functionId: existingFunctionId,
+          displayName: "Custom Lab-Member",
+        },
+        applicability: "pending",
+        assignments: [{
+          assignmentId: toPersonAssignmentId("existing-full-custom-person"),
+          role: "member",
+          name: "Existing Full Custom Person",
+          email: "existing.full.custom@example.test",
+          functionText: "Custom Lab-Member",
+        }],
+      }],
+    });
+    const project = projectWithTeam(team);
+    const onSave = vi.fn(successfulSave(project));
+    const { createFunctionId } = renderWorkspace({ project, onSave });
+    startEditing();
+    fireEvent.click(screen.getByRole("button", { name: "Add person" }));
+    const addedRow = screen.getAllByTestId("team-candidate-row").at(-1)!;
+    fireEvent.change(within(addedRow).getByLabelText("Function"), {
+      target: { value: "Custom Lab-Member" },
+    });
+    fireEvent.change(within(addedRow).getByLabelText("Name"), {
+      target: { value: "Added Full Custom Person" },
+    });
+    fireEvent.change(within(addedRow).getByLabelText("Email"), {
+      target: { value: "added.full.custom@example.test" },
+    });
+
+    expect(createFunctionId).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Save Team" }));
+
+    const result = onSave.mock.results[0]!.value as ReturnType<TeamMemberWorkspaceProps["onSave"]>;
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.project.team?.functions).toEqual([
+      expect.objectContaining({
+        function: {
+          kind: "custom",
+          functionId: existingFunctionId,
+          displayName: "Custom Lab-Member",
+        },
+        applicability: "pending",
+        assignments: [
+          expect.objectContaining({ name: "Existing Full Custom Person" }),
+          expect.objectContaining({ name: "Added Full Custom Person", role: "member" }),
+        ],
+      }),
+    ]);
   });
 
 	it("recomputes canonical Advisories in read-only mode after a successful Save", () => {
@@ -612,8 +1577,7 @@ describe("Team Member workspace", () => {
     const onSave = vi.fn(successfulSave(project));
     renderWorkspace({ project, onSave });
     startEditing();
-    fireEvent.click(screen.getByText("Source details"));
-    fireEvent.change(screen.getByLabelText("Tel"), { target: { value: "5678" } });
+    fireEvent.change(screen.getByLabelText("Tel. No."), { target: { value: "5678" } });
     fireEvent.click(screen.getByRole("button", { name: "Save Team" }));
     const result = onSave.mock.results[0]!.value;
     expect(result.ok).toBe(true);
@@ -628,7 +1592,7 @@ describe("Team Member workspace", () => {
     expect(assignment?.sourceRows).toEqual([sourceEvidence]);
   });
 
-	it("shows immutable raw source evidence after Function edit, Save, and reopen", () => {
+	it("preserves immutable raw source evidence after Function edit, Save, and reopen without Details UI", () => {
 		const detailedSource: TeamSourceRow = {
 			fileName: "source-team.xlsx",
 			sheetName: "Original Sheet",
@@ -663,6 +1627,7 @@ describe("Team Member workspace", () => {
 				}],
 			}],
 		}));
+		let savedProject: Project | null = null;
 		function StatefulSourceWorkspace(): React.ReactElement {
 			const [project, setProject] = React.useState(initialProject);
 			return (
@@ -677,7 +1642,10 @@ describe("Team Member workspace", () => {
 							candidate,
 							teamFunctionCatalog,
 						);
-						if (result.ok) setProject(result.project);
+						if (result.ok) {
+							savedProject = result.project;
+							setProject(result.project);
+						}
 						return result;
 					}}
 					project={project}
@@ -687,22 +1655,28 @@ describe("Team Member workspace", () => {
 		}
 		render(<StatefulSourceWorkspace />);
 		startEditing();
-		fireEvent.change(screen.getByLabelText("Function"), { target: { value: teamFunctionCatalog[1]!.id } });
+		fireEvent.change(screen.getByLabelText("Function"), { target: { value: "QCI-EE-Member" } });
 		fireEvent.click(screen.getByRole("button", { name: "Save Team" }));
-		fireEvent.click(screen.getByText("Source details"));
-		const details = screen.getByText("Source details").parentElement!;
-		expect(within(details).getByText("Original Function: Original Raw Function")).toBeInTheDocument();
-		expect(within(details).getByText("File: source-team.xlsx")).toBeInTheDocument();
-		expect(within(details).getByText("Sheet: Original Sheet")).toBeInTheDocument();
-		expect(within(details).getByText("Row: 42")).toBeInTheDocument();
-		expect(within(details).getByText("Column 4 (Tel. No.)")).toBeInTheDocument();
-		expect(within(details).getByText("Raw value (n): 12345")).toBeInTheDocument();
-		expect(within(details).getByText("Formatted text: 12,345")).toBeInTheDocument();
-		expect(within(details).getByText("Hidden: yes")).toBeInTheDocument();
-		expect(screen.getByText("QCI-EE")).toBeInTheDocument();
+		expect(savedProject).not.toBeNull();
+		const assignment = savedProject!.team?.functions
+			.find(({ function: ref }) => ref.functionId === teamFunctionCatalog[1]!.id)
+			?.assignments[0];
+		expect(assignment?.sourceRows).toEqual([detailedSource]);
+		expect(assignment?.sourceRows?.[0]).toMatchObject({
+			fileName: "source-team.xlsx",
+			sheetName: "Original Sheet",
+			rowNumber: 42,
+			cells: [
+				expect.objectContaining({ headerText: "Function", rawValue: "Original Raw Function", rawType: "s", hidden: false }),
+				expect.objectContaining({ headerText: "Tel. No.", rawValue: 12345, rawType: "n", formattedText: "12,345", hidden: true }),
+			],
+		});
+		expect(screen.getByRole("cell", { name: "QCI-EE-Member" })).toBeInTheDocument();
+		expect(screen.queryByText("Source details")).not.toBeInTheDocument();
+		expect(screen.queryByText("File: source-team.xlsx")).not.toBeInTheDocument();
 	});
 
-	it("labels a manual-only row without inventing imported source", () => {
+	it("keeps a manual-only row source-free without exposing or inventing Details UI", () => {
 		const team = onePersonTeam({
 			functions: [{
 				...onePersonTeam().functions[0]!,
@@ -713,13 +1687,14 @@ describe("Team Member workspace", () => {
 				}],
 			}],
 		});
-		renderWorkspace({ project: projectWithTeam(team) });
-		fireEvent.click(screen.getByText("Source details"));
-		const details = screen.getByText("Source details").parentElement!;
-		expect(within(details).getByText("No imported source.")).toBeInTheDocument();
-		expect(within(details).queryByText(/^File:/)).not.toBeInTheDocument();
-		expect(within(details).queryByText(/^Sheet:/)).not.toBeInTheDocument();
-		expect(within(details).queryByText(/^Row:/)).not.toBeInTheDocument();
+		const project = projectWithTeam(team);
+		const onSave = vi.fn(successfulSave(project));
+		renderWorkspace({ project, onSave });
+		expect(screen.queryByText("Source details")).not.toBeInTheDocument();
+		expect(screen.queryByText("No imported source.")).not.toBeInTheDocument();
+		startEditing();
+		fireEvent.click(screen.getByRole("button", { name: "Save Team" }));
+		expect(onSave.mock.calls[0]![1].rows[0]!.sourceRows).toEqual([]);
 	});
 
   it("keeps cross-Function rows distinct when their canonical assignmentId matches", () => {
@@ -821,6 +1796,8 @@ describe("Team Member workspace", () => {
     ]));
 
     const choice = await screen.findByRole("region", { name: "Choose Team import sheet" });
+    expect(screen.getByTestId("team-action-bar")).toHaveClass("sticky", "top-0", "z-40");
+    expect(screen.getAllByTestId("team-action-bar")).toHaveLength(1);
     expect(within(choice).getByText(/Roster A.*1 person row/)).toBeInTheDocument();
     expect(within(choice).getByText(/Roster B.*1 person row/)).toBeInTheDocument();
     expect(screen.queryByText("Sheet A Person")).not.toBeInTheDocument();
@@ -870,19 +1847,99 @@ describe("Team Member workspace", () => {
 
     fireEvent.change(screen.getByDisplayValue("Imported One"), { target: { value: "Corrected Imported One" } });
     const secondRow = screen.getByDisplayValue("Imported Two").closest<HTMLElement>('[data-testid="team-candidate-row"]')!;
-    fireEvent.click(within(secondRow).getByRole("button", { name: "Exclude imported row" }));
+    expect(within(secondRow).getByRole("button", { name: "Exclude from import" })).toBeInTheDocument();
+    expect(within(secondRow).queryByRole("button", { name: "Remove person" })).not.toBeInTheDocument();
+    fireEvent.click(within(secondRow).getByRole("button", { name: "Exclude from import" }));
 
     expect(screen.getByDisplayValue("Corrected Imported One")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("Imported Two")).not.toBeInTheDocument();
     expect(screen.getByText("Excluded imported rows: 1")).toBeInTheDocument();
     const excluded = screen.getByRole("region", { name: "Excluded imported rows" });
     expect(excluded).toHaveTextContent("Name: Imported Two");
-    expect(excluded).toHaveTextContent("Original Function: QCI-EE-Owner");
-    expect(excluded).toHaveTextContent("File: preview.csv");
-    expect(excluded).toHaveTextContent("Row: 3");
-    expect(screen.getByText("Original Function: QCI-ME-Owner")).toBeInTheDocument();
+    expect(excluded).toHaveTextContent("Function: QCI-EE-Owner");
+    expect(excluded).not.toHaveTextContent("File: preview.csv");
+    expect(excluded).not.toHaveTextContent("Row: 3");
+    expect(screen.queryByText("Source details")).not.toBeInTheDocument();
     expect(project.team).toEqual(onePersonTeam());
     expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("uses Remove person for a manual row added inside an import preview", async () => {
+    renderWorkspace({ project: projectWithTeam(null) });
+    selectImportFile(csvImportFile("mixed-preview.csv", [
+      "Function,Member,email",
+      "QCI-ME-Owner,Imported Person,imported@example.test",
+    ]));
+    await waitForImportPreview();
+
+    const importedRow = screen.getByDisplayValue("Imported Person").closest<HTMLElement>('[data-testid="team-candidate-row"]')!;
+    expect(within(importedRow).getByRole("button", { name: "Exclude from import" })).toBeInTheDocument();
+    expect(within(importedRow).queryByRole("button", { name: "Remove person" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add person" }));
+    const rows = screen.getAllByTestId("team-candidate-row");
+    const manualRow = rows[rows.length - 1]!;
+    expect(within(manualRow).getByRole("button", { name: "Remove person" })).toBeInTheDocument();
+    expect(within(manualRow).queryByRole("button", { name: "Exclude from import" })).not.toBeInTheDocument();
+    expect(within(manualRow).getAllByRole("button")).toHaveLength(1);
+  });
+
+  it("keeps excluded import evidence reviewable and omits that row from Save", async () => {
+    const project = projectWithTeam(null);
+    const onSave = vi.fn(successfulSave(project));
+    renderWorkspace({ project, onSave });
+    selectImportFile(csvImportFile("exclude-save.csv", [
+      "Function,Member,email,Note",
+      "QCI-ME-Owner,Kept Person,kept@example.test,Keep evidence",
+      "QCI-EE-Owner,Excluded Person,excluded@example.test,Excluded evidence",
+    ]));
+    await waitForImportPreview();
+
+    const excludedRow = screen.getByDisplayValue("Excluded Person").closest<HTMLElement>('[data-testid="team-candidate-row"]')!;
+    fireEvent.click(within(excludedRow).getByRole("button", { name: "Exclude from import" }));
+    const evidence = screen.getByRole("region", { name: "Excluded imported rows" });
+    expect(evidence).toHaveTextContent("Excluded Person");
+    expect(evidence).toHaveTextContent("QCI-EE-Owner");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save imported Team" }));
+    expect(onSave).toHaveBeenCalledTimes(1);
+    const savedCandidate = onSave.mock.calls[0]![1];
+    expect(savedCandidate.rows).toHaveLength(1);
+    expect(savedCandidate.rows[0]).toMatchObject({
+      name: "Kept Person",
+      sourceRows: [expect.objectContaining({ fileName: "exclude-save.csv", rowNumber: 2 })],
+    });
+    expect(savedCandidate.excludedSourceRowIds).toHaveLength(1);
+  });
+
+  it("keeps import actions and grouped issues before the preview roster", async () => {
+    renderWorkspace();
+    selectImportFile(csvImportFile("layout.csv", [
+      "Function,Member,email",
+      "QCI-ME-Owner,Import Missing Email,",
+    ]));
+    await waitForImportPreview();
+
+    const save = screen.getByRole("button", { name: "Save imported Team" });
+    const advisories = screen.getByRole("region", { name: "Advisories" });
+    const table = screen.getByRole("table", { name: "Team roster editor" });
+    expect(save.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(advisories.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(advisories).getByText(/Person has a name but no email address/)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Save imported Team" })).toHaveLength(1);
+    expect(screen.getByTestId("team-action-bar")).toHaveClass(
+      "sticky",
+      "top-0",
+      "z-40",
+      "border-b",
+      "border-slate-200",
+      "bg-white",
+      "shadow-sm",
+    );
+    expect(screen.getByTestId("team-action-content")).toHaveClass("px-4");
+    expect(screen.getByTestId("team-main-content")).toHaveClass("px-4");
+    expect(screen.getByRole("status", { name: "Team issue status" })).toHaveTextContent("Advisories 7");
+    expect(screen.getAllByTestId("team-action-bar")).toHaveLength(1);
   });
 
   it("blocks a zero-effective-row import without invoking manual clear or replacement", async () => {
@@ -896,6 +1953,30 @@ describe("Team Member workspace", () => {
 
     expect(screen.getByText(/Import must contain at least one effective roster row/)).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Confirm manual clear" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Confirm whole Team replacement" })).not.toBeInTheDocument();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("treats an imported row whose current person fields were cleared as zero-effective while retaining its source row", async () => {
+    const project = projectWithTeam(onePersonTeam());
+    const onSave = vi.fn(successfulSave(project));
+    renderWorkspace({ project, onSave });
+    selectImportFile(csvImportFile("cleared-import.csv", [
+      "Function,Member,email,Tel. No.",
+      "QCI-ME-Owner,Cleared Person,cleared@example.test,24680",
+    ]));
+    await waitForImportPreview();
+
+    const importedRow = screen.getByTestId("team-candidate-row");
+    fireEvent.change(within(importedRow).getByLabelText("Name"), { target: { value: "" } });
+    fireEvent.change(within(importedRow).getByLabelText("Email"), { target: { value: "" } });
+    fireEvent.change(within(importedRow).getByLabelText("Tel. No."), { target: { value: "" } });
+
+    expect(screen.getByText("Effective roster rows: 0")).toBeInTheDocument();
+    expect(within(importedRow).getByRole("button", { name: "Exclude from import" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save imported Team" }));
+
+    expect(screen.getByText(/Import must contain at least one effective roster row/)).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Confirm whole Team replacement" })).not.toBeInTheDocument();
     expect(onSave).not.toHaveBeenCalled();
   });
@@ -917,6 +1998,7 @@ describe("Team Member workspace", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Save imported Team" }));
     let dialog = screen.getByRole("dialog", { name: "Confirm whole Team replacement" });
+    expect(dialog).toHaveClass("fixed", "inset-0");
     expect(within(dialog).getByText("Project: Nautilus")).toBeInTheDocument();
     expect(within(dialog).getByText("File: replacement.csv")).toBeInTheDocument();
     expect(within(dialog).getByText("Existing roster rows: 1")).toBeInTheDocument();

@@ -104,6 +104,83 @@ function importCandidate(
 }
 
 describe("Team import candidate creation", () => {
+	it.each([
+		"NA",
+		"N/A",
+		"NA-Leader",
+		"NA-Owner",
+		"NA-Member",
+		"N/A-Leader",
+		"N/A-Owner",
+		"N/A-Member",
+	])("blocks applicability marker %s as a Function while retaining raw evidence", (functionText) => {
+		const source = sourceRow(2, functionText, "Synthetic NA Person", "na.person@example.test");
+		const createFunctionId = deterministicFactory(
+			`invalid-na-${functionText.replaceAll("/", "-")}`,
+		);
+		const candidate = importCandidate(
+			null,
+			sheet([source]),
+			createFunctionId,
+		);
+
+		expect(validateTeamEditCandidate(candidate, standardDefinitions)).toContainEqual(
+			expect.objectContaining({
+				code: "team.data.invalid-applicability-function-label",
+				severity: "blocking",
+				message: "NA / N/A represents applicability and cannot be used as a Function name.",
+			}),
+		);
+		expect(createFunctionId).not.toHaveBeenCalled();
+		expect(candidate.rows[0]?.functionRef).toBeNull();
+		expect(candidate.rows[0]?.sourceRows).toEqual([source]);
+	});
+
+	it("does not false-positive legitimate Function names containing NA", () => {
+		const candidate = importCandidate(
+			null,
+			sheet([
+				sourceRow(2, "NAND-Owner", "Synthetic NAND Owner", "nand@example.test"),
+				sourceRow(3, "Finance-Owner", "Synthetic Finance Owner", "finance@example.test"),
+			]),
+			deterministicFactory("nand-function", "finance-function"),
+		);
+
+		expect(validateTeamEditCandidate(candidate, standardDefinitions)).not.toContainEqual(
+			expect.objectContaining({ code: "team.data.invalid-applicability-function-label" }),
+		);
+	});
+
+	it("blocks an imported N/A member name while retaining raw evidence and legal Function identity", () => {
+		const telephone: TeamSourceCell = {
+			columnIndex: 4,
+			headerText: "Tel. No.",
+			rawType: "n",
+			rawValue: 24680,
+			formattedText: "24680",
+			hidden: true,
+		};
+		const source = sourceRow(6, "Synthetic Thermal", " n/A ", "na.member@example.test", [telephone]);
+		const candidate = importCandidate(
+			null,
+			sheet([source]),
+			deterministicFactory(),
+		);
+
+		expect(validateTeamEditCandidate(candidate, standardDefinitions)).toContainEqual(
+			expect.objectContaining({
+				code: "team.data.invalid-applicability-member-name",
+				severity: "blocking",
+			}),
+		);
+		expect(candidate.rows[0]).toMatchObject({
+			name: " n/A ",
+			functionRef: { kind: "standard", functionId: standardThermalId },
+			extraCells: [telephone],
+			sourceRows: [source],
+		});
+	});
+
 	it("creates distinct row IDs for identical source coordinates in separate import sessions", () => {
 		const selectedSheet = sheet([sourceRow(2, "QCI-PM-Owner", "Synthetic PM", "pm@example.test")]);
 		const first = createImportCandidate(
@@ -146,6 +223,51 @@ describe("Team import candidate creation", () => {
 		expect(createFunctionId).not.toHaveBeenCalled();
 		expect(definitions).toEqual(standardDefinitions);
 		expect(candidate).not.toHaveProperty("standardFunctionDefinitions");
+	});
+
+	it.each([
+		["QCI-ME-Leader", "leader"],
+		["QCI-ME-Owner", "owner"],
+		["QCI-ME-Member", "member"],
+	] as const)("maps an exact raw %s label to its production-shaped standard Function", (rawLabel, role) => {
+		const productionMeId = toTeamFunctionId("team-function-qci-me");
+		const productionDefinitions: readonly TeamFunctionDefinition[] = [{
+			id: productionMeId,
+			displayName: "QCI-ME",
+			active: true,
+		}];
+		const baseTeam: ProjectTeam = {
+			...emptyTeam(),
+			functions: [{
+				function: { kind: "standard", functionId: productionMeId },
+				applicability: "notApplicable",
+				assignments: [],
+			}],
+		};
+		const createFunctionId = deterministicFactory("must-not-create-custom-qci-me");
+		const candidate = importCandidate(
+			baseTeam,
+			sheet([sourceRow(2, rawLabel, "Synthetic Person", "person@example.test")]),
+			createFunctionId,
+			"production-standard-import-session",
+			productionDefinitions,
+		);
+
+		expect(candidate.rows[0]).toMatchObject({
+			functionText: rawLabel,
+			functionRef: { kind: "standard", functionId: productionMeId },
+			roleText: role,
+			applicability: "notApplicable",
+			sourceRows: [expect.objectContaining({ rowNumber: 2 })],
+		});
+		expect(createFunctionId).not.toHaveBeenCalled();
+		expect(validateTeamEditCandidate(candidate, productionDefinitions)).toContainEqual(
+			expect.objectContaining({
+				code: "team.data.not-applicable-with-people",
+				severity: "blocking",
+			}),
+		);
+		expect(materializeProjectTeam(candidate, productionDefinitions)).toMatchObject({ ok: false });
 	});
 
 	it("does not fuzzy-map an unknown label to a standard Function", () => {
@@ -1087,6 +1209,74 @@ describe("saved Team editing", () => {
 
 		expect(edited.rows[0]).toMatchObject({ parsedRole: "owner", restrictedKey: null, possibleRestricted: false, restrictedRoleDecision: "unresolved" });
 		expect(candidate.rows[0]?.roleText).not.toBe("owner");
+	});
+
+	it("drops an empty legacy NA Function identity after its person is explicitly reassigned", () => {
+		const invalidFunctionId = toTeamFunctionId("legacy-na-function");
+		const assignmentId = toPersonAssignmentId("legacy-na-owner");
+		const source = sourceRow(2, "NA-Owner", "Synthetic Corrected Owner", "corrected@example.test");
+		const baseTeam: ProjectTeam = {
+			...emptyTeam(),
+			functions: [{
+				function: {
+					kind: "custom",
+					functionId: invalidFunctionId,
+					displayName: "NA",
+				},
+				applicability: "applicable",
+				assignments: [{
+					assignmentId,
+					role: "owner",
+					functionText: "NA-Owner",
+					name: "Synthetic Corrected Owner",
+					email: "corrected@example.test",
+					extraCells: [],
+					sourceRows: [source],
+				}],
+			}],
+		};
+		const opened = createEditCandidate(projectId, baseTeam, standardDefinitions);
+		const reassigned = assignCandidateFunction(
+			opened,
+			opened.rows[0]!.rowId,
+			{ kind: "standard", functionId: standardMeId },
+			standardDefinitions,
+		);
+		const result = materializeProjectTeam(reassigned, standardDefinitions);
+
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.team.functions).not.toContainEqual(
+			expect.objectContaining({
+				function: expect.objectContaining({ functionId: invalidFunctionId }),
+			}),
+		);
+		expect(result.team.functions).toContainEqual(expect.objectContaining({
+			function: { kind: "standard", functionId: standardMeId },
+			assignments: [expect.objectContaining({ assignmentId, sourceRows: [source] })],
+		}));
+	});
+
+	it("retains a legitimate zero-person custom Function during materialization", () => {
+		const functionId = toTeamFunctionId("legitimate-zero-person-custom");
+		const baseTeam: ProjectTeam = {
+			...emptyTeam(),
+			functions: [{
+				function: { kind: "custom", functionId, displayName: "RF Lab" },
+				applicability: "pending",
+				assignments: [],
+			}],
+		};
+		const candidate = createEditCandidate(projectId, baseTeam, standardDefinitions);
+		const result = materializeProjectTeam(candidate, standardDefinitions);
+
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.team.functions).toContainEqual({
+			function: { kind: "custom", functionId, displayName: "RF Lab" },
+			applicability: "pending",
+			assignments: [],
+		});
 	});
 
 	it("keeps add remove assign and custom-ref helpers pure", () => {

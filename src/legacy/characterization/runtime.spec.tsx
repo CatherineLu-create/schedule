@@ -12,6 +12,7 @@ import {
   startScheduleWorkingDraft,
 } from "../../application/commands/canonicalScheduleCommands";
 import { selectDashboardProjectRow } from "../../application/selectors/dashboardProjectRows";
+import { selectTeamMemberRows } from "../../application/selectors/teamMemberRows";
 import {
   resolveCanonicalScheduleOwner,
   selectCurrentPublishedSchedule,
@@ -1113,6 +1114,77 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(screen.getByRole("heading", { name: "Team Member" })).toBeInTheDocument();
     expect(screen.getAllByText("Runtime Imported").length).toBeGreaterThan(0);
     expect(screen.queryByText("DEV ME Owner")).not.toBeInTheDocument();
+  });
+
+  it("imports hidden numeric XLSX evidence into one lossless unknown-role roster and reopens it", async () => {
+    render(<App initialSelectedProjectId={devProject002.id} />);
+    fireEvent.click(screen.getByRole("button", { name: "Open Team Member" }));
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      ["Function", "Member", "email", "Tel. No."],
+      ["QCMC-Coordinator", "Integrated Unknown", null, 24680],
+    ]);
+    worksheet["!cols"] = [{}, {}, {}, { hidden: true }];
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Roster");
+    const bytes = XLSX.write(workbook, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
+    const file = {
+      name: "integrated-hidden.xlsx",
+      arrayBuffer: vi.fn(async () => bytes),
+    } as unknown as File;
+
+    fireEvent.change(screen.getByLabelText("Import Team Member file"), {
+      target: { files: [file] },
+    });
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Import Team preview" })).toBeInTheDocument());
+    expect(screen.getByDisplayValue("Integrated Unknown")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save imported Team" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Save imported Team" }));
+    fireEvent.click(screen.getByRole("button", { name: "Replace & Save" }));
+
+    const reduced = lastReducedState();
+    const saved = reduced.projects.find(({ id }) => id === devProject002.id)!;
+    expect(selectTeamMemberRows(saved.team)).toHaveLength(1);
+    expect(saved.team?.preservedUnclassifiedEntries).toEqual([
+      expect.objectContaining({
+        roleText: "",
+        name: "Integrated Unknown",
+        email: null,
+        extraCells: [expect.objectContaining({
+          headerText: "Tel. No.",
+          rawType: "n",
+          rawValue: 24680,
+          hidden: true,
+        })],
+        sourceRows: [expect.objectContaining({
+          fileName: "integrated-hidden.xlsx",
+          sheetName: "Roster",
+          rowNumber: 2,
+          cells: expect.arrayContaining([
+            expect.objectContaining({
+              headerText: "Function",
+              rawType: "s",
+              rawValue: "QCMC-Coordinator",
+              formattedText: "QCMC-Coordinator",
+              hidden: false,
+            }),
+            expect.objectContaining({
+              headerText: "Tel. No.",
+              rawType: "n",
+              rawValue: 24680,
+              formattedText: "24680",
+              hidden: true,
+            }),
+          ]),
+        })],
+      }),
+    ]);
+    expect(saved.team?.appliedTemplate).toEqual(devProject002.team?.appliedTemplate);
+    const roster = screen.getByRole("table");
+    expect(within(roster).getAllByRole("cell")).toHaveLength(4);
+    expect(within(roster).getByRole("cell", { name: "Integrated Unknown" })).toBeInTheDocument();
+    expect(within(roster).getByRole("cell", { name: "24680" })).toBeInTheDocument();
+    expect(within(roster).queryByText("Source details")).not.toBeInTheDocument();
+    expect(within(roster).queryByText("Raw value (n): 24680")).not.toBeInTheDocument();
   });
 
   it("shows the valid no-Published Schedule state", () => {

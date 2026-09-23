@@ -35,6 +35,20 @@ function normalizeLabel(value: string): string {
 	return value.trim().replace(/\s+/g, " ").toUpperCase();
 }
 
+function isNotApplicableToken(value: string): boolean {
+	const normalized = normalizeLabel(value);
+	return normalized === "NA" || normalized === "N/A";
+}
+
+export function isInvalidApplicabilityFunctionLabel(value: string): boolean {
+	const base = normalizeLabel(value).replace(/-(LEADER|OWNER|MEMBER)$/, "");
+	return isNotApplicableToken(base);
+}
+
+export function isInvalidNotApplicableMemberName(value: string | null): boolean {
+	return value !== null && isNotApplicableToken(value);
+}
+
 function labelTokens(value: string): readonly string[] {
 	return normalizeLabel(value)
 		.split(/[^A-Z0-9]+/)

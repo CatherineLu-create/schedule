@@ -277,6 +277,96 @@ describe("Project Team validation", () => {
 		);
 	});
 
+	it.each([
+		["NA", false],
+		["N/A-Owner", true],
+	] as const)("blocks invalid Function identity %s in canonical validation", (displayName, withPerson) => {
+		const functionId = toTeamFunctionId(`invalid-${displayName.replaceAll("/", "-")}`);
+		const team: ProjectTeam = {
+			projectRoles: { qciPm: null, qciPjm: null, acerPm: null },
+			functions: [{
+				function: { kind: "custom", functionId, displayName },
+				applicability: "applicable",
+				assignments: withPerson ? [{
+					assignmentId: toPersonAssignmentId("invalid-canonical-na-person"),
+					role: "owner",
+					functionText: displayName,
+					name: "Invalid Canonical NA Person",
+					email: "invalid.canonical@example.test",
+				}] : [],
+			}],
+			preservedUnclassifiedEntries: [],
+			appliedTemplate: null,
+		};
+
+		expect(validateProjectTeam(team, devTeamFunctionDefinitions)).toContainEqual(
+			expect.objectContaining({
+				code: "team.data.invalid-applicability-function-label",
+				severity: "blocking",
+			}),
+		);
+	});
+
+	it.each([
+		"NA",
+		"N/A",
+		" na ",
+		" n/a ",
+	] as const)("blocks exact applicability marker %s as a canonical member name", (name) => {
+		const team: ProjectTeam = {
+			projectRoles: { qciPm: null, qciPjm: null, acerPm: null },
+			functions: [{
+				function: { kind: "standard", functionId: devMeTeamFunctionDefinition.id },
+				applicability: "applicable",
+				assignments: [{
+					assignmentId: toPersonAssignmentId(`invalid-member-${name.trim().replaceAll("/", "-")}`),
+					role: "member",
+					name,
+					email: "invalid.member@example.test",
+					extraCells: [{
+						columnIndex: 4,
+						headerText: "Tel. No.",
+						rawType: "s",
+						rawValue: "24680",
+						formattedText: "24680",
+						hidden: false,
+					}],
+				}],
+			}],
+			preservedUnclassifiedEntries: [],
+			appliedTemplate: null,
+		};
+
+		expect(validateProjectTeam(team, devTeamFunctionDefinitions)).toContainEqual(
+			expect.objectContaining({
+				code: "team.data.invalid-applicability-member-name",
+				severity: "blocking",
+				message: "NA / N/A cannot be used as a member name. Leave Member blank if no person is assigned.",
+			}),
+		);
+	});
+
+	it.each(["Nadia", "Nathan", "Nara", "N/A Team"])(
+		"does not reject legitimate canonical member name %s",
+		(name) => {
+			const rows: readonly RestrictedCountRow[] = [{
+				rowId: `legitimate-${name}`,
+				functionText: "Synthetic Support",
+				roleText: "member",
+				key: null,
+				possibleRestricted: false,
+				name,
+				normalizedEmail: "legitimate@example.test",
+				extraCells: [],
+				sourceRows: [],
+			}];
+
+			expect(validateRestrictedRoleRows(rows)).not.toContainEqual(
+				expect.objectContaining({ code: "team.data.invalid-applicability-member-name" }),
+			);
+		},
+	);
+
 	it("uses the current custom Function name for restricted-role safety", () => {
 		const functionId = toTeamFunctionId("renamed-restricted-function");
 		const team: ProjectTeam = {

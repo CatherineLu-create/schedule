@@ -24,6 +24,7 @@ import {
 } from "../../domain/team/teamValidation";
 import {
 	classifyTeamLabel,
+	isInvalidApplicabilityFunctionLabel,
 	type RestrictedTeamRole,
 } from "../../domain/team/teamRoleMapping";
 import {
@@ -252,10 +253,21 @@ export function createImportCandidate(
 			classification.kind === "restricted" && projectRoleKeys.has(classification.key);
 		const isPossibleRestricted =
 			classification.kind === "unclassified" && classification.possibleRestricted;
+		const isInvalidApplicabilityFunction =
+			isInvalidApplicabilityFunctionLabel(functionText);
 		let functionRef: ProjectFunctionRef | null = null;
-		if (!isProjectRole && !isPossibleRestricted && functionText.trim() !== "") {
+		if (
+			!isProjectRole &&
+			!isPossibleRestricted &&
+			!isInvalidApplicabilityFunction &&
+			functionText.trim() !== ""
+		) {
 			const key = normalizedLabel(functionText);
-			const standardMatches = standardAssociations.get(key) ?? [];
+			const directStandardMatches = standardAssociations.get(key) ?? [];
+			const roleBaseKey = key.replace(/-(LEADER|OWNER|MEMBER)$/, "");
+			const standardMatches = directStandardMatches.length > 0
+				? directStandardMatches
+				: standardAssociations.get(roleBaseKey) ?? [];
 			const savedMatches = associations.get(key) ?? [];
 			if (standardMatches.length === 1) {
 				functionRef = { kind: "standard", functionId: standardMatches[0]!.id };
@@ -910,6 +922,12 @@ export function materializeProjectTeam(
 		assignments: FunctionPersonAssignment[];
 	}>();
 	for (const functionTeam of candidate.baseTeam?.functions ?? []) {
+		if (
+			functionTeam.function.kind === "custom" &&
+			isInvalidApplicabilityFunctionLabel(functionTeam.function.displayName)
+		) {
+			continue;
+		}
 		functions.set(functionTeam.function.functionId, {
 			function: functionTeam.function,
 			applicability: functionTeam.applicability,

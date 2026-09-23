@@ -37,6 +37,143 @@ function saveTeam(
 }
 
 describe("Team Save command", () => {
+	it("does not save a custom Function whose name is an N/A applicability marker", () => {
+		const team: ProjectTeam = {
+			projectRoles: { qciPm: null, qciPjm: null, acerPm: null },
+			functions: [{
+				function: { kind: "custom", functionId: toTeamFunctionId("invalid-na-function"), displayName: "N/A" },
+				applicability: "applicable",
+				assignments: [{
+					assignmentId: toPersonAssignmentId("invalid-na-person"),
+					role: "owner",
+					functionText: "N/A-Owner",
+					name: "Invalid NA Person",
+					email: "invalid.na@example.test",
+				}],
+			}],
+			preservedUnclassifiedEntries: [],
+			appliedTemplate: null,
+		};
+
+		const result = saveTeam(devProject002, team, teamFunctionCatalog);
+
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.issues).toContainEqual(expect.objectContaining({
+			code: "team.data.invalid-applicability-function-label",
+			severity: "blocking",
+		}));
+		expect(result).not.toHaveProperty("project");
+	});
+
+	it("does not save an exact N/A member identity", () => {
+		const team: ProjectTeam = {
+			projectRoles: { qciPm: null, qciPjm: null, acerPm: null },
+			functions: [{
+				function: { kind: "custom", functionId: toTeamFunctionId("valid-support-function"), displayName: "Synthetic Support" },
+				applicability: "applicable",
+				assignments: [{
+					assignmentId: toPersonAssignmentId("invalid-na-member"),
+					role: "member",
+					functionText: "Synthetic Support-Member",
+					name: " n/A ",
+					email: "invalid.member@example.test",
+					extraCells: [{
+						columnIndex: 4,
+						headerText: "Tel. No.",
+						rawType: "s",
+						rawValue: "24680",
+						formattedText: "24680",
+						hidden: false,
+					}],
+				}],
+			}],
+			preservedUnclassifiedEntries: [],
+			appliedTemplate: null,
+		};
+
+		const result = saveTeam(devProject002, team, teamFunctionCatalog);
+
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.issues).toContainEqual(expect.objectContaining({
+			code: "team.data.invalid-applicability-member-name",
+			severity: "blocking",
+		}));
+		expect(result).not.toHaveProperty("project");
+	});
+
+	it("blocks an ambiguous QCI Owner even when all seven restricted roles are otherwise valid", () => {
+		const team: ProjectTeam = {
+			projectRoles: {
+				qciPm: { assignmentId: toPersonAssignmentId("valid-qci-pm"), name: "Valid QCI PM", email: "qci.pm@example.test" },
+				qciPjm: { assignmentId: toPersonAssignmentId("valid-qci-pjm"), name: "Valid QCI PjM", email: "qci.pjm@example.test" },
+				acerPm: { assignmentId: toPersonAssignmentId("valid-acer-pm"), name: "Valid Acer PM", email: "acer.pm@example.test" },
+			},
+			functions: teamFunctionCatalog.map((definition, index) => ({
+				function: { kind: "standard" as const, functionId: definition.id },
+				applicability: "applicable" as const,
+				assignments: [{
+					assignmentId: toPersonAssignmentId(`valid-owner-${index}`),
+					role: "owner" as const,
+					name: `Valid Owner ${index}`,
+					email: `valid.owner.${index}@example.test`,
+				}],
+			})),
+			preservedUnclassifiedEntries: [{
+				entryId: toPersonAssignmentId("ambiguous-qci-owner"),
+				function: { kind: "custom", functionId: toTeamFunctionId("ambiguous-qci-function"), displayName: "QCI PM Owner" },
+				functionText: "QCI PM Owner",
+				roleText: "unclear",
+				name: "Ambiguous Owner",
+				email: "ambiguous@example.test",
+				extraCells: [],
+				sourceRows: [],
+				restrictedRoleExclusion: null,
+			}],
+			appliedTemplate: null,
+		};
+
+		const result = saveTeam(devProject002, team, teamFunctionCatalog);
+
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.issues).toContainEqual(expect.objectContaining({
+			code: "team.data.restricted-role-ambiguous",
+			severity: "blocking",
+		}));
+		expect(result).not.toHaveProperty("project");
+	});
+
+	it("blocks no-email restricted duplicate identity while missing Email remains advisory", () => {
+		const qciMe = teamFunctionCatalog[0]!;
+		const team: ProjectTeam = {
+			projectRoles: { qciPm: null, qciPjm: null, acerPm: null },
+			functions: [{
+				function: { kind: "standard", functionId: qciMe.id },
+				applicability: "applicable",
+				assignments: [
+					{ assignmentId: toPersonAssignmentId("blank-email-one"), role: "owner", name: "Same Unknown", email: null },
+					{ assignmentId: toPersonAssignmentId("blank-email-two"), role: "owner", name: "Same Unknown", email: null },
+				],
+			}],
+			preservedUnclassifiedEntries: [],
+			appliedTemplate: null,
+		};
+
+		const result = saveTeam(devProject002, team, teamFunctionCatalog);
+
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.issues).toContainEqual(expect.objectContaining({
+			code: "team.data.restricted-role-identity-unresolved",
+			severity: "blocking",
+		}));
+		expect(result.issues.filter(({ code }) => code === "team.data.missing-email"))
+			.toEqual(expect.arrayContaining([expect.objectContaining({ severity: "advisory" })]));
+		expect(result).not.toHaveProperty("project");
+	});
+
 	it("blocks two canonical QCI-ME owner assignments without a raw Excel label", () => {
 		const qciMe = teamFunctionCatalog[0]!;
 		const team: ProjectTeam = {

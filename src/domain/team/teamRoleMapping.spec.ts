@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { classifyTeamLabel } from "./teamRoleMapping";
+import {
+	classifyTeamLabel,
+	isInvalidApplicabilityFunctionLabel,
+} from "./teamRoleMapping";
 
 describe("Team role mapping", () => {
 	it.each([
@@ -86,5 +89,27 @@ describe("Team role mapping", () => {
 			kind: "unclassified",
 			possibleRestricted: false,
 		});
+	});
+
+	it.each([
+		"NA",
+		"N/A",
+		" na-owner ",
+		"NA-Leader",
+		"NA-Member",
+		"N/A-Owner",
+		"N/A-Leader",
+		"N/A-Member",
+	])("rejects the applicability marker %s as a Function label", (functionText) => {
+		expect(isInvalidApplicabilityFunctionLabel(functionText)).toBe(true);
+	});
+
+	it.each([
+		"NAND-Owner",
+		"Finance-Owner",
+		"QCI-ME-Owner",
+		"QCMC-EE IQC-Owner",
+	])("does not reject the legitimate Function label %s", (functionText) => {
+		expect(isInvalidApplicabilityFunctionLabel(functionText)).toBe(false);
 	});
 });
