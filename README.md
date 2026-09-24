@@ -29,7 +29,7 @@ Weekly Report、PPT、Excel、PDF、Email 等文件可以是 Evidence、Import S
 | 功能 | 狀態 | 說明 |
 | --- | --- | --- |
 | Dashboard | 已實作 | 顯示 Header、Needs Attention、Search、Filters、Project List、Create Project、Export to Excel |
-| Needs Attention | 已實作 | Blocking Issues 維持未啟用；Milestone Due 與 Overdue 由 Current Published Schedule 計算唯一 Project 數量 |
+| Needs Attention | 已實作 | Blocking Issues 維持未啟用；Upcoming Milestones 與 Overdue 由 Current Published Schedule 顯示唯一 Project 數量及 Project / Milestone 明細 |
 | Project Search | 已實作 | 搜尋 Project Name、QCI Model Name、Product Line、Customer、CPU、GPU |
 | Dashboard Filters | 已實作 | Year、Product Line、Panel Size、CPU、Customer；AND logic；chips 可移除；Clear All 可清空 |
 | Project List | 已實作 | 使用 `src/dashboardProjectRows.json` 產生 Project；支援水平捲動與欄寬拖曳 |
@@ -91,10 +91,10 @@ Dashboard 目前包含：
 `Needs Attention` 目前有三張卡片：
 
 - `Blocking Issues`：計算尚未啟用
-- `Milestone Due`：Current Published Schedule 未來 14 天內到期的唯一 Project 數量
+- `Upcoming Milestones`：Current Published Schedule 未來 14 天內到期的唯一 Project 數量
 - `Overdue`：Current Published Schedule 已逾期的唯一 Project 數量
 
-Due / Overdue 不讀取 Working Draft；成功 Publish 後才會反映新的 Current Published Schedule。
+Upcoming / Overdue 會依 Project 分組顯示 Project Name、符合條件的 Milestone Type 與 Plan Date；點擊 Project Name 會開啟既有 Project Workspace。這兩張卡片不讀取 Working Draft；成功 Publish 後才會反映新的 Current Published Schedule。
 
 Dashboard Filters 實際包含：
 
@@ -119,6 +119,8 @@ Project List 欄位來自 `src/dashboardColumns.ts`：
 - Project Status
 - Current Stage
 - MDRR
+
+既有 MDRR 欄位從 Current Published Schedule 顯示 MDRR 的 Plan / Actual；Not Applicable、缺少 MDRR 或沒有可顯示日期時顯示 `—`。Working Draft 不影響此欄位，直到成功 Publish。
 
 ### Project Workspace
 

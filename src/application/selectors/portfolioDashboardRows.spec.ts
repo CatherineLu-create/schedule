@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { milestoneDefinitions, portfolioMilestoneDefinitions } from "../../config/v2/referenceData";
+import {
+  mdrrMilestoneDefinition,
+  milestoneDefinitions,
+  portfolioMilestoneDefinitions,
+} from "../../config/v2/referenceData";
 import type { CanonicalProjectSchedule, CanonicalPublishedScheduleMilestone } from "../../domain/schedule/officialSchedule";
 import { toScheduleVersionNumber, type ScheduleVersionNumber } from "../../domain/schedule/schedule";
 import { parseDateOnly, type DateOnly } from "../../domain/shared/dateOnly";
@@ -82,17 +86,23 @@ describe("canonical Portfolio Dashboard read projection", () => {
     expect(withDraft.schedule).toEqual(baseline.schedule);
   });
 
-  it("projects every published result through the 34 ordered unique portfolio definitions", () => {
+  it("projects every Published result through the 34 Portfolio definitions and MDRR", () => {
     const rows = selectPortfolioDashboardRows(fixtureState());
-    const expectedIds = portfolioMilestoneDefinitions.map((definition) => definition.id);
+    const expectedIds = [
+      ...portfolioMilestoneDefinitions.map((definition) => definition.id),
+      mdrrMilestoneDefinition.id,
+    ];
 
     for (const row of rows) {
       if (row.schedule.kind !== "published") continue;
       const ids = row.schedule.cells.map((cell) => cell.milestoneDefinitionId);
-      expect(ids).toHaveLength(34);
+      expect(ids).toHaveLength(35);
       expect(ids).toEqual(expectedIds);
-      expect(new Set(ids).size).toBe(34);
-      expect(ids.every((id) => milestoneDefinitions.some((definition) => definition.id === id && definition.showInPortfolio))).toBe(true);
+      expect(new Set(ids).size).toBe(35);
+      expect(ids.slice(0, 34).every((id) => milestoneDefinitions.some(
+        (definition) => definition.id === id && definition.showInPortfolio,
+      ))).toBe(true);
+      expect(mdrrMilestoneDefinition.showInPortfolio).toBe(false);
     }
   });
 
@@ -223,7 +233,7 @@ describe("canonical Portfolio Dashboard read projection", () => {
     ]);
   });
 
-  it("excludes MDRR and keeps the inherited Dashboard MDRR placeholder while Project team changes cannot alter a row", () => {
+  it("projects Published MDRR while a conflicting Working Draft and Project team cannot alter the row", () => {
     const mdrr = {
       milestoneId: toMilestoneId("portfolio-mdrr"),
       milestoneDefinitionId: toMilestoneDefinitionId("milestone-mdrr"),
@@ -231,14 +241,43 @@ describe("canonical Portfolio Dashboard read projection", () => {
       plan: dateOnly("2026-10-05"),
       actual: null,
     };
-    const state = fixtureState([devProject003], [publishedSchedule(devProject003.id, [mdrr])]);
-    const changedTeamState = fixtureState([{ ...devProject003, team: null }], [publishedSchedule(devProject003.id, [mdrr])]);
-    const row = selectedRow(state, devProject003.id);
+    const published = publishedSchedule(devProject003.id, [mdrr]);
+    const withDraft: CanonicalProjectSchedule = {
+      ...published,
+      workingDraft: {
+        milestones: [{
+          ...mdrr,
+          plan: dateOnly("2099-01-01"),
+          actual: dateOnly("2099-01-02"),
+        }],
+      },
+    };
+    const row = selectedRow(
+      fixtureState([devProject003], [published]),
+      devProject003.id,
+    );
+    const draftRow = selectedRow(
+      fixtureState([devProject003], [withDraft]),
+      devProject003.id,
+    );
+    const changedTeamRow = selectedRow(
+      fixtureState([{ ...devProject003, team: null }], [published]),
+      devProject003.id,
+    );
 
     expect(row.schedule.kind).toBe("published");
-    if (row.schedule.kind === "published") expect(row.schedule.cells.some((cell) => cell.milestoneDefinitionId === toMilestoneDefinitionId("milestone-mdrr"))).toBe(false);
+    if (row.schedule.kind !== "published") return;
+    expect(row.schedule.cells.find(
+      (cell) => cell.milestoneDefinitionId === mdrrMilestoneDefinition.id,
+    )?.occurrences).toEqual([{
+      milestoneId: mdrr.milestoneId,
+      applicability: "applicable",
+      plan: "2026/10/05",
+      actual: "-",
+    }]);
     expect(row.project.mdrr).toBe("-");
-    expect(selectedRow(changedTeamState, devProject003.id)).toEqual(row);
+    expect(draftRow).toEqual(row);
+    expect(changedTeamRow).toEqual(row);
   });
 
   it("does not mutate input Project, Schedule, version, or milestone arrays", () => {

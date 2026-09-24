@@ -10,11 +10,34 @@ export interface PortfolioScheduleColumnMapping {
   readonly milestoneDefinitionId: MilestoneDefinitionId;
   readonly portfolioVisible: boolean;
   readonly valueMode: "planActual" | "placeholder";
+  readonly emptyWhenNotApplicableOrUndated?: boolean;
+}
+interface ScheduleMappingOptions {
+  readonly portfolioVisible?: boolean;
+  readonly valueMode?: PortfolioScheduleColumnMapping["valueMode"];
+  readonly emptyWhenNotApplicableOrUndated?: boolean;
 }
 function scheduleMapping<const TKey extends `schedule:${string}`>(
-  key: TKey, groupKey: string, groupLabel: string, label: string, idValue: string, portfolioVisible = true,
+  key: TKey,
+  groupKey: string,
+  groupLabel: string,
+  label: string,
+  idValue: string,
+  options: ScheduleMappingOptions = {},
 ): Omit<PortfolioScheduleColumnMapping, "key"> & { readonly key: TKey } {
-  return { key, groupKey, groupLabel, label, milestoneDefinitionId: toMilestoneDefinitionId(idValue), portfolioVisible, valueMode: portfolioVisible ? "planActual" : "placeholder" };
+  const portfolioVisible = options.portfolioVisible ?? true;
+  return {
+    key,
+    groupKey,
+    groupLabel,
+    label,
+    milestoneDefinitionId: toMilestoneDefinitionId(idValue),
+    portfolioVisible,
+    valueMode: options.valueMode
+      ?? (portfolioVisible ? "planActual" : "placeholder"),
+    emptyWhenNotApplicableOrUndated:
+      options.emptyWhenNotApplicableOrUndated,
+  };
 }
 
 export const portfolioScheduleColumnMappings = [
@@ -52,7 +75,18 @@ export const portfolioScheduleColumnMappings = [
   scheduleMapping("schedule:ramp-stage:ramp-pre-build", "ramp-stage", "RAMP-stage", "RAMP Pre-build", "milestone-ramp-pre-build"),
   scheduleMapping("schedule:ramp-stage:ramp-main-build", "ramp-stage", "RAMP-stage", "RAMP Main build", "milestone-ramp-main-build"),
   scheduleMapping("schedule:ramp-stage:fcs", "ramp-stage", "RAMP-stage", "FCS", "milestone-ramp-fcs"),
-  scheduleMapping("schedule:mdrr:mdrr", "mdrr", "MDRR", "MDRR", "milestone-mdrr", false),
+  scheduleMapping(
+    "schedule:mdrr:mdrr",
+    "mdrr",
+    "MDRR",
+    "MDRR",
+    "milestone-mdrr",
+    {
+      portfolioVisible: false,
+      valueMode: "planActual",
+      emptyWhenNotApplicableOrUndated: true,
+    },
+  ),
 ] as const satisfies readonly PortfolioScheduleColumnMapping[];
 export type PortfolioScheduleColumnKey = (typeof portfolioScheduleColumnMappings)[number]["key"];
 export type PortfolioProjectInfoColumnKey = "projectStatus" | "year" | "name" | "qciProjectName" | "customer" | "category" | "productLine" | "size" | "cpu" | "gpu" | "pcbNumber";

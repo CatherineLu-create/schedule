@@ -8,7 +8,7 @@ import {
 
 describe("Portfolio visual schema", () => {
   // Mutation: dropping/reordering a stage or using same-name definition matching.
-  it("maps the 35 ordered visual leaves to all 34 Portfolio definitions and inactive MDRR", () => {
+  it("maps the 35 ordered visual leaves to 34 Portfolio definitions and the active MDRR projection", () => {
     expect(portfolioScheduleColumnMappings.map((entry) => entry.key)).toEqual([
       "schedule:design:kickoff", "schedule:design:id-fix",
       "schedule:me-portion:me-drawing", "schedule:me-portion:mockup-dfm", "schedule:me-portion:tooling-start-t1", "schedule:me-portion:me-material-c",
@@ -26,8 +26,13 @@ describe("Portfolio visual schema", () => {
       expect(entry.portfolioVisible).toBe(true);
       expect(entry.valueMode).toBe("planActual");
     }
-    expect(portfolioScheduleColumnMappings[34]).toMatchObject({ milestoneDefinitionId: mdrrMilestoneDefinition.id, portfolioVisible: false, valueMode: "placeholder" });
-    // Mutation: the visual placeholder outlives a removed, duplicated, or Portfolio-enabled canonical MDRR definition.
+    expect(portfolioScheduleColumnMappings[34]).toMatchObject({
+      milestoneDefinitionId: mdrrMilestoneDefinition.id,
+      portfolioVisible: false,
+      valueMode: "planActual",
+      emptyWhenNotApplicableOrUndated: true,
+    });
+    // Mutation: the active visual projection changes the catalog flag or loses its exact definition.
     const mappedMdrrDefinitions = milestoneDefinitions.filter((definition) => definition.id === portfolioScheduleColumnMappings[34].milestoneDefinitionId);
     expect(mappedMdrrDefinitions).toHaveLength(1);
     expect(mappedMdrrDefinitions[0]).toEqual(mdrrMilestoneDefinition);

@@ -1,7 +1,15 @@
 import React from "react";
-import type { DashboardAttentionRead } from "./application/selectors/dashboardAttention";
+import type {
+  DashboardAttentionGroup,
+  DashboardAttentionRead,
+} from "./application/selectors/dashboardAttention";
 import type { PortfolioDashboardRow } from "./application/selectors/portfolioDashboardRows";
-import type { ProjectId } from "./domain/shared/ids";
+import {
+  milestoneDefinitions,
+  milestoneTypeCatalog,
+} from "./config/v2/referenceData";
+import { formatDateOnly } from "./domain/shared/dateOnly";
+import type { MilestoneId, ProjectId } from "./domain/shared/ids";
 import {
   emptyPortfolioDashboardFilters,
   filterPortfolioDashboardRows,
@@ -35,6 +43,67 @@ const controls: readonly (
 ];
 const focus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600";
 
+interface AttentionProjectPresentation {
+  readonly projectId: ProjectId;
+  readonly projectName: string;
+  readonly milestones: readonly {
+    readonly milestoneId: MilestoneId;
+    readonly typeLabel: string;
+    readonly planLabel: string;
+  }[];
+}
+
+const milestoneDefinitionById = new Map(
+  milestoneDefinitions.map((definition) => [definition.id, definition]),
+);
+const milestoneTypeById = new Map(
+  milestoneTypeCatalog.map((type) => [type.id, type]),
+);
+
+function attentionProjectPresentations(
+  group: DashboardAttentionGroup,
+  rows: readonly PortfolioDashboardRow[],
+): readonly AttentionProjectPresentation[] {
+  const rowByProjectId = new Map(rows.map((row) => [row.projectId, row]));
+
+  return group.projectIds.map((projectId) => {
+    const row = rowByProjectId.get(projectId);
+    if (row === undefined) {
+      throw new Error(`Attention Project row is unavailable: ${projectId}`);
+    }
+
+    const milestones = group.matches
+      .filter((match) => match.projectId === projectId)
+      .map((match) => {
+        const definition = milestoneDefinitionById.get(
+          match.milestoneDefinitionId,
+        );
+        if (definition === undefined) {
+          throw new Error(
+            `Attention milestone definition is unavailable: ${match.milestoneDefinitionId}`,
+          );
+        }
+        const type = milestoneTypeById.get(definition.milestoneTypeId);
+        if (type === undefined) {
+          throw new Error(
+            `Attention milestone type is unavailable: ${definition.milestoneTypeId}`,
+          );
+        }
+        return {
+          milestoneId: match.milestoneId,
+          typeLabel: type.displayName,
+          planLabel: formatDateOnly(match.plan),
+        };
+      });
+
+    return {
+      projectId,
+      projectName: row.project.projectName,
+      milestones,
+    };
+  });
+}
+
 export function PortfolioDashboardView({ attention, rows, onCreateProject, onExport, onOpenProject }: PortfolioDashboardViewProps): React.ReactElement {
   const [searchTerm, setSearchTerm] = React.useState("");
   const [filters, setFilters] = React.useState(emptyPortfolioDashboardFilters);
@@ -43,18 +112,24 @@ export function PortfolioDashboardView({ attention, rows, onCreateProject, onExp
   const filteredRows = filterPortfolioDashboardRows(rows, searchTerm, filters);
   const chips = portfolioDashboardFilterChips(filters);
   const attentionCards = [
-    { title: "Blocking Issues", value: "—", supporting: "Calculation not active", tone: "border-rose-100 bg-rose-50/60 text-rose-800" },
+    { title: "Blocking Issues", value: "—", supporting: "Calculation not active", tone: "border-rose-100 bg-rose-50/60 text-rose-800", projects: [] },
     {
-      title: "Milestone Due",
+      title: "Upcoming Milestones",
       value: attention.kind === "available" ? String(attention.due.projectCount) : "—",
       supporting: attention.kind === "available" ? "Next 14 days · unique projects" : "Calculation unavailable",
       tone: "border-amber-100 bg-amber-50/60 text-amber-800",
+      projects: attention.kind === "available"
+        ? attentionProjectPresentations(attention.due, rows)
+        : [],
     },
     {
       title: "Overdue",
       value: attention.kind === "available" ? String(attention.overdue.projectCount) : "—",
       supporting: attention.kind === "available" ? "Past due · unique projects" : "Calculation unavailable",
       tone: "border-orange-100 bg-orange-50/60 text-orange-800",
+      projects: attention.kind === "available"
+        ? attentionProjectPresentations(attention.overdue, rows)
+        : [],
     },
   ] as const;
 
@@ -72,12 +147,29 @@ export function PortfolioDashboardView({ attention, rows, onCreateProject, onExp
 
     <section aria-labelledby={`${id}-attention`} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
       <h2 id={`${id}-attention`} className="text-base font-semibold text-slate-900">Needs Attention</h2>
-      <p className="mt-1 text-xs text-slate-500">Due and Overdue use Current Published Schedule.</p>
+      <p className="mt-1 text-xs text-slate-500">Upcoming and Overdue use Current Published Schedule.</p>
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
         {attentionCards.map((card) => <div key={card.title} role="group" aria-label={card.title} className={`rounded-lg border p-4 ${card.tone}`}>
           <h3 className="text-sm font-medium">{card.title}</h3>
           <div className="mt-2 text-2xl font-semibold">{card.value}</div>
           <p className="mt-1 text-xs">{card.supporting}</p>
+          {card.projects.length > 0 && <div className="mt-3 space-y-3 border-t border-current/15 pt-3">
+            {card.projects.map((project) => <div key={project.projectId}>
+              <button
+                type="button"
+                aria-label={`Open Project ${project.projectName}`}
+                onClick={() => onOpenProject(project.projectId)}
+                className={`max-w-full text-left text-sm font-semibold underline-offset-2 hover:underline ${focus}`}
+              >
+                {project.projectName}
+              </button>
+              <ul className="mt-1 space-y-0.5 text-xs">
+                {project.milestones.map((milestone) => <li key={milestone.milestoneId}>
+                  {milestone.typeLabel} · {milestone.planLabel}
+                </li>)}
+              </ul>
+            </div>)}
+          </div>}
         </div>)}
       </div>
     </section>

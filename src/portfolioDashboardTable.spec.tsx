@@ -212,8 +212,8 @@ describe("PortfolioDashboardTable", () => {
     expect(new Set(appearances).size).toBe(3);
   });
 
-  // Mutation: keeping only first/last repeated occurrence, exposing stored N/A dates, or exposing MDRR.
-  it("renders repeated Published occurrences in snapshot order and masks notApplicable dates", () => {
+  // Mutation: keeping only first/last repeated occurrence or exposing stored N/A dates.
+  it("renders repeated Published occurrences including MDRR in snapshot order and masks non-MDRR notApplicable dates", () => {
     const schedule: PortfolioCurrentPublishedRead = {
       kind: "published", versionLabel: "Published v03", milestoneCount: 4, cells: [
         { milestoneDefinitionId: toMilestoneDefinitionId("milestone-c2-c-g-o"), occurrences: [
@@ -221,7 +221,8 @@ describe("PortfolioDashboardTable", () => {
           { milestoneId: toMilestoneId("earlier-id"), applicability: "applicable", plan: "-", actual: "-" },
         ] },
         { milestoneDefinitionId: toMilestoneDefinitionId("milestone-mdrr"), occurrences: [
-          { milestoneId: toMilestoneId("hidden-mdrr"), applicability: "applicable", plan: "2099/01/01", actual: "2099/01/02" },
+          { milestoneId: toMilestoneId("mdrr-plan-only"), applicability: "applicable", plan: "2099/01/01", actual: "-" },
+          { milestoneId: toMilestoneId("mdrr-completed"), applicability: "applicable", plan: "2099/02/01", actual: "2099/02/02" },
         ] },
       ],
     };
@@ -243,9 +244,54 @@ describe("PortfolioDashboardTable", () => {
     expect(applicableOccurrence).toHaveTextContent("P: —");
     expect(applicableOccurrence).toHaveTextContent("A: —");
     expect(leaf("schedule:c1-stage:c-g-o")).toHaveTextContent(/^—$/);
-    expect(leaf("schedule:mdrr:mdrr")).toHaveTextContent(/^—$/);
-    expect(screen.queryByText(/2099/)).not.toBeInTheDocument();
+    const mdrrCell = leaf("schedule:mdrr:mdrr");
+    expect([...mdrrCell.querySelectorAll('[data-milestone-id]')].map(
+      (element) => element.getAttribute("data-milestone-id"),
+    )).toEqual(["mdrr-plan-only", "mdrr-completed"]);
+    expect(mdrrCell.querySelector('[data-milestone-id="mdrr-plan-only"]'))
+      .toHaveTextContent("P: 2099/01/01");
+    expect(mdrrCell.querySelector('[data-milestone-id="mdrr-plan-only"]'))
+      .toHaveTextContent("A: —");
+    expect(mdrrCell.querySelector('[data-milestone-id="mdrr-completed"]'))
+      .toHaveTextContent("P: 2099/02/01");
+    expect(mdrrCell.querySelector('[data-milestone-id="mdrr-completed"]'))
+      .toHaveTextContent("A: 2099/02/02");
     expect(row).toEqual(before);
+  });
+
+  it.each([
+    ["Not Applicable", [{
+      milestoneId: toMilestoneId("mdrr-not-applicable"),
+      applicability: "notApplicable" as const,
+      plan: "2027/01/03",
+      actual: "2027/01/04",
+    }]],
+    ["entirely undated", [{
+      milestoneId: toMilestoneId("mdrr-undated"),
+      applicability: "applicable" as const,
+      plan: "-",
+      actual: "-",
+    }]],
+    ["missing", []],
+  ])("renders one dash for %s Published MDRR", (_scenario, occurrences) => {
+    const schedule: PortfolioCurrentPublishedRead = {
+      kind: "published",
+      versionLabel: "Published v05",
+      milestoneCount: 1,
+      cells: [{
+        milestoneDefinitionId: toMilestoneDefinitionId("milestone-mdrr"),
+        occurrences,
+      }],
+    };
+
+    render(<PortfolioDashboardTable
+      rows={[rowWith(schedule)]}
+      onOpenProject={() => {}}
+    />);
+
+    const mdrrCell = leaf("schedule:mdrr:mdrr");
+    expect(mdrrCell).toHaveTextContent(/^—$/);
+    expect(mdrrCell.querySelectorAll("[data-milestone-id]")).toHaveLength(0);
   });
 
   it("shows dated applicable fields and one N/A for a notApplicable occurrence with null fields", () => {

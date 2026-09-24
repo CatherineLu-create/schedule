@@ -69,6 +69,7 @@ import {
 } from "./domain/shared/ids";
 import type { ValidationIssue } from "./domain/validation/validationIssue";
 import { DuplicateProjectReview } from "./duplicateProjectReview";
+import { createUserTrialDemoSeed } from "./fixtures/userTrialDemoSeed";
 import { canonicalProjectFixtures } from "./fixtures/v2/canonicalProjectFixtures";
 import { canonicalScheduleFixtures } from "./fixtures/v2/canonicalScheduleFixtures";
 import {
@@ -109,6 +110,16 @@ const initialPrototypeState: PrototypeState = {
   projects: canonicalProjectFixtures,
   schedules: canonicalScheduleFixtures,
 };
+
+export function createUserTrialPrototypeState(
+  referenceDate: DateOnly,
+): PrototypeState {
+  const demoSeed = createUserTrialDemoSeed(referenceDate);
+  return {
+    projects: [...canonicalProjectFixtures, ...demoSeed.projects],
+    schedules: [...canonicalScheduleFixtures, ...demoSeed.schedules],
+  };
+}
 
 const createDefaults: CreateProjectDefaults = {
   customerId: toCatalogItemId("dev-customer-acer"),
@@ -1108,5 +1119,11 @@ function TeamMembersSection({
 
 const rootElement = document.getElementById("root");
 if (rootElement !== null) {
-  ReactDOM.createRoot(rootElement).render(<App />);
+  const referenceDate = toLocalDateOnly(new Date());
+  ReactDOM.createRoot(rootElement).render(
+    <App
+      initialState={createUserTrialPrototypeState(referenceDate)}
+      referenceDate={referenceDate}
+    />,
+  );
 }

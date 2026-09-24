@@ -6,7 +6,7 @@ import { selectPortfolioDashboardRows } from "./application/selectors/portfolioD
 import { canonicalProjectFixtures } from "./fixtures/v2/canonicalProjectFixtures";
 import { canonicalScheduleFixtures } from "./fixtures/v2/canonicalScheduleFixtures";
 import { parseDateOnly, type DateOnly } from "./domain/shared/dateOnly";
-import { toMilestoneDefinitionId, toMilestoneId, toProjectId } from "./domain/shared/ids";
+import { toMilestoneDefinitionId, toMilestoneId } from "./domain/shared/ids";
 import { PortfolioDashboardView } from "./portfolioDashboardView";
 
 afterEach(cleanup);
@@ -23,18 +23,44 @@ const zeroAttention: DashboardAttentionRead = {
   due: { projectIds: [], projectCount: 0, matches: [] },
   overdue: { projectIds: [], projectCount: 0, matches: [] },
 };
-function availableAttention(dueCount: number, overdueCount: number): DashboardAttentionRead {
-  const dueProjectIds = Array.from({ length: dueCount }, (_, index) =>
-    toProjectId(`view-due-${String(index + 1)}`));
-  const overdueProjectIds = Array.from({ length: overdueCount }, (_, index) =>
-    toProjectId(`view-overdue-${String(index + 1)}`));
-  return {
-    kind: "available",
-    referenceDate,
-    due: { projectIds: dueProjectIds, projectCount: dueProjectIds.length, matches: [] },
-    overdue: { projectIds: overdueProjectIds, projectCount: overdueProjectIds.length, matches: [] },
-  };
-}
+const detailedAttention: DashboardAttentionRead = {
+  kind: "available",
+  referenceDate,
+  due: {
+    projectIds: [rows[0]!.projectId, rows[1]!.projectId],
+    projectCount: 2,
+    matches: [
+      {
+        projectId: rows[0]!.projectId,
+        milestoneId: toMilestoneId("view-manta-go"),
+        milestoneDefinitionId: toMilestoneDefinitionId("milestone-a1-a-g-o"),
+        plan: dateOnly("2026-09-28"),
+      },
+      {
+        projectId: rows[0]!.projectId,
+        milestoneId: toMilestoneId("view-manta-mdrr"),
+        milestoneDefinitionId: toMilestoneDefinitionId("milestone-mdrr"),
+        plan: dateOnly("2026-10-03"),
+      },
+      {
+        projectId: rows[1]!.projectId,
+        milestoneId: toMilestoneId("view-nautilus-close"),
+        milestoneDefinitionId: toMilestoneDefinitionId("milestone-a-a2-a-close"),
+        plan: dateOnly("2026-09-30"),
+      },
+    ],
+  },
+  overdue: {
+    projectIds: [rows[0]!.projectId],
+    projectCount: 1,
+    matches: [{
+      projectId: rows[0]!.projectId,
+      milestoneId: toMilestoneId("view-manta-smt"),
+      milestoneDefinitionId: toMilestoneDefinitionId("milestone-a1-a-smt"),
+      plan: dateOnly("2026-09-16"),
+    }],
+  },
+};
 function setup(attention: DashboardAttentionRead = zeroAttention) {
   const callbacks = { onCreateProject: vi.fn(), onExport: vi.fn(), onOpenProject: vi.fn() };
   render(<PortfolioDashboardView attention={attention} rows={rows} {...callbacks} />);
@@ -58,7 +84,7 @@ describe("Portfolio Dashboard shell", () => {
     expect(getComputedStyle(dashboard).isolation).toBe("isolate");
   });
 
-  it("keeps approved heading/actions and activates only Due and Overdue counts", () => {
+  it("keeps approved heading/actions and active Upcoming and Overdue zero states", () => {
     setup();
     expect(screen.getByRole("heading", { name: "Project Information", level: 1 })).toBeInTheDocument();
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
@@ -69,11 +95,11 @@ describe("Portfolio Dashboard shell", () => {
     // Detects an unauthorized fourth indicator, a missing card, or changed visual order.
     const cards = within(attention).getAllByRole("group");
     expect(cards).toHaveLength(3);
-    ["Blocking Issues", "Milestone Due", "Overdue"].forEach((title, index) => {
+    ["Blocking Issues", "Upcoming Milestones", "Overdue"].forEach((title, index) => {
       expect(cards[index]).toHaveAccessibleName(title);
     });
     expect(within(attention).getByRole("heading", { name: "Needs Attention" })).toBeInTheDocument();
-    expect(within(attention).getByText("Due and Overdue use Current Published Schedule.")).toBeInTheDocument();
+    expect(within(attention).getByText("Upcoming and Overdue use Current Published Schedule.")).toBeInTheDocument();
     for (const [title, supporting] of [
       ["Blocking Issues", "Calculation not active"],
     ]) {
@@ -82,9 +108,10 @@ describe("Portfolio Dashboard shell", () => {
       expect(within(card).getByText(supporting)).toBeVisible();
       expect(within(card).queryByText(/^\d+$/)).not.toBeInTheDocument();
     }
-    const due = within(attention).getByRole("group", { name: "Milestone Due" });
+    const due = within(attention).getByRole("group", { name: "Upcoming Milestones" });
     expect(within(due).getByText("0")).toBeVisible();
     expect(within(due).getByText("Next 14 days · unique projects")).toBeVisible();
+    expect(within(due).queryByRole("button")).not.toBeInTheDocument();
     const overdue = within(attention).getByRole("group", { name: "Overdue" });
     expect(within(overdue).getByText("0")).toBeVisible();
     expect(within(overdue).getByText("Past due · unique projects")).toBeVisible();
@@ -96,13 +123,27 @@ describe("Portfolio Dashboard shell", () => {
     expect(screen.getByText("Scroll horizontally to view Schedule and Team Member")).toBeInTheDocument();
   });
 
-  it("renders positive unique-Project counts independently of table search", () => {
-    setup(availableAttention(2, 1));
+  it("groups retained matches by selector Project order and opens the exact Project independently of table search", () => {
+    const callbacks = setup(detailedAttention);
     const attention = screen.getByRole("region", { name: "Needs Attention" });
-    const due = within(attention).getByRole("group", { name: "Milestone Due" });
+    const due = within(attention).getByRole("group", { name: "Upcoming Milestones" });
     const overdue = within(attention).getByRole("group", { name: "Overdue" });
     expect(within(due).getByText("2")).toBeVisible();
     expect(within(overdue).getByText("1")).toBeVisible();
+    expect(within(due).getAllByRole("button", { name: "Open Project Manta" }))
+      .toHaveLength(1);
+    expect(within(due).getByText("G/O · 2026/09/28")).toBeVisible();
+    expect(within(due).getByText("MDRR · 2026/10/03")).toBeVisible();
+    expect(within(due).getByText("Close · 2026/09/30")).toBeVisible();
+    expect(within(overdue).getAllByRole("button", { name: "Open Project Manta" }))
+      .toHaveLength(1);
+    expect(within(overdue).getByText("SMT · 2026/09/16")).toBeVisible();
+
+    fireEvent.click(within(due).getByRole("button", {
+      name: "Open Project Manta",
+    }));
+    expect(callbacks.onOpenProject).toHaveBeenCalledOnce();
+    expect(callbacks.onOpenProject).toHaveBeenCalledWith(rows[0]!.projectId);
 
     fireEvent.change(screen.getByRole("searchbox"), {
       target: { value: "not-a-project" },
@@ -110,16 +151,19 @@ describe("Portfolio Dashboard shell", () => {
     expect(screen.getByText("Showing 0 of 5 projects")).toBeInTheDocument();
     expect(within(due).getByText("2")).toBeVisible();
     expect(within(overdue).getByText("1")).toBeVisible();
+    expect(within(due).getByText("MDRR · 2026/10/03")).toBeVisible();
+    expect(within(overdue).getByText("SMT · 2026/09/16")).toBeVisible();
   });
 
   it("renders unavailable attention without a misleading numeric zero", () => {
     setup({ kind: "unavailable", referenceDate, issues: [] });
     const attention = screen.getByRole("region", { name: "Needs Attention" });
-    for (const title of ["Milestone Due", "Overdue"]) {
+    for (const title of ["Upcoming Milestones", "Overdue"]) {
       const card = within(attention).getByRole("group", { name: title });
       expect(within(card).getByText("—")).toBeVisible();
       expect(within(card).getByText("Calculation unavailable")).toBeVisible();
       expect(within(card).queryByText("0")).not.toBeInTheDocument();
+      expect(within(card).queryByRole("button")).not.toBeInTheDocument();
     }
   });
 

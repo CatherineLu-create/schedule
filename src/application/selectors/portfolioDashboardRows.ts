@@ -1,4 +1,7 @@
-import { portfolioMilestoneDefinitions } from "../../config/v2/referenceData";
+import {
+  mdrrMilestoneDefinition,
+  portfolioMilestoneDefinitions,
+} from "../../config/v2/referenceData";
 import type { CatalogItem } from "../../domain/reference-data/catalog";
 import type { MilestoneApplicability } from "../../domain/schedule/schedule";
 import { formatDateOnly, type DateOnly } from "../../domain/shared/dateOnly";
@@ -36,6 +39,10 @@ export interface PortfolioDashboardRow {
 }
 
 const EMPTY_DISPLAY = "-";
+const portfolioProjectedMilestoneDefinitions = [
+  ...portfolioMilestoneDefinitions,
+  mdrrMilestoneDefinition,
+] as const;
 
 function displayText(value: string | null): string {
   return value === null || value.trim().length === 0 ? EMPTY_DISPLAY : value;
@@ -68,7 +75,7 @@ export function selectPortfolioDashboardRows(
             kind: "published",
             versionLabel: currentPublished.versionLabel,
             milestoneCount: currentPublished.version.milestones.length,
-            cells: portfolioMilestoneDefinitions.map((definition) => ({
+            cells: portfolioProjectedMilestoneDefinitions.map((definition) => ({
               milestoneDefinitionId: definition.id,
               occurrences: currentPublished.version.milestones
                 .filter((milestone) => milestone.milestoneDefinitionId === definition.id)

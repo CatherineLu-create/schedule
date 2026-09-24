@@ -14,8 +14,8 @@ import {
 const expectedGroups = [
 	{
 		items: customerReferenceFixtures,
-		ids: ["dev-customer-acer", "dev-customer-b"],
-		names: ["Acer", "DEV Customer B"],
+		ids: ["dev-customer-acer", "dev-customer-b", "user-trial-demo-customer"],
+		names: ["Acer", "DEV Customer B", "DEMO"],
 	},
 	{
 		items: categoryReferenceFixtures,

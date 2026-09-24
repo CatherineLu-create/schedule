@@ -14,6 +14,9 @@ import {
 import { selectDashboardProjectRow } from "../../application/selectors/dashboardProjectRows";
 import { selectTeamMemberRows } from "../../application/selectors/teamMemberRows";
 import {
+  selectDashboardAttention,
+} from "../../application/selectors/dashboardAttention";
+import {
   resolveCanonicalScheduleOwner,
   selectCurrentPublishedSchedule,
   selectScheduleWorkingDraft,
@@ -37,9 +40,11 @@ import {
   canonicalScheduleFixtures,
   devSchedule001,
 } from "../../fixtures/v2/canonicalScheduleFixtures";
+import { userTrialDemoProjectIds } from "../../fixtures/userTrialDemoSeed";
 import type { ScheduleWorkspaceProps } from "../../scheduleWorkspace";
 import {
   App,
+  createUserTrialPrototypeState,
   ProjectWorkspace,
 } from "../../main";
 
@@ -740,7 +745,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
   it("keeps Portfolio Published-only while editing, then reflects Publish", () => {
     render(<App referenceDate={dashboardReferenceDate} />);
     const dueCard = () => within(screen.getByRole("region", { name: "Needs Attention" }))
-      .getByRole("group", { name: "Milestone Due" });
+      .getByRole("group", { name: "Upcoming Milestones" });
     expect(within(dueCard()).getByText("0")).toBeVisible();
     const initialCell = dashboardRow("dev-project-001")
       .querySelector('[data-column-key="schedule:a1-stage:a-g-o"]');
@@ -772,7 +777,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     vi.setSystemTime(new Date(2026, 8, 30, 12));
     render(<App />);
     const dueCard = () => within(screen.getByRole("region", { name: "Needs Attention" }))
-      .getByRole("group", { name: "Milestone Due" });
+      .getByRole("group", { name: "Upcoming Milestones" });
 
     expect(within(dueCard()).getByText("0")).toBeVisible();
 
@@ -915,6 +920,101 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(screen.queryByRole("region", { name: "Project Header" }))
       .not.toBeInTheDocument();
   });
+
+  it("boots the User Trial Demo Seed through canonical Dashboard and Workspace paths", () => {
+    const runtimeState = createUserTrialPrototypeState(dashboardReferenceDate);
+    const attentionRead = selectDashboardAttention(
+      runtimeState,
+      dashboardReferenceDate,
+    );
+    expect(attentionRead.kind).toBe("available");
+    if (attentionRead.kind !== "available") {
+      throw new Error("Expected available runtime Dashboard attention");
+    }
+    expect(attentionRead.due.projectIds).toEqual(expect.arrayContaining([
+      userTrialDemoProjectIds.goDueSoon,
+      userTrialDemoProjectIds.mdrrDueSoon,
+    ]));
+    expect(attentionRead.overdue.projectIds).toContain(
+      userTrialDemoProjectIds.smtOverdue,
+    );
+    expect(attentionRead.due.projectIds).not.toContain(
+      userTrialDemoProjectIds.completedMilestone,
+    );
+    expect(attentionRead.overdue.projectIds).not.toContain(
+      userTrialDemoProjectIds.completedMilestone,
+    );
+    expect(attentionRead.due.projectCount).toBe(2);
+    expect(attentionRead.overdue.projectCount).toBe(1);
+
+    render(<App
+      initialState={runtimeState}
+      referenceDate={dashboardReferenceDate}
+    />);
+
+    expect(screen.getByText("Showing 9 of 9 projects")).toBeInTheDocument();
+    const attention = screen.getByRole("region", { name: "Needs Attention" });
+    const upcoming = within(attention).getByRole("group", {
+      name: "Upcoming Milestones",
+    });
+    const overdue = within(attention).getByRole("group", { name: "Overdue" });
+    expect(within(upcoming)
+      .getByText(String(attentionRead.due.projectCount))).toBeVisible();
+    expect(within(overdue)
+      .getByText(String(attentionRead.overdue.projectCount))).toBeVisible();
+    expect(within(upcoming).getByRole("button", {
+      name: "Open Project DEMO - G/O Due Soon",
+    })).toBeVisible();
+    expect(within(upcoming).getByText("G/O · 2026/09/28")).toBeVisible();
+    expect(within(upcoming).getByRole("button", {
+      name: "Open Project DEMO - MDRR Due Soon",
+    })).toBeVisible();
+    expect(within(upcoming).getByText("MDRR · 2026/10/03")).toBeVisible();
+    expect(within(overdue).getByRole("button", {
+      name: "Open Project DEMO - SMT Overdue",
+    })).toBeVisible();
+    expect(within(overdue).getByText("SMT · 2026/09/16")).toBeVisible();
+    expect(within(attention).queryByRole("button", {
+      name: "Open Project DEMO - Completed Milestone",
+    })).not.toBeInTheDocument();
+
+    const mdrrPortfolioCell = dashboardRow(
+      userTrialDemoProjectIds.mdrrDueSoon,
+    ).querySelector('[data-column-key="schedule:mdrr:mdrr"]');
+    expect(mdrrPortfolioCell).toHaveTextContent("P: 2026/10/03");
+    expect(mdrrPortfolioCell).toHaveTextContent("A: —");
+
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "DEMO -" },
+    });
+    expect(dashboardRows()).toHaveLength(4);
+    expect(screen.getByText("Showing 4 of 9 projects")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Customer"))
+      .getByRole("option", { name: "DEMO" })).toBeInTheDocument();
+
+    fireEvent.click(within(upcoming).getByRole("button", {
+      name: "Open Project DEMO - MDRR Due Soon",
+    }));
+    expect(within(projectHeader()).getByText(
+      "Project Name: DEMO - MDRR Due Soon",
+    )).toBeInTheDocument();
+    expect(within(projectHeader()).getByText("Customer: DEMO"))
+      .toBeInTheDocument();
+    expect(within(projectHeader()).getByText("Year: 2026"))
+      .toBeInTheDocument();
+    expect(within(projectHeader()).getByText(
+      "Product Line: Aspire (Refresh ID)",
+    )).toBeInTheDocument();
+    const schedule = screen.getByRole("region", { name: "Current Schedule" });
+    expect(within(schedule).getByText("Published v01")).toBeInTheDocument();
+    const plannedDate = within(schedule).getByText("2026/10/03");
+    const milestoneRow = plannedDate.closest("tr");
+    if (milestoneRow === null) {
+      throw new Error("Expected the Published MDRR milestone row");
+    }
+    expect(within(milestoneRow).getAllByText("MDRR")).toHaveLength(2);
+  });
+
   it("integrates the canonical Portfolio shell, Current Published grouped table, search, and seven filters", () => {
     render(<App referenceDate={dashboardReferenceDate} />);
 
@@ -933,13 +1033,13 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
       expect(within(card).getByText(supporting)).toBeVisible();
       expect(within(card).queryByText(/^\d+$/)).not.toBeInTheDocument();
     }
-    const due = within(attention).getByRole("group", { name: "Milestone Due" });
+    const due = within(attention).getByRole("group", { name: "Upcoming Milestones" });
     expect(within(due).getByText("0")).toBeVisible();
     expect(within(due).getByText("Next 14 days · unique projects")).toBeVisible();
     const overdue = within(attention).getByRole("group", { name: "Overdue" });
     expect(within(overdue).getByText("0")).toBeVisible();
     expect(within(overdue).getByText("Past due · unique projects")).toBeVisible();
-    expect(within(attention).getByText("Due and Overdue use Current Published Schedule.")).toBeVisible();
+    expect(within(attention).getByText("Upcoming and Overdue use Current Published Schedule.")).toBeVisible();
     expect(within(attention).queryByText("Next 14 days · calculation not active")).not.toBeInTheDocument();
     expect(within(attention).queryByText("Past due · calculation not active")).not.toBeInTheDocument();
     expect(screen.queryByText("No items requiring attention.")).not.toBeInTheDocument();

@@ -49,6 +49,22 @@ and Project Master scenarios.
 Draft edge cases and non-contiguous or multiple Published-version scenarios use
 local test builders. They are not canonical runtime fixture topology.
 
+## User Trial Demo Seed
+
+The moving-date User Trial records are isolated from the fixed canonical
+fixtures. `createUserTrialDemoSeed(referenceDate)` owns only four DEMO Projects
+and their four Published Schedule containers. The browser bootstrap captures
+one local-calendar `DateOnly` reference date and merges those returned Project
+and Schedule collections with `canonicalProjectFixtures` and
+`canonicalScheduleFixtures` without mutating either baseline.
+
+Demo Projects use the same Project, Schedule, Search, Workspace, and Current
+Published Schedule paths as every other Project. Dashboard attention remains a
+derived read through `selectDashboardAttention()`; the seed does not store or
+special-case Due or Overdue results. Tests pass a fixed reference date so the
+demo seed is deterministic, while only the browser bootstrap supplies the
+runtime-relative date.
+
 ## Canonical Schedule fixture rules
 
 `canonicalProjectFixtures.ts` owns Project/Master and Team fixture values only.
@@ -111,9 +127,13 @@ MDRR is an additional valid Milestone Catalog item with:
 - `showInPortfolio = false`
 
 This MDRR definition is a deliberate V2 development catalog decision and is
-not inferred from legacy fixture data. MDRR remains hidden from Portfolio
-Schedule columns, but its stable Milestone Type ID participates in Dashboard
-Due and Overdue derivation from Current Published Schedule.
+not inferred from legacy fixture data. The User Trial Portfolio explicitly
+projects this definition into its already-existing MDRR column from Current
+Published Schedule while retaining `showInPortfolio = false` as historical
+catalog metadata. This presentation exception does not change catalog or
+Schedule authority. Its stable Milestone Type ID continues to participate in
+Dashboard Upcoming and Overdue derivation through the unchanged attention
+selector.
 
 Workspace Add selects an existing PIP `MilestoneDefinitionId`; it does not
 create a definition. The future input boundary is:

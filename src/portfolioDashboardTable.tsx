@@ -38,9 +38,14 @@ function schedulePresentation(read: PortfolioCurrentPublishedRead, label: string
 function ScheduleValue({ read, mapping }: { read: PortfolioCurrentPublishedRead; mapping: PortfolioScheduleColumnMapping }) {
   if (read.kind !== "published" || read.milestoneCount === 0 || mapping.valueMode === "placeholder") return <>—</>;
   const occurrences = read.cells.find((cell) => cell.milestoneDefinitionId === mapping.milestoneDefinitionId)?.occurrences ?? [];
-  if (occurrences.length === 0) return <>—</>;
+  const displayableOccurrences = mapping.emptyWhenNotApplicableOrUndated
+    ? occurrences.filter((occurrence) =>
+        occurrence.applicability === "applicable"
+        && (occurrence.plan !== "-" || occurrence.actual !== "-"))
+    : occurrences;
+  if (displayableOccurrences.length === 0) return <>—</>;
   return <div className="space-y-2 whitespace-normal text-xs leading-5">
-    {occurrences.map((occurrence) => <div key={occurrence.milestoneId} data-milestone-id={occurrence.milestoneId} className="border-b border-slate-100 pb-1 last:border-0 last:pb-0">
+    {displayableOccurrences.map((occurrence) => <div key={occurrence.milestoneId} data-milestone-id={occurrence.milestoneId} className="border-b border-slate-100 pb-1 last:border-0 last:pb-0">
       {occurrence.applicability === "notApplicable" ? (
         <div>N/A</div>
       ) : (

@@ -17,6 +17,13 @@ export const customerReferenceFixtures: readonly CatalogItem<CatalogItemId>[] = 
 		active: true,
 		reviewStatus: "reviewed",
 	},
+	{
+		id: toCatalogItemId("user-trial-demo-customer"),
+		displayName: "DEMO",
+		aliases: [],
+		active: true,
+		reviewStatus: "reviewed",
+	},
 ];
 
 export const categoryReferenceFixtures: readonly CatalogItem<CatalogItemId>[] = [
