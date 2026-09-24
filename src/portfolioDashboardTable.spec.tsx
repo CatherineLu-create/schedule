@@ -14,7 +14,10 @@ const baseRow: PortfolioDashboardRow = {
     acerMarketingName: "Hidden marketing name", panelSize: "Canonical panel size", cpu: "Canonical CPU", gpu: "Canonical GPU",
     ssid: "Hidden SSID", rmn: "Hidden RMN", projectStatus: "Canonical status", currentStage: "-", mdrr: "-",
   },
-  category: "Canonical category", pcbNumber: "PCB-77", schedule: { kind: "noPublishedSchedule" },
+  category: "Canonical category",
+  qciPm: { value: "canonical.pm@example.test", label: "Canonical QCI PM" },
+  pcbNumber: "PCB-77",
+  schedule: { kind: "noPublishedSchedule" },
 };
 function rowWith(schedule: PortfolioCurrentPublishedRead): PortfolioDashboardRow {
   return { ...baseRow, projectId: toProjectId("exact-id-not-the-name"), project: { ...baseRow.project, projectName: "Same display name" }, schedule };
@@ -337,14 +340,26 @@ describe("PortfolioDashboardTable", () => {
     expect(row).toEqual(before);
   });
 
-  // Mutation: fabricating Team owners from any supplied Project field.
-  it("renders seven honest Team placeholders", () => {
+  // Mutation: hiding the saved QCI PM behind the old Team placeholder or fabricating another Team owner.
+  it("renders saved QCI PM and keeps the other six Team columns pending", () => {
     render(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
     const teamCells = [...renderedRow().querySelectorAll('td[data-domain="team"]')];
     expect(teamCells).toHaveLength(7);
-    for (const cell of teamCells) expect(cell).toHaveTextContent(/^—$/);
-    expect(screen.getByRole("columnheader", { name: "TEAM MEMBER" })).toHaveAccessibleDescription("Migration pending");
+    expect(leaf("team:qciPm")).toHaveTextContent("Canonical QCI PM");
+    expect(leaf("team:qciPm")).not.toHaveAttribute("title", "Migration pending");
+    for (const cell of teamCells.slice(1)) {
+      expect(cell).toHaveTextContent(/^—$/);
+      expect(cell).toHaveAttribute("title", "Migration pending");
+    }
+    expect(screen.getByRole("columnheader", { name: "TEAM MEMBER" }))
+      .toHaveAccessibleDescription("QCI PM active; other Team columns migration pending");
     expect(screen.queryByRole("button", { name: /Import Team Member/ })).not.toBeInTheDocument();
+  });
+
+  it("renders an em dash when no saved QCI PM is available", () => {
+    render(<PortfolioDashboardTable rows={[{ ...baseRow, qciPm: null }]} onOpenProject={() => {}} />);
+    expect(leaf("team:qciPm")).toHaveTextContent(/^—$/);
+    expect(leaf("team:qciPm")).not.toHaveAttribute("title", "Migration pending");
   });
 
   // Mutation: passing a display name/whole object, or letting the button bubble a duplicate open.

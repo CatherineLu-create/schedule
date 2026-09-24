@@ -25,6 +25,11 @@ export interface PortfolioScheduleMilestoneCell {
   readonly occurrences: readonly PortfolioScheduleMilestoneOccurrence[];
 }
 
+export interface PortfolioQciPmPresentation {
+  readonly value: string;
+  readonly label: string;
+}
+
 export type PortfolioCurrentPublishedRead =
   | { readonly kind: "unavailable"; readonly issues: readonly ValidationIssue[] }
   | { readonly kind: "noPublishedSchedule" }
@@ -34,6 +39,7 @@ export interface PortfolioDashboardRow {
   readonly projectId: ProjectId;
   readonly project: DashboardProjectRow;
   readonly category: string;
+  readonly qciPm: PortfolioQciPmPresentation | null;
   readonly pcbNumber: string;
   readonly schedule: PortfolioCurrentPublishedRead;
 }
@@ -55,6 +61,22 @@ function displayDate(value: DateOnly | null): string {
 function resolveCategory(categoryId: CatalogItemId | null): string {
   if (categoryId === null) return EMPTY_DISPLAY;
   return categoryReferenceFixtures.find((item: CatalogItem<CatalogItemId>) => item.id === categoryId)?.displayName ?? EMPTY_DISPLAY;
+}
+
+function resolveQciPm(
+  project: NonNullable<ReturnType<typeof getProjectById>>,
+): PortfolioQciPmPresentation | null {
+  const assignment = project.team?.projectRoles.qciPm;
+  if (assignment === null || assignment === undefined) return null;
+  const name = assignment.name?.trim() ?? "";
+  const email = assignment.email?.trim() ?? "";
+  if (name === "" && email === "") return null;
+  return {
+    value: email === ""
+      ? `assignment:${assignment.assignmentId}`
+      : email.toLowerCase(),
+    label: name === "" ? email : name,
+  };
 }
 
 export function selectPortfolioDashboardRows(
@@ -92,6 +114,7 @@ export function selectPortfolioDashboardRows(
       projectId: projectRow.projectId,
       project: projectRow,
       category: resolveCategory(project.master.basicInformation.category),
+      qciPm: resolveQciPm(project),
       pcbNumber: displayText(project.master.platformHardware.pcbNumber),
       schedule,
     };

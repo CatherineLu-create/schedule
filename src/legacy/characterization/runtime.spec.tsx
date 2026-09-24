@@ -29,7 +29,11 @@ import type { Project } from "../../domain/project/project";
 import type { CanonicalProjectSchedule } from "../../domain/schedule/officialSchedule";
 import type { ScheduleVersionNumber } from "../../domain/schedule/schedule";
 import { parseDateOnly, type DateOnly } from "../../domain/shared/dateOnly";
-import { toMilestoneDefinitionId } from "../../domain/shared/ids";
+import {
+  toCatalogItemId,
+  toMilestoneDefinitionId,
+  toProjectId,
+} from "../../domain/shared/ids";
 import {
   canonicalProjectFixtures,
   devProject001,
@@ -147,6 +151,99 @@ function projectHeader(): HTMLElement {
   return screen.getByRole("region", { name: "Project Header" });
 }
 
+function openProjectMasterDetail(): HTMLElement {
+  fireEvent.click(within(projectHeader()).getByRole("button", { name: "View Project Master" }));
+  return screen.getByRole("region", { name: "Project Master Detail" });
+}
+
+function openEditMaster(): HTMLElement {
+  const detail = screen.queryByRole("region", { name: "Project Master Detail" })
+    ?? openProjectMasterDetail();
+  fireEvent.click(within(detail).getByRole("button", { name: "Edit Master" }));
+  return screen.getByRole("region", { name: "Project Master Detail" });
+}
+
+function openTeamMemberFromWorkspace(): void {
+  const resources = screen.getByRole("region", { name: "Resources" });
+  fireEvent.click(within(resources).getByRole("button", { name: "Open Team Member" }));
+}
+
+function expandedProjectMasterState(): {
+  readonly state: PrototypeState;
+  readonly target: Project;
+  readonly sourceA: Project;
+  readonly sourceB: Project;
+} {
+  const targetId = toProjectId("expanded-target");
+  const sourceA: Project = {
+    ...devProject001,
+    id: toProjectId("expanded-source-a"),
+    master: {
+      ...devProject001.master,
+      basicInformation: {
+        ...devProject001.master.basicInformation,
+        year: 2028,
+        stnProjectName: "Shared Source",
+        qciModelName: "SOURCE-QCI-A",
+      },
+    },
+  };
+  const sourceB: Project = {
+    ...devProject002,
+    id: toProjectId("expanded-source-b"),
+    master: {
+      ...devProject002.master,
+      basicInformation: {
+        ...devProject002.master.basicInformation,
+        year: 2029,
+        stnProjectName: "Shared Source",
+        qciModelName: "SOURCE-QCI-B",
+      },
+    },
+  };
+  const target: Project = {
+    ...devProject003,
+    id: targetId,
+    master: {
+      ...devProject003.master,
+      mechanical: {
+        product: {
+          productLengthMm: 320.5,
+          productWidthMm: 220,
+          productHeightMm: 17.25,
+          productWeightG: 0,
+        },
+        package: {
+          packageLengthMm: 480.5,
+          packageWidthMm: 310,
+          packageHeightMm: 65.75,
+          grossWeightG: 2500.5,
+        },
+      },
+      cover: {
+        aCover: toCatalogItemId("cover-plastic-paint"),
+        bCover: toCatalogItemId("cover-plastic-texture"),
+        cCover: toCatalogItemId("cover-al-plate"),
+        dCover: toCatalogItemId("unresolved-cover"),
+      },
+      leverage: {
+        pcbLeverage: targetId,
+        aLeverage: sourceA.id,
+        bLeverage: null,
+        cLeverage: toProjectId("unavailable-source"),
+        dLeverage: sourceB.id,
+      },
+    },
+  };
+
+  return {
+    state: { projects: [target, sourceA, sourceB], schedules: [] },
+    target,
+    sourceA,
+    sourceB,
+  };
+}
+
 function LocalScheduleWorkspaceHarness({ schedule }: { schedule: CanonicalProjectSchedule }) {
   const localState: PrototypeState = {
     projects: [devProject003],
@@ -160,9 +257,8 @@ function LocalScheduleWorkspaceHarness({ schedule }: { schedule: CanonicalProjec
 
   return (
     <ProjectWorkspace
-      feedback={[]}
       onBack={() => undefined}
-      onEditProject={() => undefined}
+      onViewProjectMaster={() => undefined}
       project={devProject003}
       row={row}
       scheduleWorkspaceProps={{
@@ -260,9 +356,8 @@ function MalformedDraftWorkspaceHarness(): React.ReactElement {
   };
 
   return <ProjectWorkspace
-    feedback={[]}
     onBack={() => undefined}
-    onEditProject={() => undefined}
+    onViewProjectMaster={() => undefined}
     project={devProject001}
     row={row}
     scheduleWorkspaceProps={scheduleWorkspaceProps}
@@ -584,8 +679,6 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(screen.getByRole("heading", { name: "Working Draft" })).toBeInTheDocument();
     const resources = screen.getByRole("region", { name: "Resources" });
     const draftSchedule = screen.getByRole("region", { name: "Schedule" });
-    expect(projectHeader().compareDocumentPosition(resources) & Node.DOCUMENT_POSITION_FOLLOWING)
-      .toBeTruthy();
     expect(resources.nextElementSibling).toBe(draftSchedule);
     expect(screen.getAllByRole("region", { name: "Schedule" })).toHaveLength(1);
     expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveValue("2026-09-18");
@@ -1015,7 +1108,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(within(milestoneRow).getAllByText("MDRR")).toHaveLength(2);
   });
 
-  it("integrates the canonical Portfolio shell, Current Published grouped table, search, and seven filters", () => {
+  it("integrates the canonical Portfolio shell, Current Published grouped table, search, and nine filters", () => {
     render(<App referenceDate={dashboardReferenceDate} />);
 
     // Detects obsolete inline Dashboard rendering or attention disconnected from canonical state.
@@ -1083,31 +1176,47 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
       expect(cells).toHaveLength(31);
       for (const cell of cells) { expect(cell).toHaveAttribute("title", "No published schedule"); expect(cell).toHaveTextContent(/^—$/); }
     }
+    const qciPmByProjectId = new Map([
+      ["dev-project-002", "DEV QCI PM"],
+      ["dev-project-003", "DEV Project 003 QCI PM"],
+      ["dev-project-004", "DEV Project 004 QCI PM"],
+      ["dev-project-005", "DEV Project 005 QCI PM"],
+    ]);
     for (const row of dashboardRows()) {
       const cells = row.querySelectorAll('[data-domain="team"]');
       expect(cells).toHaveLength(7);
-      for (const cell of cells) { expect(cell).toHaveTextContent(/^—$/); expect(cell).toHaveAttribute("title", "Migration pending"); }
+      const qciPm = row.querySelector('[data-column-key="team:qciPm"]')!;
+      const expectedQciPm = qciPmByProjectId.get(row.dataset.projectId ?? "");
+      expect(qciPm).toHaveTextContent(expectedQciPm ?? /^—$/);
+      expect(qciPm).not.toHaveAttribute("title", "Migration pending");
+      for (const cell of Array.from(cells).slice(1)) {
+        expect(cell).toHaveTextContent(/^—$/);
+        expect(cell).toHaveAttribute("title", "Migration pending");
+      }
     }
-    expect(screen.queryByText("DEV Project 003 QCI PM")).not.toBeInTheDocument();
+    expect(within(dashboardRow("dev-project-003")).getByText("DEV Project 003 QCI PM")).toBeInTheDocument();
 
-    // Detects missing canonical predicates or accidentally enabled unsupported fields.
+    // Detects missing canonical predicates or stale disabled Category / QCI PM controls.
     const filterPanel = screen.getByRole("region", { name: "Search / Filters" });
     const labels = ["Year", "Customer", "Status", "Category", "Product Line", "Panel Size", "CPU", "GPU", "QCI PM"];
     const controls = within(filterPanel).getAllByRole("combobox");
     expect(controls).toHaveLength(9);
     labels.forEach((label, index) => {
       expect(controls[index]).toHaveAccessibleName(label);
-      if (label === "Category" || label === "QCI PM") {
-        expect(controls[index]).toBeDisabled();
-        expect(controls[index]).toHaveAccessibleDescription(/Not available in V2.2|Migration pending/);
-        expect(within(controls[index]).getAllByRole("option")).toHaveLength(1);
-      } else expect(controls[index]).toBeEnabled();
+      expect(controls[index]).toBeEnabled();
     });
-    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "DEV-QCI-DRAFT-04" } });
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "ZBG" } });
     expect(dashboardRows()).toHaveLength(1);
     expect(within(dashboardTable()).getByText("Beluga")).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Category"), { target: { value: "Gaming" } });
+    expect(dashboardRows().map((row) => row.dataset.projectId)).toEqual(["dev-project-003", "dev-project-004"]);
+    fireEvent.change(screen.getByLabelText("QCI PM"), { target: { value: "project.003.qci.pm@example.test" } });
+    expect(dashboardRows().map((row) => row.dataset.projectId)).toEqual(["dev-project-003"]);
+    expect(screen.getByRole("button", { name: "Remove QCI PM: DEV Project 003 QCI PM" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
+
     const productLineFilter = screen.getByLabelText("Product Line");
     expect(within(productLineFilter).getByRole("option", { name: "Aspire (Refresh ID)" })).toBeInTheDocument();
     expect(within(productLineFilter).queryByRole("option", { name: "Deep Sea" })).not.toBeInTheDocument();
@@ -1139,6 +1248,10 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
 
     expect(projectHeader()).toHaveAttribute("data-project-id", "dev-project-001");
     expect(within(projectHeader()).getByText("Project Name: Manta")).toBeInTheDocument();
+    const scheduleView = screen.getByRole("region", { name: "Current Schedule" });
+    expect(within(scheduleView).getByText("Published v01")).toBeInTheDocument();
+    expect(within(scheduleView).getByText("Kickoff")).toBeInTheDocument();
+
     const resources = screen.getByRole("region", { name: "Resources" });
     expect(within(resources).getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual([
       "Schedule", "Team Member", "Weekly Report", "AVL",
@@ -1152,12 +1265,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(screen.getByRole("button", { name: "Open AVL" })).toBeDisabled();
     expect(screen.getAllByText("Migration pending")).toHaveLength(2);
 
-    const scheduleView = screen.getByRole("region", { name: "Current Schedule" });
-    expect(within(scheduleView).getByText("Published v01")).toBeInTheDocument();
-    expect(within(scheduleView).getByText("Kickoff")).toBeInTheDocument();
-    expect(projectHeader()).toHaveAttribute("data-project-id", "dev-project-001");
-
-    fireEvent.click(screen.getByRole("button", { name: "Open Team Member" }));
+    fireEvent.click(within(resources).getByRole("button", { name: "Open Team Member" }));
     expect(screen.getByRole("heading", { name: "Team Member" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Current Schedule" })).not.toBeInTheDocument();
 
@@ -1177,7 +1285,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     render(<App initialSelectedProjectId={devProject002.id} />);
     const initialSchedule = devSchedule001;
 
-    fireEvent.click(screen.getByRole("button", { name: "Open Team Member" }));
+    openTeamMemberFromWorkspace();
     fireEvent.click(screen.getByRole("button", { name: "Edit Team" }));
     fireEvent.change(screen.getByDisplayValue("DEV ME Owner"), {
       target: { value: "Saved ME Owner" },
@@ -1209,7 +1317,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
 
   it("atomically replaces only the selected Project Team after imported Save confirmation", async () => {
     render(<App initialSelectedProjectId={devProject002.id} />);
-    fireEvent.click(screen.getByRole("button", { name: "Open Team Member" }));
+    openTeamMemberFromWorkspace();
     const encoded = new TextEncoder().encode([
       "Function,Member,email",
       "Custom Lab-Member,Runtime Imported,runtime-imported@example.test",
@@ -1256,7 +1364,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
 
   it("imports hidden numeric XLSX evidence into one lossless unknown-role roster and reopens it", async () => {
     render(<App initialSelectedProjectId={devProject002.id} />);
-    fireEvent.click(screen.getByRole("button", { name: "Open Team Member" }));
+    openTeamMemberFromWorkspace();
     const workbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.aoa_to_sheet([
       ["Function", "Member", "email", "Tel. No."],
@@ -1331,8 +1439,6 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
 
     const resources = screen.getByRole("region", { name: "Resources" });
     const scheduleView = screen.getByRole("region", { name: "Current Schedule" });
-    expect(projectHeader().compareDocumentPosition(resources) & Node.DOCUMENT_POSITION_FOLLOWING)
-      .toBeTruthy();
     expect(resources.nextElementSibling).toBe(scheduleView);
     expect(screen.getAllByRole("region", { name: "Current Schedule" })).toHaveLength(1);
     expect(within(scheduleView).getByText("-")).toBeInTheDocument();
@@ -1369,7 +1475,83 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
 
     expect(projectHeader()).toHaveAttribute("data-project-id", "dev-project-003");
     expect(within(projectHeader()).getByText("Project Name: Orca")).toBeInTheDocument();
-    expect(within(projectHeader()).getByRole("button", { name: "Edit Project" })).toBeEnabled();
+    expect(within(projectHeader()).getByRole("button", { name: "View Project Master" })).toBeEnabled();
+  });
+
+  it("shows compact canonical Mechanical and Cover / Leverage in Project Master Detail", () => {
+    const targetId = toProjectId("read-only-target");
+    const sourceId = toProjectId("read-only-source");
+    const source: Project = {
+      ...devProject002,
+      id: sourceId,
+      master: {
+        ...devProject002.master,
+        basicInformation: {
+          ...devProject002.master.basicInformation,
+          year: 2028,
+          stnProjectName: "Shared Name",
+          qciModelName: "SOURCE-QCI",
+        },
+      },
+    };
+    const target: Project = {
+      ...devProject003,
+      id: targetId,
+      master: {
+        ...devProject003.master,
+        mechanical: {
+          product: {
+            productLengthMm: 320.5,
+            productWidthMm: null,
+            productHeightMm: 17.25,
+            productWeightG: 0,
+          },
+          package: {
+            packageLengthMm: 480.5,
+            packageWidthMm: 310,
+            packageHeightMm: 65.75,
+            grossWeightG: 2500.5,
+          },
+        },
+        cover: {
+          aCover: toCatalogItemId("cover-plastic-paint"),
+          bCover: toCatalogItemId("cover-plastic-texture"),
+          cCover: toCatalogItemId("cover-al-plate"),
+          dCover: toCatalogItemId("unresolved-cover"),
+        },
+        leverage: {
+          pcbLeverage: targetId,
+          aLeverage: sourceId,
+          bLeverage: null,
+          cLeverage: toProjectId("unavailable-source"),
+          dLeverage: null,
+        },
+      },
+    };
+    const localState: PrototypeState = { projects: [target, source], schedules: [] };
+
+    render(<App initialSelectedProjectId={targetId} initialState={localState} />);
+
+    expect(within(projectHeader()).getByText("Project Name: Orca")).toBeInTheDocument();
+    const detail = openProjectMasterDetail();
+    const mechanical = within(detail).getByRole("region", { name: "Mechanical" });
+    const coverLeverage = within(detail).getByRole("region", { name: "Cover / Leverage" });
+    expect(mechanical.compareDocumentPosition(coverLeverage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(detail).queryByRole("heading", { name: "Resources" })).not.toBeInTheDocument();
+
+    expect(within(mechanical).getByRole("heading", { name: "Product Dimension" })).toBeInTheDocument();
+    expect(within(mechanical).getByRole("heading", { name: "Package Dimension" })).toBeInTheDocument();
+    for (const value of ["320.5 mm", "—", "17.25 mm", "0 g", "480.5 mm", "310 mm", "65.75 mm", "2500.5 g"]) {
+      expect(within(mechanical).getByText(value)).toBeInTheDocument();
+    }
+
+    expect(within(coverLeverage).getByText("New Design")).toBeInTheDocument();
+    expect(within(coverLeverage).getByText("Plastic-Paint")).toBeInTheDocument();
+    expect(within(coverLeverage).getByText("2028 | Shared Name | SOURCE-QCI")).toBeInTheDocument();
+    expect(within(coverLeverage).getByText("Plastic-Texture")).toBeInTheDocument();
+    expect(within(coverLeverage).getByText("Unavailable Project")).toBeInTheDocument();
+    expect(within(coverLeverage).getByText("Al-plate")).toBeInTheDocument();
+    expect(within(coverLeverage).queryByRole("table")).not.toBeInTheDocument();
   });
 
   it("shows canonical-safe attention and exports all canonical rows despite active filters", () => {
@@ -1567,9 +1749,165 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(projectHeader()).toHaveAttribute("data-project-id", fixedUuid);
   });
 
+  it("keeps Project Master, Resources, and Current Schedule in Workspace order", () => {
+    render(<App />);
+    openProjectByName("Manta");
+
+    const projectMaster = projectHeader();
+    const resources = screen.getByRole("region", { name: "Resources" });
+    const currentSchedule = screen.getByRole("region", { name: "Current Schedule" });
+    expect(projectMaster.compareDocumentPosition(resources) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(resources.compareDocumentPosition(currentSchedule) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Mechanical", level: 2 }))
+      .not.toBeInTheDocument();
+
+    fireEvent.click(within(projectMaster).getByRole("button", { name: "View Project Master" }));
+    expect(screen.getByRole("heading", { name: "Project Master Detail", level: 1 })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Current Schedule" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Collapse Basic Information" })).toHaveTextContent("−");
+    expect(screen.getByRole("button", { name: "Collapse Mechanical" })).toHaveTextContent("−");
+    expect(screen.getByRole("button", { name: "Collapse Cover / Leverage" })).toHaveTextContent("−");
+    expect(screen.queryByRole("heading", { name: "Resources" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to Project Workspace" }));
+    expect(projectHeader()).toBeVisible();
+    expect(screen.getByRole("region", { name: "Resources" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Current Schedule" })).toBeVisible();
+  });
+
+  it("initializes the approved expansion in Edit while keeping Create at its current scope", () => {
+    const { state, target } = expandedProjectMasterState();
+    render(<App initialSelectedProjectId={target.id} initialState={state} />);
+    const detail = openEditMaster();
+    expect(within(detail).queryByRole("button", { name: "Back to Project Workspace" }))
+      .not.toBeInTheDocument();
+
+    expect(within(detail).getByLabelText("Product Length (mm)")).toHaveValue("320.5");
+    expect(within(detail).getByLabelText("Product Weight (g)")).toHaveValue("0");
+    expect(within(detail).getByLabelText("Gross Weight (g)")).toHaveValue("2500.5");
+    expect(within(detail).getByLabelText("A Cover Material")).toHaveValue("cover-plastic-paint");
+    expect(within(detail).getByLabelText("D Cover Material")).toHaveValue("unresolved-cover");
+    expect(within(detail).queryByLabelText("PCB Material")).not.toBeInTheDocument();
+    expect(within(detail).getByRole("button", { name: /PCB Leverage Project/ })).toHaveTextContent("Current Project (New Design)");
+    expect(within(detail).getByRole("button", { name: /A Cover Leverage Project/ })).toHaveTextContent("SOURCE-QCI-A");
+    expect(within(detail).getByRole("button", { name: /B Cover Leverage Project/ })).toHaveTextContent("Not specified");
+    expect(within(detail).getByRole("button", { name: /C Cover Leverage Project/ })).toHaveTextContent("Unavailable Project");
+
+    fireEvent.click(within(detail).getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to Project Workspace" }));
+    fireEvent.click(screen.getByRole("button", { name: "← Dashboard" }));
+    const createDialog = openCreateDialog();
+    expect(within(createDialog).queryByRole("group", { name: "Mechanical" })).not.toBeInTheDocument();
+    expect(within(createDialog).queryByRole("group", { name: "Cover / Leverage" })).not.toBeInTheDocument();
+  });
+
+  it("blocks invalid Mechanical Save and preserves decimal, blank, and zero values exactly", () => {
+    const { state, target } = expandedProjectMasterState();
+    render(<App initialSelectedProjectId={target.id} initialState={state} />);
+    const detail = openEditMaster();
+    const length = within(detail).getByLabelText("Product Length (mm)");
+    fireEvent.change(length, { target: { value: "-1.5" } });
+    fireEvent.click(within(detail).getByRole("button", { name: "Save Changes" }));
+
+    expect(within(detail).getByText("Must be 0 or greater.")).toBeInTheDocument();
+    expect(vi.mocked(updateProjectMaster)).not.toHaveBeenCalled();
+    expect(within(detail).getByRole("button", { name: "Collapse Mechanical" })).toBeVisible();
+
+    fireEvent.change(length, { target: { value: "1e309" } });
+    fireEvent.click(within(detail).getByRole("button", { name: "Save Changes" }));
+    expect(within(detail).getByText("Enter a valid number.")).toBeInTheDocument();
+    expect(vi.mocked(updateProjectMaster)).not.toHaveBeenCalled();
+    expect(within(detail).getByRole("button", { name: "Save Changes" })).toBeVisible();
+
+    fireEvent.change(length, { target: { value: "321.75" } });
+    fireEvent.change(within(detail).getByLabelText("Product Width (mm)"), {
+      target: { value: "" },
+    });
+    fireEvent.change(within(detail).getByLabelText("Product Weight (g)"), {
+      target: { value: "0" },
+    });
+    fireEvent.click(within(detail).getByRole("button", { name: "Save Changes" }));
+
+    const candidate = vi.mocked(updateProjectMaster).mock.calls.at(-1)?.[1].master;
+    expect(candidate?.mechanical.product).toMatchObject({
+      productLengthMm: 321.75,
+      productWidthMm: null,
+      productWeightG: 0,
+    });
+    expect(within(detail).getByRole("button", { name: "Edit Master" })).toBeVisible();
+  });
+
+  it("uses catalog materials and exact ProjectId leverage choices without losing dangling IDs", () => {
+    const { state, target, sourceB } = expandedProjectMasterState();
+    render(<App initialSelectedProjectId={target.id} initialState={state} />);
+    const detail = openEditMaster();
+
+    expect(within(detail).getByLabelText("A Cover Material")).toHaveTextContent("Plastic-Paint");
+    expect(within(detail).getByLabelText("A Cover Material")).toHaveTextContent("Mg-Al");
+    expect(within(detail).getByRole("button", { name: /C Cover Leverage Project/ })).toHaveTextContent("Unavailable Project");
+    expect(within(detail).getByRole("button", { name: /PCB Leverage Project/ })).toHaveTextContent(
+      "Current Project (New Design)",
+    );
+
+    fireEvent.click(within(detail).getByRole("button", { name: /A Cover Leverage Project/ }));
+    fireEvent.change(within(detail).getByLabelText("Search A Cover Leverage Project"), {
+      target: { value: "source-qci-b" },
+    });
+    const leverageOptions = within(detail).getByRole("listbox", {
+      name: "A Cover Leverage Project options",
+    });
+    const sourceOption = within(leverageOptions).getByRole("option", {
+      name: "2029 | Shared Source | SOURCE-QCI-B",
+    });
+    expect(sourceOption).toBeInTheDocument();
+    expect(within(leverageOptions).queryByRole("option", {
+      name: "2028 | Shared Source | SOURCE-QCI-A",
+    })).not.toBeInTheDocument();
+    fireEvent.click(sourceOption);
+    fireEvent.change(within(detail).getByLabelText("A Cover Material"), {
+      target: { value: "" },
+    });
+    fireEvent.click(within(detail).getByRole("button", { name: "Save Changes" }));
+
+    const candidate = vi.mocked(updateProjectMaster).mock.calls.at(-1)?.[1].master;
+    expect(candidate?.cover.aCover).toBeNull();
+    expect(candidate?.leverage.aLeverage).toBe(sourceB.id);
+    expect(candidate?.leverage.pcbLeverage).toBe(target.id);
+    expect(candidate?.leverage.bLeverage).toBeNull();
+    expect(candidate?.leverage.cLeverage).toBe(toProjectId("unavailable-source"));
+  });
+
+  it("resolves a direct leverage source's current identity after that source is renamed", () => {
+    const { state, target, sourceA } = expandedProjectMasterState();
+    render(<App initialSelectedProjectId={target.id} initialState={state} />);
+    let detail = openProjectMasterDetail();
+    expect(within(detail).getByRole("region", { name: "Cover / Leverage" })).toHaveTextContent(
+      "2028 | Shared Source | SOURCE-QCI-A",
+    );
+
+    fireEvent.click(within(detail).getByRole("button", { name: "Back to Project Workspace" }));
+    fireEvent.click(screen.getByRole("button", { name: "← Dashboard" }));
+    openProjectByQci("SOURCE-QCI-A");
+    detail = openEditMaster();
+    fireEvent.change(within(detail).getByLabelText("STN Project Name"), {
+      target: { value: "Renamed Direct Source" },
+    });
+    fireEvent.click(within(detail).getByRole("button", { name: "Save Changes" }));
+    fireEvent.click(within(detail).getByRole("button", { name: "Back to Project Workspace" }));
+    fireEvent.click(screen.getByRole("button", { name: "← Dashboard" }));
+    openProjectByQci(target.master.basicInformation.qciModelName!);
+
+    detail = openProjectMasterDetail();
+    expect(within(detail).getByRole("region", { name: "Cover / Leverage" })).toHaveTextContent(
+      "2028 | Renamed Direct Source | SOURCE-QCI-A",
+    );
+    const reducedTarget = lastReducedState().projects.find(({ id }) => id === target.id);
+    expect(reducedTarget?.master.leverage.aLeverage).toBe(sourceA.id);
+  });
+
   it("edits through the Master command, preserves hidden fields, and retains ProjectId", () => {
     render(<App />);
-    openProjectByQci("DEV-QCI-ALPHA-02");
+    openProjectByQci("ZOR");
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     fireEvent.change(screen.getByLabelText("Milestone definition"), {
       target: { value: "milestone-design-kickoff" },
@@ -1577,8 +1915,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add Milestone" }));
     applyDateInput(screen.getByLabelText(/^Plan for Kickoff occurrence/), "2035-07-08");
     expect(projectHeader()).toHaveAttribute("data-project-id", "dev-project-003");
-    fireEvent.click(within(projectHeader()).getByRole("button", { name: "Edit Project" }));
-    const dialog = screen.getByRole("dialog", { name: "Edit Project" });
+    const detail = openEditMaster();
 
     const textChanges: Record<string, string> = {
       "STN Project Name": "Orca Revised", "QCI Model Name": "DEV-QCI-ALPHA-REVISED",
@@ -1586,16 +1923,16 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
       Year: "2031", SSID: "REVISED-SSID", RMN: "REVISED-RMN",
     };
     for (const [label, value] of Object.entries(textChanges)) {
-      fireEvent.change(within(dialog).getByLabelText(label), { target: { value } });
+      fireEvent.change(within(detail).getByLabelText(label), { target: { value } });
     }
     for (const [label, value] of [
       ["Customer", "dev-customer-acer"], ["Product Line", "dev-product-line-beta"],
       ["Panel Size", "dev-panel-size-18"], ["CPU", "dev-cpu-beta"], ["GPU", "dev-gpu-beta"],
       ["Project Status", "status-mp"],
     ]) {
-      fireEvent.change(within(dialog).getByLabelText(label), { target: { value } });
+      fireEvent.change(within(detail).getByLabelText(label), { target: { value } });
     }
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save Changes" }));
+    fireEvent.click(within(detail).getByRole("button", { name: "Save Changes" }));
 
     const commandCall = vi.mocked(updateProjectMaster).mock.calls.at(-1);
     expect(commandCall).toBeDefined();
@@ -1610,8 +1947,10 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     const commandResult = vi.mocked(updateProjectMaster).mock.results.at(-1)?.value as UpdateProjectMasterResult;
     expect(commandResult.project.identityAliases).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: "stnProjectName", originalValue: "Orca" }),
-      expect.objectContaining({ kind: "qciModelName", originalValue: "DEV-QCI-ALPHA-02" }),
+      expect.objectContaining({ kind: "qciModelName", originalValue: "ZOR" }),
     ]));
+    expect(within(detail).getByText("Project Name: Orca Revised")).toBeInTheDocument();
+    fireEvent.click(within(detail).getByRole("button", { name: "Back to Project Workspace" }));
     expect(projectHeader()).toHaveAttribute("data-project-id", "dev-project-003");
     expect(within(projectHeader()).getByText("Project Name: Orca Revised")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Working Draft" })).toBeInTheDocument();
@@ -1640,38 +1979,50 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
           severity: "advisory", message: "Advisory saved.",
           target: { section: "projectMaster.basicInformation", entityId: project.id },
         }],
-      }));
+    }));
     render(<App />);
-    openProjectByQci("DEV-QCI-ALPHA-02");
-    fireEvent.click(within(projectHeader()).getByRole("button", { name: "Edit Project" }));
-    const dialog = screen.getByRole("dialog", { name: "Edit Project" });
-    fireEvent.change(within(dialog).getByLabelText("STN Project Name"), { target: { value: "Blocked Candidate" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save Changes" }));
+    openProjectByQci("ZOR");
+    const detail = openEditMaster();
+    fireEvent.change(within(detail).getByLabelText("STN Project Name"), { target: { value: "Blocked Candidate" } });
+    fireEvent.click(within(detail).getByRole("button", { name: "Save Changes" }));
 
-    expect(screen.getByRole("dialog", { name: "Edit Project" })).toBeInTheDocument();
-    expect(within(dialog).getByText("Blocked for correction.")).toBeInTheDocument();
-    expect(within(projectHeader()).getByText("Project Name: Orca")).toBeInTheDocument();
+    expect(within(detail).getByRole("button", { name: "Save Changes" })).toBeVisible();
+    expect(within(detail).getByText("Blocked for correction.")).toBeInTheDocument();
+    fireEvent.click(within(detail).getByRole("button", { name: "Cancel" }));
+    expect(within(detail).getByText("Project Name: Orca")).toBeInTheDocument();
 
-    fireEvent.change(within(dialog).getByLabelText("STN Project Name"), { target: { value: "Advisory Candidate" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save Changes" }));
-    expect(screen.queryByRole("dialog", { name: "Edit Project" })).not.toBeInTheDocument();
-    expect(within(projectHeader()).getByText("Project Name: Advisory Candidate")).toBeInTheDocument();
-    expect(screen.getByText("Advisory saved.")).toBeInTheDocument();
+    fireEvent.click(within(detail).getByRole("button", { name: "Edit Master" }));
+    fireEvent.change(within(detail).getByLabelText("STN Project Name"), { target: { value: "Advisory Candidate" } });
+    fireEvent.click(within(detail).getByRole("button", { name: "Save Changes" }));
+    expect(within(detail).queryByRole("button", { name: "Save Changes" })).not.toBeInTheDocument();
+    expect(within(detail).getByText("Project Name: Advisory Candidate")).toBeInTheDocument();
+    expect(within(detail).getByText("Advisory saved.")).toBeInTheDocument();
   });
 
   it("cancels Edit and discards only transient form changes", () => {
     render(<App />);
-    openProjectByQci("DEV-QCI-ALPHA-02");
-    fireEvent.click(within(projectHeader()).getByRole("button", { name: "Edit Project" }));
-    let dialog = screen.getByRole("dialog", { name: "Edit Project" });
-    fireEvent.change(within(dialog).getByLabelText("STN Project Name"), { target: { value: "Discard Me" } });
-    fireEvent.change(within(dialog).getByLabelText("QCI Model Name"), { target: { value: "DISCARD-QCI" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    openProjectByQci("ZOR");
+    const detail = openEditMaster();
+    fireEvent.change(within(detail).getByLabelText("STN Project Name"), { target: { value: "Discard Me" } });
+    fireEvent.change(within(detail).getByLabelText("QCI Model Name"), { target: { value: "DISCARD-QCI" } });
+    fireEvent.change(within(detail).getByLabelText("Product Length (mm)"), { target: { value: "999.5" } });
+    fireEvent.change(within(detail).getByLabelText("A Cover Material"), {
+      target: { value: "cover-plastic-paint" },
+    });
+    fireEvent.click(within(detail).getByRole("button", { name: /A Cover Leverage Project/ }));
+    fireEvent.change(within(detail).getByLabelText("Search A Cover Leverage Project"), {
+      target: { value: "Manta" },
+    });
+    fireEvent.click(within(detail).getByRole("option", { name: /Manta/ }));
+    fireEvent.click(within(detail).getByRole("button", { name: "Cancel" }));
 
-    expect(within(projectHeader()).getByText("Project Name: Orca")).toBeInTheDocument();
-    fireEvent.click(within(projectHeader()).getByRole("button", { name: "Edit Project" }));
-    dialog = screen.getByRole("dialog", { name: "Edit Project" });
-    expect(within(dialog).getByLabelText("STN Project Name")).toHaveValue("Orca");
-    expect(within(dialog).getByLabelText("QCI Model Name")).toHaveValue("DEV-QCI-ALPHA-02");
+    expect(within(detail).getByText("Project Name: Orca")).toBeInTheDocument();
+    fireEvent.click(within(detail).getByRole("button", { name: "Edit Master" }));
+    expect(within(detail).getByLabelText("STN Project Name")).toHaveValue("Orca");
+    expect(within(detail).getByLabelText("QCI Model Name")).toHaveValue("ZOR");
+    expect(within(detail).getByLabelText("Product Length (mm)")).toHaveValue("");
+    expect(within(detail).getByLabelText("A Cover Material")).toHaveValue("cover-mg-al");
+    expect(within(detail).getByRole("button", { name: /A Cover Leverage Project/ }))
+      .toHaveTextContent("Not specified");
   });
 });

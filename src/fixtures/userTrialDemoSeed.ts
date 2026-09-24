@@ -50,7 +50,7 @@ const scenarios: readonly UserTrialDemoScenario[] = [
   {
     projectId: userTrialDemoProjectIds.goDueSoon,
     projectName: "DEMO - G/O Due Soon",
-    qciModelName: "DEMO-GO-DUE-SOON",
+    qciModelName: "ZGDS",
     milestoneId: userTrialDemoMilestoneIds.goDueSoon,
     milestoneDefinitionId: toMilestoneDefinitionId("milestone-a1-a-g-o"),
     planOffsetDays: 5,
@@ -59,7 +59,7 @@ const scenarios: readonly UserTrialDemoScenario[] = [
   {
     projectId: userTrialDemoProjectIds.smtOverdue,
     projectName: "DEMO - SMT Overdue",
-    qciModelName: "DEMO-SMT-OVERDUE",
+    qciModelName: "ZSMT",
     milestoneId: userTrialDemoMilestoneIds.smtOverdue,
     milestoneDefinitionId: toMilestoneDefinitionId("milestone-a1-a-smt"),
     planOffsetDays: -7,
@@ -68,7 +68,7 @@ const scenarios: readonly UserTrialDemoScenario[] = [
   {
     projectId: userTrialDemoProjectIds.mdrrDueSoon,
     projectName: "DEMO - MDRR Due Soon",
-    qciModelName: "DEMO-MDRR-DUE-SOON",
+    qciModelName: "ZMDR",
     milestoneId: userTrialDemoMilestoneIds.mdrrDueSoon,
     milestoneDefinitionId: toMilestoneDefinitionId("milestone-mdrr"),
     planOffsetDays: 10,
@@ -77,7 +77,7 @@ const scenarios: readonly UserTrialDemoScenario[] = [
   {
     projectId: userTrialDemoProjectIds.completedMilestone,
     projectName: "DEMO - Completed Milestone",
-    qciModelName: "DEMO-COMPLETED-MILESTONE",
+    qciModelName: "ZCMP",
     milestoneId: userTrialDemoMilestoneIds.completedMilestone,
     milestoneDefinitionId: toMilestoneDefinitionId("milestone-a1-a-smt"),
     planOffsetDays: -3,

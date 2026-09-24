@@ -4,10 +4,12 @@ export const portfolioDashboardFilterKeys = [
 	"year",
 	"customer",
 	"status",
+	"category",
 	"productLine",
 	"panelSize",
 	"cpu",
 	"gpu",
+	"qciPm",
 ] as const;
 
 export type PortfolioDashboardFilterKey = (typeof portfolioDashboardFilterKeys)[number];
@@ -18,13 +20,22 @@ export const emptyPortfolioDashboardFilters: PortfolioDashboardFilters = {
 	year: "",
 	customer: "",
 	status: "",
+	category: "",
 	productLine: "",
 	panelSize: "",
 	cpu: "",
 	gpu: "",
+	qciPm: "",
 };
 
-export type PortfolioDashboardFilterOptions = Readonly<Record<PortfolioDashboardFilterKey, readonly string[]>>;
+export interface PortfolioDashboardFilterOption {
+	readonly value: string;
+	readonly label: string;
+}
+
+export type PortfolioDashboardFilterOptions = Readonly<
+	Record<PortfolioDashboardFilterKey, readonly PortfolioDashboardFilterOption[]>
+>;
 
 export interface PortfolioDashboardFilterChip {
 	readonly key: PortfolioDashboardFilterKey;
@@ -37,20 +48,24 @@ const portfolioDashboardFilterFields: Readonly<Record<PortfolioDashboardFilterKe
 	year: "Year",
 	customer: "Customer",
 	status: "Status",
+	category: "Category",
 	productLine: "Product Line",
 	panelSize: "Panel Size",
 	cpu: "CPU",
 	gpu: "GPU",
+	qciPm: "QCI PM",
 };
 
 const portfolioDashboardFilterGetters: Readonly<Record<PortfolioDashboardFilterKey, (row: PortfolioDashboardRow) => string>> = {
 	year: (row) => row.project.year,
 	customer: (row) => row.project.customer,
 	status: (row) => row.project.projectStatus,
+	category: (row) => row.category,
 	productLine: (row) => row.project.productLine,
 	panelSize: (row) => row.project.panelSize,
 	cpu: (row) => row.project.cpu,
 	gpu: (row) => row.project.gpu,
+	qciPm: (row) => row.qciPm?.value ?? "",
 };
 
 const searchableProjectValues: readonly ((row: PortfolioDashboardRow) => string)[] = [
@@ -65,9 +80,17 @@ const searchableProjectValues: readonly ((row: PortfolioDashboardRow) => string)
 export function portfolioDashboardFilterOptions(
 	rows: readonly PortfolioDashboardRow[],
 ): PortfolioDashboardFilterOptions {
-	const options = {} as Record<PortfolioDashboardFilterKey, readonly string[]>;
+	const options = {} as Record<PortfolioDashboardFilterKey, readonly PortfolioDashboardFilterOption[]>;
 	for (const key of portfolioDashboardFilterKeys) {
-		options[key] = [...new Set(rows.map(portfolioDashboardFilterGetters[key]).filter((value) => value !== "" && value !== "-"))];
+		const byValue = new Map<string, PortfolioDashboardFilterOption>();
+		for (const row of rows) {
+			const value = portfolioDashboardFilterGetters[key](row);
+			if (value === "" || value === "-") continue;
+			const label = key === "qciPm" ? row.qciPm?.label ?? "" : value;
+			if (label === "" || byValue.has(value)) continue;
+			byValue.set(value, { value, label });
+		}
+		options[key] = [...byValue.values()];
 	}
 	return options;
 }
@@ -91,11 +114,14 @@ export function filterPortfolioDashboardRows(
 
 export function portfolioDashboardFilterChips(
 	filters: PortfolioDashboardFilters,
+	options?: PortfolioDashboardFilterOptions,
 ): readonly PortfolioDashboardFilterChip[] {
 	return portfolioDashboardFilterKeys.flatMap((key) => {
 		const value = filters[key];
 		if (value === "") return [];
 		const field = portfolioDashboardFilterFields[key];
-		return [{ key, field, value, label: `${field}: ${value}` }];
+		const selectedLabel = options?.[key].find((option) => option.value === value)?.label
+			?? (key === "qciPm" ? "Unavailable QCI PM" : value);
+		return [{ key, field, value, label: `${field}: ${selectedLabel}` }];
 	});
 }

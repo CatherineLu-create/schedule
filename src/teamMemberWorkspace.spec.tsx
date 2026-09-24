@@ -193,7 +193,8 @@ async function waitForImportPreview(): Promise<HTMLElement> {
 describe("Team Member workspace", () => {
   it("opens the selected Project saved Team read-only from Resources", () => {
     render(<App initialSelectedProjectId={devProject002.id} />);
-    const openTeam = screen.getByRole("button", { name: "Open Team Member" });
+    const resources = screen.getByRole("region", { name: "Resources" });
+    const openTeam = within(resources).getByRole("button", { name: "Open Team Member" });
     expect(openTeam).toBeEnabled();
     fireEvent.click(openTeam);
     expect(screen.getByRole("heading", { name: "Team Member" })).toBeInTheDocument();

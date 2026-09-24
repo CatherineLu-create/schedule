@@ -584,8 +584,8 @@ describe("Project Master update command", () => {
 			},
 			{
 				kind: "qciModelName",
-				originalValue: "DEV-QCI-ALPHA-01",
-				normalizedValue: "dev-qci-alpha-01",
+				originalValue: "ZNT",
+				normalizedValue: "znt",
 			},
 		]);
 		expect(result.project.team).toBe(devProject002.team);

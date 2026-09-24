@@ -27,19 +27,16 @@ export interface PortfolioDashboardViewProps {
   readonly onOpenProject: (projectId: ProjectId) => void;
 }
 
-const controls: readonly (
-  | { readonly key: PortfolioDashboardFilterKey; readonly label: string; readonly disabled?: false }
-  | { readonly key: "category" | "qciPm"; readonly label: string; readonly disabled: true; readonly explanation: string }
-)[] = [
+const controls: readonly { readonly key: PortfolioDashboardFilterKey; readonly label: string }[] = [
   { key: "year", label: "Year" },
   { key: "customer", label: "Customer" },
   { key: "status", label: "Status" },
-  { key: "category", label: "Category", disabled: true, explanation: "Not available in V2.2" },
+  { key: "category", label: "Category" },
   { key: "productLine", label: "Product Line" },
   { key: "panelSize", label: "Panel Size" },
   { key: "cpu", label: "CPU" },
   { key: "gpu", label: "GPU" },
-  { key: "qciPm", label: "QCI PM", disabled: true, explanation: "Migration pending" },
+  { key: "qciPm", label: "QCI PM" },
 ];
 const focus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600";
 
@@ -110,7 +107,7 @@ export function PortfolioDashboardView({ attention, rows, onCreateProject, onExp
   const id = React.useId();
   const options = portfolioDashboardFilterOptions(rows);
   const filteredRows = filterPortfolioDashboardRows(rows, searchTerm, filters);
-  const chips = portfolioDashboardFilterChips(filters);
+  const chips = portfolioDashboardFilterChips(filters, options);
   const attentionCards = [
     { title: "Blocking Issues", value: "—", supporting: "Calculation not active", tone: "border-rose-100 bg-rose-50/60 text-rose-800", projects: [] },
     {
@@ -181,15 +178,10 @@ export function PortfolioDashboardView({ attention, rows, onCreateProject, onExp
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {controls.map((control) => <div key={control.key} className="min-w-0">
           <label htmlFor={`${id}-${control.key}`} className="block text-xs font-medium text-slate-600">{control.label}</label>
-          {control.disabled ? <>
-            <select id={`${id}-${control.key}`} disabled aria-describedby={`${id}-${control.key}-reason`} className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-400 disabled:cursor-not-allowed">
-              <option>Not available</option>
-            </select>
-            <p id={`${id}-${control.key}-reason`} className="mt-1 text-xs text-slate-500">{control.explanation}</p>
-          </> : <select id={`${id}-${control.key}`} value={filters[control.key]} onChange={(event) => setFilters((current) => ({ ...current, [control.key]: event.target.value }))} className={`mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm ${focus}`}>
+          <select id={`${id}-${control.key}`} value={filters[control.key]} onChange={(event) => setFilters((current) => ({ ...current, [control.key]: event.target.value }))} className={`mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm ${focus}`}>
             <option value="">All</option>
-            {options[control.key].map((value) => <option key={value} value={value}>{value}</option>)}
-          </select>}
+            {options[control.key].map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
         </div>)}
       </div>
       {chips.length > 0 && <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">

@@ -6,9 +6,10 @@ import {
   portfolioMilestoneDefinitions,
 } from "../../config/v2/referenceData";
 import type { CanonicalProjectSchedule, CanonicalPublishedScheduleMilestone } from "../../domain/schedule/officialSchedule";
+import type { ProjectRoleAssignment } from "../../domain/team/team";
 import { toScheduleVersionNumber, type ScheduleVersionNumber } from "../../domain/schedule/schedule";
 import { parseDateOnly, type DateOnly } from "../../domain/shared/dateOnly";
-import { toMilestoneDefinitionId, toMilestoneId } from "../../domain/shared/ids";
+import { toMilestoneDefinitionId, toMilestoneId, toPersonAssignmentId, toProjectId } from "../../domain/shared/ids";
 import { canonicalProjectFixtures, devProject002, devProject003 } from "../../fixtures/v2/canonicalProjectFixtures";
 import { canonicalScheduleFixtures } from "../../fixtures/v2/canonicalScheduleFixtures";
 import type { PrototypeState } from "../state/prototypeState";
@@ -129,6 +130,65 @@ describe("canonical Portfolio Dashboard read projection", () => {
     expect(rows[2]).toMatchObject({ pcbNumber: "DEV-PCB-003" });
   });
 
+  it("derives QCI PM filter identity and display only from the saved project role", () => {
+    const withQciPm = (
+      id: string,
+      qciPm: ProjectRoleAssignment | null,
+    ) => ({
+      ...devProject002,
+      id: toProjectId(id),
+      team: {
+        ...devProject002.team!,
+        projectRoles: { ...devProject002.team!.projectRoles, qciPm },
+      },
+    });
+    const projects = [
+      withQciPm("normalized-one", {
+        assignmentId: toPersonAssignmentId("normalized-one-assignment"),
+        name: "  Shared PM  ",
+        email: "  SHARED.PM@Example.Test  ",
+      }),
+      withQciPm("normalized-two", {
+        assignmentId: toPersonAssignmentId("normalized-two-assignment"),
+        name: "Shared PM Renamed",
+        email: "shared.pm@example.test",
+      }),
+      withQciPm("same-name-different-email", {
+        assignmentId: toPersonAssignmentId("different-email-assignment"),
+        name: "Shared PM",
+        email: "other.pm@example.test",
+      }),
+      withQciPm("assignment-fallback", {
+        assignmentId: toPersonAssignmentId("no-email-assignment"),
+        name: "No Email PM",
+        email: null,
+      }),
+      withQciPm("email-label-fallback", {
+        assignmentId: toPersonAssignmentId("email-label-assignment"),
+        name: "   ",
+        email: "  Label.PM@Example.Test  ",
+      }),
+      withQciPm("unidentified", {
+        assignmentId: toPersonAssignmentId("unidentified-assignment"),
+        name: null,
+        email: null,
+      }),
+      withQciPm("no-qci-pm", null),
+      { ...devProject002, id: toProjectId("no-team"), team: null },
+    ];
+
+    expect(selectPortfolioDashboardRows(fixtureState(projects, [])).map(({ qciPm }) => qciPm)).toEqual([
+      { value: "shared.pm@example.test", label: "Shared PM" },
+      { value: "shared.pm@example.test", label: "Shared PM Renamed" },
+      { value: "other.pm@example.test", label: "Shared PM" },
+      { value: "assignment:no-email-assignment", label: "No Email PM" },
+      { value: "label.pm@example.test", label: "Label.PM@Example.Test" },
+      null,
+      null,
+      null,
+    ]);
+  });
+
   it("uses maximum Published version rather than final array entry in a local edge-case schedule", () => {
     const currentMilestone = {
       milestoneId: toMilestoneId("local-current-c1-go"),
@@ -233,7 +293,7 @@ describe("canonical Portfolio Dashboard read projection", () => {
     ]);
   });
 
-  it("projects Published MDRR while a conflicting Working Draft and Project team cannot alter the row", () => {
+  it("projects Published MDRR independently of Working Draft and Team-derived QCI PM", () => {
     const mdrr = {
       milestoneId: toMilestoneId("portfolio-mdrr"),
       milestoneDefinitionId: toMilestoneDefinitionId("milestone-mdrr"),
@@ -277,7 +337,9 @@ describe("canonical Portfolio Dashboard read projection", () => {
     }]);
     expect(row.project.mdrr).toBe("-");
     expect(draftRow).toEqual(row);
-    expect(changedTeamRow).toEqual(row);
+    expect(changedTeamRow).toEqual({ ...row, qciPm: null });
+    expect(changedTeamRow.schedule).toEqual(row.schedule);
+    expect(changedTeamRow.project).toEqual(row.project);
   });
 
   it("does not mutate input Project, Schedule, version, or milestone arrays", () => {

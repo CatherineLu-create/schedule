@@ -119,7 +119,7 @@ describe("Portfolio Dashboard shell", () => {
     expect(within(attention).queryByText("Past due · calculation not active")).not.toBeInTheDocument();
     expect(screen.queryByText("No items requiring attention.")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Working Draft|Publish|warning|Edit Team|Import Team/ })).not.toBeInTheDocument();
-    expect(screen.queryByText("DEV Project 003 QCI PM")).not.toBeInTheDocument();
+    expect(screen.getAllByText("DEV Project 003 QCI PM").length).toBeGreaterThan(0);
     expect(screen.getByText("Scroll horizontally to view Schedule and Team Member")).toBeInTheDocument();
   });
 
@@ -167,7 +167,7 @@ describe("Portfolio Dashboard shell", () => {
     }
   });
 
-  it("exposes only seven canonical filters in visual order and explains both disabled controls", () => {
+  it("exposes all nine canonical filters with Category and QCI PM options from current rows", () => {
     setup();
     const filters = screen.getByRole("region", { name: "Search / Filters" });
     expect(within(filters).getAllByRole("searchbox")).toHaveLength(1);
@@ -177,15 +177,37 @@ describe("Portfolio Dashboard shell", () => {
     expect(controls).toHaveLength(9);
     labels.forEach((label, index) => {
       expect(controls[index]).toHaveAccessibleName(label);
-      if (label === "Category" || label === "QCI PM") {
-        expect(controls[index]).toBeDisabled();
-        expect(controls[index]).toHaveAttribute("aria-describedby");
-        expect(controls[index]).toHaveAccessibleDescription(/Not available in V2.2|Migration pending/);
-        expect(within(controls[index]).getAllByRole("option")).toHaveLength(1);
-      } else expect(controls[index]).toBeEnabled();
+      expect(controls[index]).toBeEnabled();
     });
     expect(within(screen.getByRole("combobox", { name: "Status" })).getAllByRole("option").map((option) => option.textContent)).toEqual(["All", "RFQ", "On Going", "Pending", "Kick off", "MP"]);
     expect(within(screen.getByRole("combobox", { name: "GPU" })).getAllByRole("option").map((option) => option.textContent)).toEqual(["All", "GN22-X2/X4", "GN20-X6", "GN22-X7/X9"]);
+    expect(within(screen.getByRole("combobox", { name: "Category" })).getAllByRole("option").map((option) => option.textContent)).toEqual(["All", "Aspire", "Gamepad", "Gaming", "WOA"]);
+    expect(within(screen.getByRole("combobox", { name: "QCI PM" })).getAllByRole("option").map((option) => [option.getAttribute("value"), option.textContent])).toEqual([
+      ["", "All"],
+      ["qci.pm@example.test", "DEV QCI PM"],
+      ["project.003.qci.pm@example.test", "DEV Project 003 QCI PM"],
+      ["project.004.qci.pm@example.test", "DEV Project 004 QCI PM"],
+      ["project.005.qci.pm@example.test", "DEV Project 005 QCI PM"],
+    ]);
+  });
+
+  it("filters by Category and visible QCI PM while preserving chip removal and Clear all", () => {
+    setup();
+    select("Category", "Gaming");
+    expect(visibleIds()).toEqual(["dev-project-003", "dev-project-004"]);
+    expect(screen.getByRole("button", { name: "Remove Category: Gaming" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Remove Category: Gaming" }));
+    expect(visibleIds()).toEqual(["dev-project-001", "dev-project-002", "dev-project-003", "dev-project-004", "dev-project-005"]);
+
+    select("QCI PM", "project.003.qci.pm@example.test");
+    expect(visibleIds()).toEqual(["dev-project-003"]);
+    expect(screen.getByRole("button", { name: "Remove QCI PM: DEV Project 003 QCI PM" })).toBeVisible();
+    const qciPmCell = screen.getByRole("table", { name: "Projects" })
+      .querySelector('[data-project-id="dev-project-003"] [data-column-key="team:qciPm"]');
+    expect(qciPmCell).toHaveTextContent("DEV Project 003 QCI PM");
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
+    expect(visibleIds()).toEqual(["dev-project-001", "dev-project-002", "dev-project-003", "dev-project-004", "dev-project-005"]);
   });
 
   it("wires canonical Status and GPU predicates to the real table and result count", () => {
@@ -221,7 +243,7 @@ describe("Portfolio Dashboard shell", () => {
   it("combines search with filters and retains the complete shell for zero search results", () => {
     setup();
 		select("GPU", "GN22-X7/X9");
-    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "  qci-alpha-02  " } });
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "  zor  " } });
     expect(visibleIds()).toEqual(["dev-project-003"]);
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "not-a-project" } });
     expect(visibleIds()).toEqual([]);

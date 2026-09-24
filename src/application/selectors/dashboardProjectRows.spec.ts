@@ -62,7 +62,7 @@ describe("Dashboard Project row projection", () => {
 			customer: "Acer",
 			productLine: "Game pad",
 			projectName: "Nautilus",
-			qciModelName: "DEV-QCI-ALPHA-01",
+			qciModelName: "ZNT",
 			acerModelName: "Acer Display Model",
 			acerMarketingName: "Acer Display Marketing",
 			panelSize: '16"',

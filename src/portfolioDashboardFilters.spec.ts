@@ -22,10 +22,12 @@ const valueByKey = {
 	year: (row) => row.project.year,
 	customer: (row) => row.project.customer,
 	status: (row) => row.project.projectStatus,
+	category: (row) => row.category,
 	productLine: (row) => row.project.productLine,
 	panelSize: (row) => row.project.panelSize,
 	cpu: (row) => row.project.cpu,
 	gpu: (row) => row.project.gpu,
+	qciPm: (row) => row.qciPm?.value ?? "",
 } satisfies Record<PortfolioDashboardFilterKey, (row: PortfolioDashboardRow) => string>;
 
 function filtersWith(
@@ -39,25 +41,29 @@ function rowIds(matched: readonly PortfolioDashboardRow[]): string[] {
 }
 
 describe("canonical Portfolio Dashboard filters", () => {
-	it("exposes exactly the approved seven filter keys", () => {
+	it("exposes the nine approved filter keys in visual order", () => {
 		expect(portfolioDashboardFilterKeys).toEqual([
 			"year",
 			"customer",
 			"status",
+			"category",
 			"productLine",
 			"panelSize",
 			"cpu",
 			"gpu",
+			"qciPm",
 		]);
 		expect(Object.keys(emptyPortfolioDashboardFilters)).toEqual(portfolioDashboardFilterKeys);
 		expect(emptyPortfolioDashboardFilters).toEqual({
 			year: "",
 			customer: "",
 			status: "",
+			category: "",
 			productLine: "",
 			panelSize: "",
 			cpu: "",
 			gpu: "",
+			qciPm: "",
 		});
 	});
 
@@ -70,44 +76,60 @@ describe("canonical Portfolio Dashboard filters", () => {
 		expect(rowIds(result)).toEqual(rows.filter((row) => valueByKey[key](row) === value).map((row) => row.projectId));
 	});
 
-	it("derives unique options in first canonical row order without empty or dash sentinels", () => {
+	it("derives unique labeled options in first canonical row order without empty or dash sentinels", () => {
 		const options = portfolioDashboardFilterOptions(rows);
 		expect(Object.keys(options)).toEqual(portfolioDashboardFilterKeys);
 
 		for (const key of portfolioDashboardFilterKeys) {
-			const seen: string[] = [];
+			const seen: { value: string; label: string }[] = [];
 			for (const row of rows) {
 				const value = valueByKey[key](row);
-				if (value !== "" && value !== "-" && !seen.includes(value)) seen.push(value);
+				const label = key === "qciPm" ? row.qciPm?.label ?? "" : value;
+				if (value !== "" && value !== "-" && !seen.some((option) => option.value === value)) {
+					seen.push({ value, label });
+				}
 			}
 			expect(options[key]).toEqual(seen);
-			expect(new Set(options[key]).size).toBe(options[key].length);
-			expect(options[key].every((value) => value !== "" && value !== "-")).toBe(true);
+			expect(new Set(options[key].map(({ value }) => value)).size).toBe(options[key].length);
+			expect(options[key].every(({ value, label }) => value !== "" && value !== "-" && label !== "")).toBe(true);
 		}
 	});
 
-	it("derives options only from supplied rows in insertion order and excludes both sentinels", () => {
+	it("derives options only from supplied rows in insertion order and excludes blank values and sentinels", () => {
 		const suppliedValues = [
-			{ year: "2031", customer: "Zeta Customer", projectStatus: "Synthetic Active", productLine: "Zeta Line", panelSize: "13 inch", cpu: "CPU Zeta", gpu: "GPU Zeta" },
-			{ year: "2030", customer: "Alpha Customer", projectStatus: "Synthetic Draft", productLine: "Alpha Line", panelSize: "14 inch", cpu: "CPU Alpha", gpu: "GPU Alpha" },
-			{ year: "2031", customer: "Zeta Customer", projectStatus: "Synthetic Active", productLine: "Zeta Line", panelSize: "13 inch", cpu: "CPU Zeta", gpu: "GPU Zeta" },
-			{ year: "", customer: "", projectStatus: "", productLine: "", panelSize: "", cpu: "", gpu: "" },
-			{ year: "-", customer: "-", projectStatus: "-", productLine: "-", panelSize: "-", cpu: "-", gpu: "-" },
+			{ year: "2031", customer: "Zeta Customer", projectStatus: "Synthetic Active", category: "Zeta Category", productLine: "Zeta Line", panelSize: "13 inch", cpu: "CPU Zeta", gpu: "GPU Zeta", qciPm: { value: "shared@example.test", label: "First Shared PM" } },
+			{ year: "2030", customer: "Alpha Customer", projectStatus: "Synthetic Draft", category: "Alpha Category", productLine: "Alpha Line", panelSize: "14 inch", cpu: "CPU Alpha", gpu: "GPU Alpha", qciPm: { value: "alpha@example.test", label: "Same Display Name" } },
+			{ year: "2031", customer: "Zeta Customer", projectStatus: "Synthetic Active", category: "Zeta Category", productLine: "Zeta Line", panelSize: "13 inch", cpu: "CPU Zeta", gpu: "GPU Zeta", qciPm: { value: "shared@example.test", label: "Later Shared Label" } },
+			{ year: "", customer: "", projectStatus: "", category: "", productLine: "", panelSize: "", cpu: "", gpu: "", qciPm: { value: "other@example.test", label: "Same Display Name" } },
+			{ year: "-", customer: "-", projectStatus: "-", category: "-", productLine: "-", panelSize: "-", cpu: "-", gpu: "-", qciPm: null },
 		] as const;
 		const suppliedRows = suppliedValues.map((values, index) => ({
 			...rows[index]!,
-			project: { ...rows[index]!.project, ...values },
+			category: values.category,
+			qciPm: values.qciPm,
+			project: { ...rows[index]!.project, ...values, category: undefined, qciPm: undefined },
 		}));
 
 		expect(portfolioDashboardFilterOptions(suppliedRows)).toEqual({
-			year: ["2031", "2030"],
-			customer: ["Zeta Customer", "Alpha Customer"],
-			status: ["Synthetic Active", "Synthetic Draft"],
-			productLine: ["Zeta Line", "Alpha Line"],
-			panelSize: ["13 inch", "14 inch"],
-			cpu: ["CPU Zeta", "CPU Alpha"],
-			gpu: ["GPU Zeta", "GPU Alpha"],
+			year: [{ value: "2031", label: "2031" }, { value: "2030", label: "2030" }],
+			customer: [{ value: "Zeta Customer", label: "Zeta Customer" }, { value: "Alpha Customer", label: "Alpha Customer" }],
+			status: [{ value: "Synthetic Active", label: "Synthetic Active" }, { value: "Synthetic Draft", label: "Synthetic Draft" }],
+			category: [{ value: "Zeta Category", label: "Zeta Category" }, { value: "Alpha Category", label: "Alpha Category" }],
+			productLine: [{ value: "Zeta Line", label: "Zeta Line" }, { value: "Alpha Line", label: "Alpha Line" }],
+			panelSize: [{ value: "13 inch", label: "13 inch" }, { value: "14 inch", label: "14 inch" }],
+			cpu: [{ value: "CPU Zeta", label: "CPU Zeta" }, { value: "CPU Alpha", label: "CPU Alpha" }],
+			gpu: [{ value: "GPU Zeta", label: "GPU Zeta" }, { value: "GPU Alpha", label: "GPU Alpha" }],
+			qciPm: [
+				{ value: "shared@example.test", label: "First Shared PM" },
+				{ value: "alpha@example.test", label: "Same Display Name" },
+				{ value: "other@example.test", label: "Same Display Name" },
+			],
 		});
+		expect(rowIds(filterPortfolioDashboardRows(
+			suppliedRows,
+			"",
+			filtersWith({ qciPm: "shared@example.test" }),
+		))).toEqual([suppliedRows[0]!.projectId, suppliedRows[2]!.projectId]);
 	});
 
 	it("combines Product Line, Customer, and GPU with AND semantics", () => {
@@ -121,13 +143,27 @@ describe("canonical Portfolio Dashboard filters", () => {
 		expect(rowIds(result)).toEqual([target.projectId]);
 	});
 
+	it("combines exact Category and QCI PM identities with other filters", () => {
+		const categoryTarget = rows[2]!;
+		expect(rowIds(filterPortfolioDashboardRows(rows, "", filtersWith({
+			category: categoryTarget.category,
+			customer: categoryTarget.project.customer,
+		})))).toEqual([categoryTarget.projectId]);
+
+		const qciTarget = rows[1]!;
+		expect(rowIds(filterPortfolioDashboardRows(rows, "", filtersWith({
+			qciPm: qciTarget.qciPm!.value,
+			panelSize: qciTarget.project.panelSize,
+		})))).toEqual([qciTarget.projectId]);
+	});
+
 	it("returns no rows when a populated filter value has no exact match", () => {
 		expect(filterPortfolioDashboardRows(rows, "", filtersWith({ gpu: "not a canonical GPU" }))).toEqual([]);
 	});
 
 	it.each([
 		["STN Project Name", "manta", (row: PortfolioDashboardRow) => row.project.projectName],
-		["QCI Model Name", "qci-alpha-01", (row: PortfolioDashboardRow) => row.project.qciModelName],
+		["QCI Model Name", "znt", (row: PortfolioDashboardRow) => row.project.qciModelName],
 		["Product Line", "helios neo", (row: PortfolioDashboardRow) => row.project.productLine],
 		["Customer", "customer b", (row: PortfolioDashboardRow) => row.project.customer],
 		["CPU", "novalake", (row: PortfolioDashboardRow) => row.project.cpu],
@@ -144,13 +180,15 @@ describe("canonical Portfolio Dashboard filters", () => {
 		expect(filterPortfolioDashboardRows(rows, "DEV Project Alpha Legacy", emptyPortfolioDashboardFilters)).toEqual([]);
 	});
 
-	it("emits chips in key order with exact field labels and values", () => {
-		const filters = filtersWith({ gpu: "DEV GPU Alpha", status: "On Going", customer: "DEV Customer Acer" });
+	it("emits chips in key order and uses the human QCI PM label", () => {
+		const filters = filtersWith({ gpu: "DEV GPU Alpha", status: "On Going", customer: "DEV Customer Acer", qciPm: rows[2]!.qciPm!.value });
+		const options = portfolioDashboardFilterOptions(rows);
 
-		expect(portfolioDashboardFilterChips(filters)).toEqual([
+		expect(portfolioDashboardFilterChips(filters, options)).toEqual([
 			{ key: "customer", field: "Customer", value: "DEV Customer Acer", label: "Customer: DEV Customer Acer" },
 			{ key: "status", field: "Status", value: "On Going", label: "Status: On Going" },
 			{ key: "gpu", field: "GPU", value: "DEV GPU Alpha", label: "GPU: DEV GPU Alpha" },
+			{ key: "qciPm", field: "QCI PM", value: "project.003.qci.pm@example.test", label: "QCI PM: DEV Project 003 QCI PM" },
 		]);
 	});
 
@@ -168,15 +206,10 @@ describe("canonical Portfolio Dashboard filters", () => {
 		expect(active.gpu).toBe("GN22-X7/X9");
 	});
 
-	it("ignores runtime Category and QCI PM values instead of treating them as filters", () => {
-		const unsupportedValues = {
-			...emptyPortfolioDashboardFilters,
-			category: "DEV Notebook",
-			qciPm: "DEV Project 003 QCI PM",
-		} as PortfolioDashboardFilters;
-
-		expect(filterPortfolioDashboardRows(rows, "", unsupportedValues)).toEqual(rows);
-		expect(portfolioDashboardFilterChips(unsupportedValues)).toEqual([]);
+	it("keeps Projects without Category or QCI PM visible under All", () => {
+		const blankRow = { ...rows[0]!, category: "-", qciPm: null };
+		expect(filterPortfolioDashboardRows([blankRow], "", emptyPortfolioDashboardFilters)).toEqual([blankRow]);
+		expect(portfolioDashboardFilterOptions([blankRow])).toMatchObject({ category: [], qciPm: [] });
 	});
 
 	it("returns all canonical rows with empty search and filter state", () => {

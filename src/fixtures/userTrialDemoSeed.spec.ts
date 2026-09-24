@@ -42,10 +42,10 @@ describe("createUserTrialDemoSeed", () => {
       "DEMO - Completed Milestone",
     ]);
     expect(seed.projects.map(({ master }) => master.basicInformation.qciModelName)).toEqual([
-      "DEMO-GO-DUE-SOON",
-      "DEMO-SMT-OVERDUE",
-      "DEMO-MDRR-DUE-SOON",
-      "DEMO-COMPLETED-MILESTONE",
+      "ZGDS",
+      "ZSMT",
+      "ZMDR",
+      "ZCMP",
     ]);
     expect(seed.projects.every(({ master }) => master.basicInformation.year === 2026)).toBe(true);
     expect(seed.projects.every(({ identityAliases }) => identityAliases.length === 0)).toBe(true);
@@ -81,6 +81,19 @@ describe("createUserTrialDemoSeed", () => {
 
     const canonicalIds = new Set(canonicalProjectFixtures.map(({ id }) => id));
     expect(seed.projects.every(({ id }) => !canonicalIds.has(id))).toBe(true);
+  });
+
+  it("uses unique approved QCI Model Names across the complete built-in runtime Project set", () => {
+    const seed = createUserTrialDemoSeed(REFERENCE_DATE);
+    const qciModelNames = [...canonicalProjectFixtures, ...seed.projects].map(
+      ({ master }) => master.basicInformation.qciModelName,
+    );
+
+    expect(qciModelNames).toHaveLength(9);
+    for (const qciModelName of qciModelNames) {
+      expect(qciModelName).toEqual(expect.stringMatching(/^Z[A-Z]{2,3}$/));
+    }
+    expect(new Set(qciModelNames).size).toBe(qciModelNames.length);
   });
 
   it("builds exact fixed-date Published milestones and derives attention canonically", () => {

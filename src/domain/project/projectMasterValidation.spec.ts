@@ -9,6 +9,14 @@ import {
 	type ProjectMasterCompletenessField,
 } from "./projectMasterValidation";
 
+const masterWithMissingQciModelName = {
+	...devProject001.master,
+	basicInformation: {
+		...devProject001.master.basicInformation,
+		qciModelName: null,
+	},
+};
+
 describe("Project Master completeness advisory", () => {
 	it("derives Advisory issues only for explicitly configured fields", () => {
 		const fields: readonly ProjectMasterCompletenessField[] = [
@@ -25,7 +33,7 @@ describe("Project Master completeness advisory", () => {
 		];
 
 		const issues = validateProjectMasterCompleteness(
-			devProject001.master,
+			masterWithMissingQciModelName,
 			fields,
 		);
 
@@ -104,7 +112,7 @@ describe("Project Master completeness advisory", () => {
 	});
 
 	it("evaluates explicitly configured fields from different sections together", () => {
-		const issues = validateProjectMasterCompleteness(devProject001.master, [
+		const issues = validateProjectMasterCompleteness(masterWithMissingQciModelName, [
 			{
 				section: "basicInformation",
 				field: "qciModelName",

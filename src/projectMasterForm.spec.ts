@@ -6,6 +6,7 @@ import {
   overwriteProjectMasterFromForm,
   toCreateProjectMasterInput,
   toProjectMasterForm,
+  validateProjectMasterMechanicalForm,
   type ProjectMasterForm,
 } from "./projectMasterForm";
 
@@ -23,10 +24,27 @@ const populatedForm: ProjectMasterForm = {
   ssid: "RUNTIME-SSID",
   rmn: "RUNTIME-RMN",
   statusId: toCatalogItemId("status-mp"),
+  productLengthMm: "320.5",
+  productWidthMm: "220",
+  productHeightMm: "17.25",
+  productWeightG: "0",
+  packageLengthMm: "480.5",
+  packageWidthMm: "310",
+  packageHeightMm: "65.75",
+  grossWeightG: "2500.5",
+  aCoverId: toCatalogItemId("cover-plastic-paint"),
+  bCoverId: toCatalogItemId("cover-plastic-texture"),
+  cCoverId: toCatalogItemId("cover-al-plate"),
+  dCoverId: toCatalogItemId("unresolved-cover"),
+  pcbLeverageId: toProjectId("runtime-project"),
+  aLeverageId: toProjectId("source-a"),
+  bLeverageId: toProjectId("source-b"),
+  cLeverageId: toProjectId("unresolved-project"),
+  dLeverageId: "",
 };
 
 describe("Project Master form mappings", () => {
-  it("builds a complete Create Master from exactly the 13 visible form fields", () => {
+  it("builds a complete Create Master from the shared form backing values", () => {
     const input = toCreateProjectMasterInput(populatedForm);
 
     expect(input.basicInformation).toEqual({
@@ -45,17 +63,57 @@ describe("Project Master form mappings", () => {
       pcbNumber: null,
       housingNumber: null,
     });
-    expect(Object.values(input.leverage).every((value) => value === null)).toBe(true);
-    expect(Object.values(input.cover).every((value) => value === null)).toBe(true);
+    expect(input.leverage).toEqual({
+      pcbLeverage: populatedForm.pcbLeverageId,
+      aLeverage: populatedForm.aLeverageId,
+      bLeverage: populatedForm.bLeverageId,
+      cLeverage: populatedForm.cLeverageId,
+      dLeverage: null,
+    });
+    expect(input.cover).toEqual({
+      aCover: populatedForm.aCoverId,
+      bCover: populatedForm.bCoverId,
+      cCover: populatedForm.cCoverId,
+      dCover: populatedForm.dCoverId,
+    });
     expect(input.modelRegulatory).toEqual({
       acerModelName: "Runtime Acer Model",
       acerMarketingName: "Runtime Marketing Name",
       ssid: "RUNTIME-SSID",
       rmn: "RUNTIME-RMN",
     });
+    expect(input.mechanical).toEqual({
+      product: {
+        productLengthMm: 320.5,
+        productWidthMm: 220,
+        productHeightMm: 17.25,
+        productWeightG: 0,
+      },
+      package: {
+        packageLengthMm: 480.5,
+        packageWidthMm: 310,
+        packageHeightMm: 65.75,
+        grossWeightG: 2500.5,
+      },
+    });
+    expect(input.other.remark).toBeNull();
+  });
+
+  it("keeps Create expansion backing values blank and canonical values null by default", () => {
+    expect(emptyProjectMasterForm).toMatchObject({
+      productLengthMm: "",
+      grossWeightG: "",
+      aCoverId: "",
+      dCoverId: "",
+      pcbLeverageId: "",
+      dLeverageId: "",
+    });
+
+    const input = toCreateProjectMasterInput(emptyProjectMasterForm);
+    expect(Object.values(input.leverage).every((value) => value === null)).toBe(true);
+    expect(Object.values(input.cover).every((value) => value === null)).toBe(true);
     expect(Object.values(input.mechanical.product).every((value) => value === null)).toBe(true);
     expect(Object.values(input.mechanical.package).every((value) => value === null)).toBe(true);
-    expect(input.other.remark).toBeNull();
   });
 
   it("omits blank Customer and Status so command-owned defaults remain authoritative", () => {
@@ -69,8 +127,10 @@ describe("Project Master form mappings", () => {
     expect(input.basicInformation).not.toHaveProperty("status");
   });
 
-  it("initializes Edit form from canonical values and preserves an unresolved catalog ID", () => {
+  it("initializes Edit from canonical decimal and unresolved ID values without rounding", () => {
     const unresolvedCustomerId = toCatalogItemId("unresolved-customer");
+    const unresolvedCoverId = toCatalogItemId("unresolved-cover");
+    const unresolvedProjectId = toProjectId("unresolved-project");
     const form = toProjectMasterForm({
       ...devProject003.master,
       basicInformation: {
@@ -78,14 +138,38 @@ describe("Project Master form mappings", () => {
         customer: unresolvedCustomerId,
         year: null,
       },
+      cover: { ...devProject003.master.cover, dCover: unresolvedCoverId },
+      leverage: {
+        ...devProject003.master.leverage,
+        cLeverage: unresolvedProjectId,
+      },
+      mechanical: {
+        product: {
+          productLengthMm: 320.5,
+          productWidthMm: null,
+          productHeightMm: 17.25,
+          productWeightG: 0,
+        },
+        package: {
+          packageLengthMm: 480.5,
+          packageWidthMm: 310,
+          packageHeightMm: 65.75,
+          grossWeightG: 2500.5,
+        },
+      },
     });
 
     expect(form.customerId).toBe(unresolvedCustomerId);
     expect(form.year).toBe("");
     expect(form.stnProjectName).toBe(devProject003.master.basicInformation.stnProjectName);
+    expect(form.productLengthMm).toBe("320.5");
+    expect(form.productWidthMm).toBe("");
+    expect(form.productWeightG).toBe("0");
+    expect(form.dCoverId).toBe(unresolvedCoverId);
+    expect(form.cLeverageId).toBe(unresolvedProjectId);
   });
 
-  it("overwrites only visible Edit fields and preserves every hidden Master section", () => {
+  it("overwrites approved Edit leaves while preserving unrelated Master authority", () => {
     const richMaster = {
       ...devProject003.master,
       basicInformation: {
@@ -127,19 +211,72 @@ describe("Project Master form mappings", () => {
       other: { remark: "Hidden remark" },
     };
 
-    const result = overwriteProjectMasterFromForm(richMaster, populatedForm);
+    const richForm = toProjectMasterForm(richMaster);
+    const result = overwriteProjectMasterFromForm(richMaster, {
+      ...richForm,
+      productLengthMm: "",
+      productWeightG: "0",
+      grossWeightG: "2500.75",
+      aCoverId: toCatalogItemId("replacement-cover"),
+      cLeverageId: toProjectId("replacement-source"),
+    });
 
     expect(result.basicInformation.category).toBe(richMaster.basicInformation.category);
     expect(result.platformHardware.pcbNumber).toBe("HIDDEN-PCB");
     expect(result.platformHardware.housingNumber).toBe("HIDDEN-HOUSING");
-    expect(result.leverage).toEqual(richMaster.leverage);
-    expect(result.cover).toEqual(richMaster.cover);
-    expect(result.mechanical).toEqual(richMaster.mechanical);
+    expect(result.leverage).toEqual({
+      ...richMaster.leverage,
+      cLeverage: toProjectId("replacement-source"),
+    });
+    expect(result.cover).toEqual({
+      ...richMaster.cover,
+      aCover: toCatalogItemId("replacement-cover"),
+    });
+    expect(result.mechanical).toEqual({
+      product: {
+        ...richMaster.mechanical.product,
+        productLengthMm: null,
+        productWeightG: 0,
+      },
+      package: {
+        ...richMaster.mechanical.package,
+        grossWeightG: 2500.75,
+      },
+    });
     expect(result.other).toEqual(richMaster.other);
-    expect(result.basicInformation.stnProjectName).toBe(populatedForm.stnProjectName);
-    expect(result.modelRegulatory.rmn).toBe(populatedForm.rmn);
+    expect(result.basicInformation.stnProjectName).toBe(richMaster.basicInformation.stnProjectName);
+    expect(result.modelRegulatory.rmn).toBe(richMaster.modelRegulatory.rmn);
     expect(result).not.toHaveProperty("identityAliases");
     expect(result).not.toHaveProperty("schedule");
     expect(result).not.toHaveProperty("team");
+  });
+});
+
+describe("Mechanical form validation", () => {
+  it.each(["", "0", "12", "320.5"])("accepts blank and finite non-negative value %s", (value) => {
+    expect(
+      validateProjectMasterMechanicalForm({
+        ...populatedForm,
+        productLengthMm: value,
+      }),
+    ).toEqual({});
+  });
+
+  it("rejects negative values without coercing them", () => {
+    expect(
+      validateProjectMasterMechanicalForm({
+        ...populatedForm,
+        productLengthMm: "-0.1",
+      }),
+    ).toMatchObject({ productLengthMm: "Must be 0 or greater." });
+  });
+
+  it.each(["not-a-number", "Infinity", "1e309"])("rejects non-finite input %s", (value) => {
+    expect(
+      validateProjectMasterMechanicalForm({
+        ...populatedForm,
+        grossWeightG: value,
+      }),
+    ).toMatchObject({ grossWeightG: "Enter a valid number." });
   });
 });

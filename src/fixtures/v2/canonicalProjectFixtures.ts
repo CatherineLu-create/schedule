@@ -105,7 +105,7 @@ export const devProject001: Project = {
 				"dev-panel-size-16",
 			),
 			stnProjectName: "Manta",
-			qciModelName: null,
+			qciModelName: "ZMT",
 		},
 		platformHardware: {
 			cpu: requireCatalogItemId(cpuReferenceFixtures, "demo-cpu-intel-novalake-hx"),
@@ -148,7 +148,7 @@ export const devProject002: Project = {
 				"dev-panel-size-16",
 			),
 			stnProjectName: "Nautilus",
-			qciModelName: "DEV-QCI-ALPHA-01",
+			qciModelName: "ZNT",
 		},
 		platformHardware: {
 			cpu: requireCatalogItemId(cpuReferenceFixtures, "demo-cpu-amd-hawkpoint-1-fp8"),
@@ -254,7 +254,7 @@ export const devProject003: Project = {
 				"dev-panel-size-18",
 			),
 			stnProjectName: "Orca",
-			qciModelName: "DEV-QCI-ALPHA-02",
+			qciModelName: "ZOR",
 		},
 		platformHardware: {
 			cpu: requireCatalogItemId(cpuReferenceFixtures, "demo-cpu-intel-novalake-hx"),
@@ -391,7 +391,7 @@ export const devProject004: Project = {
 				"dev-panel-size-18",
 			),
 			stnProjectName: "Beluga",
-			qciModelName: "DEV-QCI-DRAFT-04",
+			qciModelName: "ZBG",
 		},
 		platformHardware: {
 			cpu: requireCatalogItemId(cpuReferenceFixtures, "demo-cpu-amd-hawkpoint-1-fp8"),
@@ -540,7 +540,7 @@ export const devProject005: Project = {
 				"dev-panel-size-16",
 			),
 			stnProjectName: "Marlin",
-			qciModelName: "DEV-QCI-SIGNAL-A",
+			qciModelName: "ZMR",
 		},
 		platformHardware: {
 			cpu: requireCatalogItemId(cpuReferenceFixtures, "demo-cpu-nvidia-n1"),

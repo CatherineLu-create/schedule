@@ -34,8 +34,8 @@ Weekly Report、PPT、Excel、PDF、Email 等文件可以是 Evidence、Import S
 | Dashboard Filters | 已實作 | Year、Product Line、Panel Size、CPU、Customer；AND logic；chips 可移除；Clear All 可清空 |
 | Project List | 已實作 | 使用 `src/dashboardProjectRows.json` 產生 Project；支援水平捲動與欄寬拖曳 |
 | Create Project | 已實作 | 使用 modal 建立 Project，新增後立即出現在 Dashboard |
-| Edit Project Master | 已實作 | 可修改 Project Master 欄位，儲存在前端 state，Dashboard 立即更新 |
-| Project Workspace | 已實作 | 顯示 Project Master、Version Selector、Resources、Schedule、Team Members、Export Section |
+| Edit Project Master | 已實作 | 在 Project Master Detail 相同章節中 inline 編輯，儲存在前端 state，Dashboard 立即更新 |
+| Project Workspace | 已實作 | 保留固定 Project Header、View Project Master 入口、Resources 及 Current Schedule，順序固定 |
 | Schedule | 已實作 | 顯示 Phase、Stage、Milestone、Plan、Actual |
 | Schedule Filters | 已實作 | Phase、Stage、Milestone、Plan From/To、Actual From/To |
 | Working Draft | 已實作 | 最新版本可進入 draft 編輯 Schedule cell |
@@ -127,22 +127,19 @@ Project List 欄位來自 `src/dashboardColumns.ts`：
 Project Workspace 包含：
 
 - Back to Dashboard
-- Project Master
-- Edit Project
-- Version Selector
+- 固定 Project Header 摘要
+- View Project Master
 - Resources
-- Schedule
-- Team Members
-- Export Section
+- Current Schedule / Working Draft
 
-Resources 目前狀態：
+Project Workspace 層級的 Resources 目前狀態：
 
 | Resource | 狀態 |
 | --- | --- |
-| Schedule | Enabled |
-| Team Members | Enabled |
-| Documents | Coming Soon |
-| Future Modules | Coming Soon |
+| Schedule | Enabled in Project Workspace |
+| Team Member | Enabled from Project Workspace Resources |
+| Weekly Report | Migration pending |
+| AVL | Migration pending |
 
 ### Project Master
 
@@ -156,6 +153,38 @@ Project Master 實際欄位分組如下：
 | Internal Identifier | SSID、RMN |
 | Project Management | Project Status |
 
+The Project Workspace keeps its fixed Project Header compact. **View Project
+Master** opens a dedicated full-width detail surface with three collapsible
+sections in this order: **Basic Information**, **Mechanical**, and **Cover /
+Leverage**. All three sections start expanded so their saved information is
+visible on first entry. The visible disclosure controls use `+` and `−`, and
+their state is transient UI state only. Resources remains at the Project
+Workspace level between Project Master and Current Schedule.
+
+- **Mechanical** shows Product Length, Width, Height, and Weight plus Package
+  Length, Width, Height, and Gross Weight. Dimensions use `mm`, weights use
+  `g`, and a null value displays `—` while numeric zero remains visible.
+- **Cover / Leverage** shows PCB and A/B/C/D Cover rows. A/B/C/D materials are
+  resolved from the existing Cover catalog; PCB material is not applicable.
+  Leverage stores only the directly selected ProjectId and resolves the
+  source's current `Year | STN Project Name | QCI Model Name` on render.
+  Self-reference displays `New Design`, null displays `—`, and a dangling
+  ProjectId displays `Unavailable Project` without clearing the stored ID.
+
+**Edit Master** edits fields inline in the same section order. Mechanical blanks
+save as null, zero and decimals remain valid, and negative or non-finite values
+block Save and expand Mechanical to expose the error. Cover materials use
+catalog dropdowns. Each leverage field uses one compact searchable Project
+picker that searches Year, STN Project Name, and QCI Model Name while persisting
+ProjectId only. Save and Cancel return to read-only Project Master Detail.
+Normal Back navigation is unavailable during edit so changes cannot be silently
+discarded.
+
+Create Project remains a separate modal at its existing visible scope; it does
+not expose Mechanical, Cover, Leverage, or disclosure controls. Save and Cancel
+continue through the existing in-memory Project Master lifecycle; no second
+Master authority or persistence layer is introduced.
+
 `Project Status` options 來自 `projectStatusOptions`：
 
 - Pending
@@ -163,7 +192,7 @@ Project Master 實際欄位分組如下：
 - MP
 - EOL
 
-Create Project 與 Edit Project 使用同一個 `ProjectDialog`。Edit 時會透過 `toProjectForm()` 預填現有值；Save Changes 會透過 `updateProjectFromForm()` 更新 selected project 與 Dashboard `projects` state。Create Project 會透過 `buildProjectFromForm()` 建立新 Project，並給予 `created-project-*` id。
+Create Project 使用獨立 modal；Edit Master 使用 Project Master Detail 的 inline section UI。兩者仍透過既有 Project command/reducer lifecycle 更新 canonical `Project.master`，Create Project 的 visible scope 與 duplicate review flow 維持不變。
 
 目前沒有永久儲存；Browser Refresh 後 Project Master 的新增與修改會重置。
 
@@ -597,6 +626,9 @@ Manual verification checklist 建議在功能修改後執行：
 - Search Project 正常運作。
 - Dashboard Filters 使用 AND logic，且 chips / Clear All 正常。
 - Project Workspace 可以從 Dashboard 開啟。
+- Project Workspace 依序顯示 Project Master、Resources、Current Schedule。
+- Project Master Detail 僅顯示 Basic Information、Mechanical、Cover / Leverage，且不含 Resources。
+- Resources 的 Team Member 入口可開啟既有 Team Member workspace 並返回 Project Workspace。
 - Project Master Create/Edit 後 Dashboard 與 Workspace 立即更新。
 - Schedule Filters 顯示正確 result count。
 - Filter 後編輯 Schedule Row 不會改到錯誤底層 row。

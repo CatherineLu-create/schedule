@@ -95,7 +95,7 @@ export function PortfolioDashboardTable({ rows, schemaRows = rows, onOpenProject
     <table aria-label="Projects" className="text-left text-sm" style={{ tableLayout: "fixed", width: totalWidth }}>
       <colgroup>{schema.columns.map((column) => <col key={column.key} style={{ width: widths[column.key] }} />)}</colgroup>
       <thead className="text-xs font-semibold text-slate-500">
-        <tr>{schema.domainGroups.map((group) => <th key={group.key} scope="colgroup" colSpan={group.colSpan} title={group.key === "team" ? "Migration pending" : undefined}
+        <tr>{schema.domainGroups.map((group) => <th key={group.key} scope="colgroup" colSpan={group.colSpan} title={group.key === "team" ? "QCI PM active; other Team columns migration pending" : undefined}
           className={`h-9 border-b border-r border-slate-300 px-4 py-2 text-center text-xs font-bold tracking-[0.14em] ${group.key === "project" ? "bg-slate-200 text-slate-800" : group.key === "schedule" ? "bg-sky-100 text-sky-900" : "bg-violet-100 text-violet-900"}`}>{group.label}</th>)}</tr>
         <tr>{schema.subgroups.map((group) => <th key={group.key} scope="colgroup" colSpan={group.colSpan}
           className={`h-9 border-b border-r border-slate-200 px-3 py-2 text-center text-[11px] font-bold ${group.domain === "project" ? "bg-slate-100 text-slate-700" : group.domain === "schedule" ? "bg-sky-50 text-sky-800" : "bg-violet-50 text-violet-800"}`}>{group.label}</th>)}</tr>
@@ -119,10 +119,16 @@ export function PortfolioDashboardTable({ rows, schemaRows = rows, onOpenProject
           {schema.columns.map((column, index) => {
             const mapping = column.domain === "schedule" ? schema.scheduleMappings.find((entry) => entry.key === column.key) : undefined;
             const schedule = mapping ? schedulePresentation(row.schedule, column.label) : undefined;
-            const value = column.domain === "project" ? projectValues[column.key as PortfolioProjectInfoColumnKey](row) : "—";
+            const qciPmColumn = column.key === "team:qciPm";
+            const pendingTeamColumn = column.domain === "team" && !qciPmColumn;
+            const value = column.domain === "project"
+              ? projectValues[column.key as PortfolioProjectInfoColumnKey](row)
+              : qciPmColumn
+                ? row.qciPm?.label ?? "-"
+                : "-";
             return <td key={column.key} data-column-key={column.key} data-domain={column.domain} data-schedule-state={schedule?.state}
-              title={schedule?.title ?? (column.domain === "team" ? "Migration pending" : undefined)} style={stickyStyle(column)}
-              className={`px-4 py-3.5 align-middle ${stickyClassName(column)} ${column.domain === "schedule" ? schedule?.tone : "whitespace-nowrap"} ${column.domain === "team" ? "text-slate-400" : ""} ${offsets.has(column.key) ? "bg-white shadow-[1px_0_0_0_rgb(241_245_249)] group-hover:bg-slate-50 group-focus-within:bg-sky-50" : ""} ${index > 0 && schema.columns[index - 1].domain !== column.domain ? "border-l-4 border-l-slate-200" : ""}`}>
+              title={schedule?.title ?? (pendingTeamColumn ? "Migration pending" : undefined)} style={stickyStyle(column)}
+              className={`px-4 py-3.5 align-middle ${stickyClassName(column)} ${column.domain === "schedule" ? schedule?.tone : "whitespace-nowrap"} ${pendingTeamColumn ? "text-slate-400" : ""} ${offsets.has(column.key) ? "bg-white shadow-[1px_0_0_0_rgb(241_245_249)] group-hover:bg-slate-50 group-focus-within:bg-sky-50" : ""} ${index > 0 && schema.columns[index - 1].domain !== column.domain ? "border-l-4 border-l-slate-200" : ""}`}>
               {mapping ? <ScheduleValue read={row.schedule} mapping={mapping} /> : column.key === "name"
                 ? <button type="button" aria-label={`Open Project ${display(value)}`} onClick={(event) => { event.stopPropagation(); onOpenProject(row.projectId); }} className="max-w-full truncate rounded text-left font-semibold text-slate-900 hover:text-sky-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600">{display(value)}</button>
                 : column.key === "projectStatus" ? <ProjectStatus value={value} />
