@@ -6,7 +6,6 @@ import type {
 import type { PortfolioDashboardRow } from "./application/selectors/portfolioDashboardRows";
 import {
   milestoneDefinitions,
-  milestoneTypeCatalog,
 } from "./config/v2/referenceData";
 import { formatDateOnly } from "./domain/shared/dateOnly";
 import type { MilestoneId, ProjectId } from "./domain/shared/ids";
@@ -45,7 +44,7 @@ interface AttentionProjectPresentation {
   readonly projectName: string;
   readonly milestones: readonly {
     readonly milestoneId: MilestoneId;
-    readonly typeLabel: string;
+    readonly definitionLabel: string;
     readonly planLabel: string;
   }[];
 }
@@ -53,10 +52,6 @@ interface AttentionProjectPresentation {
 const milestoneDefinitionById = new Map(
   milestoneDefinitions.map((definition) => [definition.id, definition]),
 );
-const milestoneTypeById = new Map(
-  milestoneTypeCatalog.map((type) => [type.id, type]),
-);
-
 function attentionProjectPresentations(
   group: DashboardAttentionGroup,
   rows: readonly PortfolioDashboardRow[],
@@ -80,15 +75,9 @@ function attentionProjectPresentations(
             `Attention milestone definition is unavailable: ${match.milestoneDefinitionId}`,
           );
         }
-        const type = milestoneTypeById.get(definition.milestoneTypeId);
-        if (type === undefined) {
-          throw new Error(
-            `Attention milestone type is unavailable: ${definition.milestoneTypeId}`,
-          );
-        }
         return {
           milestoneId: match.milestoneId,
-          typeLabel: type.displayName,
+          definitionLabel: definition.name,
           planLabel: formatDateOnly(match.plan),
         };
       });
@@ -162,7 +151,7 @@ export function PortfolioDashboardView({ attention, rows, onCreateProject, onExp
               </button>
               <ul className="mt-1 space-y-0.5 text-xs">
                 {project.milestones.map((milestone) => <li key={milestone.milestoneId}>
-                  {milestone.typeLabel} · {milestone.planLabel}
+                  {milestone.definitionLabel} · {milestone.planLabel}
                 </li>)}
               </ul>
             </div>)}
@@ -192,7 +181,7 @@ export function PortfolioDashboardView({ attention, rows, onCreateProject, onExp
 
     <section aria-labelledby={`${id}-projects`} className="min-w-0 rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2 p-4 sm:px-5">
-        <div><h2 id={`${id}-projects`} className="text-base font-semibold text-slate-900">Projects</h2>
+        <div><h2 id={`${id}-projects`} className="text-base font-semibold text-slate-900">All Projects</h2>
           <p className="mt-1 text-xs text-slate-500">Showing {filteredRows.length} of {rows.length} projects</p>
         </div>
         <p className="text-xs text-slate-500">Scroll horizontally to view Schedule and Team Member</p>

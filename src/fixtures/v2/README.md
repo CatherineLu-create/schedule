@@ -116,9 +116,27 @@ canonical unpublished state; only explicit successful Publish changes Current
 Schedule and Portfolio. Draft edits and Publish do not mutate the Milestone
 Definition catalog.
 
-The approved 34 Portfolio Milestone definitions are authoritative V2 catalog
-seeds. Each has a stable catalog ID and `showInPortfolio = true`; Project
-fixtures do not need to contain values for every definition.
+The active milestone catalog contains 30 ordered definitions: two Design, four
+ME Portion, one Thermal, four A1, six C1, six C2, six RAMP, and MDRR.
+Twenty-nine are normal exact-definition Portfolio definitions; MDRR remains the
+explicit historical presentation exception below. The complete validation
+catalog also retains six compatibility-only definitions with stable IDs so
+sparse historical Published and Draft occurrences remain resolvable.
+Compatibility-only definitions are inactive, Portfolio-hidden, and unavailable
+as normal Add choices.
+
+Starting a Working Draft clones Current Published occurrences exactly, or stays
+empty when no Published Schedule exists. It preserves compatibility-only and
+repeated history without synthesizing missing active definitions. Users add
+absent active definitions through Select Milestone / Add Milestone. Canonical
+and User Trial Demo Published snapshots remain intentionally sparse.
+
+The active Portfolio Schedule schema is fixed at 30 exact-definition columns.
+C1/C2 reuse their stable Main Build definition IDs with the `System Build`
+presentation and `type-system-build`; RAMP Main Build remains
+`type-main-build`. Attention remains type-driven by only G/O, SMT, Close, and
+MDRR, including RAMP G/O and RAMP SMT, while its UI displays each concrete
+definition name. No runtime parser/resolver or persistence change is introduced.
 
 MDRR is an additional valid Milestone Catalog item with:
 

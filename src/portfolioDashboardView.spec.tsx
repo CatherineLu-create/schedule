@@ -43,9 +43,15 @@ const detailedAttention: DashboardAttentionRead = {
         plan: dateOnly("2026-10-03"),
       },
       {
+        projectId: rows[0]!.projectId,
+        milestoneId: toMilestoneId("view-manta-c1-go"),
+        milestoneDefinitionId: toMilestoneDefinitionId("milestone-c1-c-g-o"),
+        plan: dateOnly("2026-10-04"),
+      },
+      {
         projectId: rows[1]!.projectId,
         milestoneId: toMilestoneId("view-nautilus-close"),
-        milestoneDefinitionId: toMilestoneDefinitionId("milestone-a-a2-a-close"),
+        milestoneDefinitionId: toMilestoneDefinitionId("milestone-c1-close"),
         plan: dateOnly("2026-09-30"),
       },
     ],
@@ -132,12 +138,13 @@ describe("Portfolio Dashboard shell", () => {
     expect(within(overdue).getByText("1")).toBeVisible();
     expect(within(due).getAllByRole("button", { name: "Open Project Manta" }))
       .toHaveLength(1);
-    expect(within(due).getByText("G/O · 2026/09/28")).toBeVisible();
+    expect(within(due).getByText("A1 G/O · 2026/09/28")).toBeVisible();
     expect(within(due).getByText("MDRR · 2026/10/03")).toBeVisible();
-    expect(within(due).getByText("Close · 2026/09/30")).toBeVisible();
+    expect(within(due).getByText("C1 G/O · 2026/10/04")).toBeVisible();
+    expect(within(due).getByText("C1 Close · 2026/09/30")).toBeVisible();
     expect(within(overdue).getAllByRole("button", { name: "Open Project Manta" }))
       .toHaveLength(1);
-    expect(within(overdue).getByText("SMT · 2026/09/16")).toBeVisible();
+    expect(within(overdue).getByText("A1 SMT · 2026/09/16")).toBeVisible();
 
     fireEvent.click(within(due).getByRole("button", {
       name: "Open Project Manta",
@@ -152,7 +159,7 @@ describe("Portfolio Dashboard shell", () => {
     expect(within(due).getByText("2")).toBeVisible();
     expect(within(overdue).getByText("1")).toBeVisible();
     expect(within(due).getByText("MDRR · 2026/10/03")).toBeVisible();
-    expect(within(overdue).getByText("SMT · 2026/09/16")).toBeVisible();
+    expect(within(overdue).getByText("A1 SMT · 2026/09/16")).toBeVisible();
   });
 
   it("renders unavailable attention without a misleading numeric zero", () => {
@@ -212,7 +219,8 @@ describe("Portfolio Dashboard shell", () => {
 
   it("wires canonical Status and GPU predicates to the real table and result count", () => {
     setup();
-    expect(screen.getByRole("heading", { name: "Projects", level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "All Projects", level: 2 })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Projects", level: 2 })).not.toBeInTheDocument();
     expect(screen.getByText("Showing 5 of 5 projects")).toBeInTheDocument();
     select("Status", "Pending");
     expect(visibleIds()).toEqual(["dev-project-003"]);
@@ -251,54 +259,29 @@ describe("Portfolio Dashboard shell", () => {
     expect(screen.getByText("No projects match the current search and filters")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Needs Attention" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Search / Filters" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Projects" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "All Projects" })).toBeVisible();
   });
 
-  it("keeps A2 visible while filtering hides the Project that makes A2 applicable", () => {
-    const source = rows[0]!;
-    expect(source.schedule.kind).toBe("published");
-    if (source.schedule.kind !== "published") {
-      throw new Error("Expected Manta to have a Current Published Schedule");
-    }
-    const a2Row = {
-      ...source,
-      schedule: {
-        ...source.schedule,
-        cells: [
-          ...source.schedule.cells,
-          {
-            milestoneDefinitionId: toMilestoneDefinitionId(
-              "milestone-a-a2-a-g-o",
-            ),
-            occurrences: [
-              {
-                milestoneId: toMilestoneId("view-applicable-a2"),
-                applicability: "applicable" as const,
-                plan: "-",
-                actual: "-",
-              },
-            ],
-          },
-        ],
-      },
-    };
-
+  it("keeps the fixed active-baseline columns while filtering changes visible Projects", () => {
     render(
       <PortfolioDashboardView
         attention={zeroAttention}
-        rows={[a2Row, rows[1]!]}
+        rows={[rows[0]!, rows[1]!]}
         onCreateProject={() => {}}
         onExport={() => {}}
         onOpenProject={() => {}}
       />,
     );
-    expect(screen.getByRole("columnheader", { name: "A2" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "A1 Close" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "C2 System Build" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "A2" })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("searchbox"), {
       target: { value: "Nautilus" },
     });
     expect(visibleIds()).toEqual(["dev-project-002"]);
-    expect(screen.getByRole("columnheader", { name: "A2" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "A1 Close" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "C2 System Build" })).toBeInTheDocument();
   });
 
   it("exports through the owner callback without filtered rows and preserves Create and exact-ID opens", () => {

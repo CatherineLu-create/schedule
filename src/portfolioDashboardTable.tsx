@@ -13,6 +13,18 @@ export interface PortfolioDashboardTableProps {
   readonly schemaRows?: readonly PortfolioDashboardRow[];
   readonly onOpenProject: (projectId: ProjectId) => void;
 }
+interface BottomScrollerLayout {
+  readonly contentWidth: number;
+  readonly left: number;
+  readonly visible: boolean;
+  readonly width: number;
+}
+const hiddenBottomScrollerLayout: BottomScrollerLayout = {
+  contentWidth: 0,
+  left: 0,
+  visible: false,
+  width: 0,
+};
 const display = (value: string) => value === "-" ? "—" : value;
 const projectValues: Record<PortfolioProjectInfoColumnKey, (row: PortfolioDashboardRow) => string> = {
   projectStatus: (row) => row.project.projectStatus,
@@ -68,6 +80,11 @@ export function PortfolioDashboardTable({ rows, schemaRows = rows, onOpenProject
   const schema = getPortfolioVisibleSchema(schemaRows);
   const [widths, setWidths] = React.useState<PortfolioColumnWidths>(defaultPortfolioColumnWidths);
   const [resizing, setResizing] = React.useState<{ key: PortfolioColumnKey; minWidth: number; startX: number; startWidth: number } | null>(null);
+  const [bottomScrollerLayout, setBottomScrollerLayout] = React.useState<BottomScrollerLayout>(
+    hiddenBottomScrollerLayout,
+  );
+  const tableViewportRef = React.useRef<HTMLDivElement>(null);
+  const bottomScrollerRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
     if (resizing === null) return;
     const move = (event: MouseEvent) => setWidths((current) => ({ ...current, [resizing.key]: resizePortfolioColumnWidth(resizing.startWidth, event.clientX - resizing.startX, resizing.minWidth) }));
@@ -91,10 +108,91 @@ export function PortfolioDashboardTable({ rows, schemaRows = rows, onOpenProject
     : "";
   const totalWidth = schema.columns.reduce((total, column) => total + widths[column.key], 0);
 
-  return <div aria-label="Projects table scroll area" role="region" tabIndex={0} data-testid="portfolio-table-scroll" className="max-w-full overflow-x-auto border-y border-slate-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600">
+  const updateBottomScrollerLayout = React.useCallback(() => {
+    const tableViewport = tableViewportRef.current;
+    if (tableViewport === null) return;
+    const rect = tableViewport.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    const clippedLeft = Math.max(0, rect.left);
+    const clippedRight = Math.min(window.innerWidth, rect.right);
+    const width = Math.max(0, clippedRight - clippedLeft);
+    const horizontalScrollRange = Math.max(
+      0,
+      tableViewport.scrollWidth - tableViewport.clientWidth,
+    );
+    const nextLayout = {
+      contentWidth: horizontalScrollRange + width,
+      left: clippedLeft,
+      visible: width > 0
+        && rect.bottom > 0
+        && rect.top < viewportHeight
+        && tableViewport.scrollWidth > tableViewport.clientWidth
+        && rect.bottom > viewportHeight,
+      width,
+    };
+    setBottomScrollerLayout((current) => current.contentWidth === nextLayout.contentWidth
+      && current.left === nextLayout.left
+      && current.visible === nextLayout.visible
+      && current.width === nextLayout.width
+      ? current
+      : nextLayout);
+    const bottomScroller = bottomScrollerRef.current;
+    if (bottomScroller !== null && bottomScroller.scrollLeft !== tableViewport.scrollLeft) {
+      bottomScroller.scrollLeft = tableViewport.scrollLeft;
+    }
+  }, []);
+
+  React.useLayoutEffect(() => {
+    updateBottomScrollerLayout();
+  });
+
+  React.useLayoutEffect(() => {
+    const tableViewport = tableViewportRef.current;
+    if (tableViewport === null) return;
+    const resizeObserver = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(updateBottomScrollerLayout);
+    resizeObserver?.observe(tableViewport);
+    const table = tableViewport.querySelector("table");
+    if (table !== null) resizeObserver?.observe(table);
+    window.addEventListener("resize", updateBottomScrollerLayout);
+    window.addEventListener("scroll", updateBottomScrollerLayout, { passive: true });
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", updateBottomScrollerLayout);
+      window.removeEventListener("scroll", updateBottomScrollerLayout);
+    };
+  }, [updateBottomScrollerLayout]);
+
+  React.useLayoutEffect(() => {
+    if (!bottomScrollerLayout.visible) return;
+    const tableViewport = tableViewportRef.current;
+    const bottomScroller = bottomScrollerRef.current;
+    if (tableViewport !== null && bottomScroller !== null
+      && bottomScroller.scrollLeft !== tableViewport.scrollLeft) {
+      bottomScroller.scrollLeft = tableViewport.scrollLeft;
+    }
+  }, [
+    bottomScrollerLayout.contentWidth,
+    bottomScrollerLayout.visible,
+    bottomScrollerLayout.width,
+  ]);
+
+  const synchronizeScrollLeft = (
+    source: HTMLDivElement,
+    target: HTMLDivElement | null,
+  ): void => {
+    if (target !== null && target.scrollLeft !== source.scrollLeft) {
+      target.scrollLeft = source.scrollLeft;
+    }
+  };
+
+  return <><div ref={tableViewportRef} aria-label="Projects table scroll area" role="region" tabIndex={0} data-testid="portfolio-table-scroll"
+    onScroll={(event) => synchronizeScrollLeft(event.currentTarget, bottomScrollerRef.current)}
+    className="min-w-0 max-h-[70vh] max-w-full overflow-auto overscroll-contain border-y border-slate-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600">
     <table aria-label="Projects" className="text-left text-sm" style={{ tableLayout: "fixed", width: totalWidth }}>
       <colgroup>{schema.columns.map((column) => <col key={column.key} style={{ width: widths[column.key] }} />)}</colgroup>
-      <thead className="text-xs font-semibold text-slate-500">
+      <thead className="sticky top-0 z-40 text-xs font-semibold text-slate-500">
         <tr>{schema.domainGroups.map((group) => <th key={group.key} scope="colgroup" colSpan={group.colSpan} title={group.key === "team" ? "QCI PM active; other Team columns migration pending" : undefined}
           className={`h-9 border-b border-r border-slate-300 px-4 py-2 text-center text-xs font-bold tracking-[0.14em] ${group.key === "project" ? "bg-slate-200 text-slate-800" : group.key === "schedule" ? "bg-sky-100 text-sky-900" : "bg-violet-100 text-violet-900"}`}>{group.label}</th>)}</tr>
         <tr>{schema.subgroups.map((group) => <th key={group.key} scope="colgroup" colSpan={group.colSpan}
@@ -139,5 +237,18 @@ export function PortfolioDashboardTable({ rows, schemaRows = rows, onOpenProject
         {rows.length === 0 && <tr><td colSpan={schema.columns.length} className="px-4 py-10 text-slate-500">No projects match the current search and filters</td></tr>}
       </tbody>
     </table>
-  </div>;
+  </div>
+  <div
+    ref={bottomScrollerRef}
+    aria-label="All Projects bottom horizontal scrollbar"
+    role="region"
+    tabIndex={bottomScrollerLayout.visible ? 0 : -1}
+    data-testid="portfolio-bottom-scroll"
+    hidden={!bottomScrollerLayout.visible}
+    onScroll={(event) => synchronizeScrollLeft(event.currentTarget, tableViewportRef.current)}
+    className="fixed bottom-0 z-50 h-4 overflow-x-auto overflow-y-hidden border-t border-slate-300 bg-white/95 shadow-[0_-2px_6px_rgba(15,23,42,0.14)]"
+    style={{ left: bottomScrollerLayout.left, width: bottomScrollerLayout.width }}
+  >
+    <div aria-hidden="true" className="h-px" style={{ width: bottomScrollerLayout.contentWidth }} />
+  </div></>;
 }

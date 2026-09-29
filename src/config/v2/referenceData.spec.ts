@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { TeamFunctionDefinition } from "../../domain/team/teamTemplate";
 import {
+  activeMilestoneDefinitions,
+  compatibilityOnlyMilestoneDefinitions,
   coverCatalog,
+  dashboardAttentionMilestoneTypeIds,
   mdrrMilestoneDefinition,
   milestoneDefinitions,
   milestoneTypeCatalog,
@@ -229,6 +232,7 @@ describe("authoritative V2 reference data", () => {
         "Close",
         "Pre-build",
         "Main Build",
+        "System Build",
         "BIOS Frozen",
         "Golden Run",
         "ME Signoff",
@@ -252,6 +256,7 @@ describe("authoritative V2 reference data", () => {
         "type-close",
         "type-pre-build",
         "type-main-build",
+        "type-system-build",
         "type-bios-frozen",
         "type-golden-run",
         "type-me-signoff",
@@ -283,71 +288,87 @@ describe("authoritative V2 reference data", () => {
       milestoneTypeCatalog.map((item) => [item.id, item.displayName]),
     );
 
-    it("contains the exact 34 Portfolio milestones in approved order", () => {
+    it("contains the exact 30 active definitions in approved order", () => {
       expect(
-        portfolioMilestoneDefinitions.map((definition) => ({
+        activeMilestoneDefinitions.map((definition) => ({
+          id: definition.id,
           stage: stageNameById.get(definition.stageGroupId),
           name: definition.name,
           type: typeNameById.get(definition.milestoneTypeId),
           displayOrder: definition.displayOrder,
         })),
       ).toEqual([
-        { stage: "Design", name: "Kickoff", type: "Kickoff", displayOrder: 10 },
-        { stage: "Design", name: "ID fix", type: "ID Fix", displayOrder: 20 },
-        { stage: "ME Portion", name: "ME drawing", type: "ME Drawing", displayOrder: 30 },
-        { stage: "ME Portion", name: "Mockup & DFM", type: "Mockup & DFM", displayOrder: 40 },
-        { stage: "ME Portion", name: "Tooling start + T1", type: "Tooling", displayOrder: 50 },
-        { stage: "ME Portion", name: "ME material for C", type: "ME Material", displayOrder: 60 },
-        { stage: "Thermal", name: "Thermal module for C", type: "Thermal Module", displayOrder: 70 },
-        { stage: "A1-stage", name: "A G/O", type: "G/O", displayOrder: 80 },
-        { stage: "A1-stage", name: "A-SMT", type: "SMT", displayOrder: 90 },
-        { stage: "A1-stage", name: "A-Test", type: "Test", displayOrder: 100 },
-        { stage: "A/A2-stage", name: "A G/O", type: "G/O", displayOrder: 110 },
-        { stage: "A/A2-stage", name: "A-SMT", type: "SMT", displayOrder: 120 },
-        { stage: "A/A2-stage", name: "A-Test", type: "Test", displayOrder: 130 },
-        { stage: "A/A2-stage", name: "A-Close", type: "Close", displayOrder: 140 },
-        { stage: "C1-stage", name: "C G/O", type: "G/O", displayOrder: 150 },
-        { stage: "C1-stage", name: "C-SMT", type: "SMT", displayOrder: 160 },
-        { stage: "C1-stage", name: "C Pre-build", type: "Pre-build", displayOrder: 170 },
-        { stage: "C1-stage", name: "C-Main Build", type: "Main Build", displayOrder: 180 },
-        { stage: "C1-stage", name: "C-Test", type: "Test", displayOrder: 190 },
-        { stage: "C1-stage", name: "C1-close", type: "Close", displayOrder: 200 },
-        { stage: "C2-stage", name: "C G/O", type: "G/O", displayOrder: 210 },
-        { stage: "C2-stage", name: "C-SMT", type: "SMT", displayOrder: 220 },
-        { stage: "C2-stage", name: "C Pre-build", type: "Pre-build", displayOrder: 230 },
-        { stage: "C2-stage", name: "C-Main Build", type: "Main Build", displayOrder: 240 },
-        { stage: "C2-stage", name: "C-Test", type: "Test", displayOrder: 250 },
-        { stage: "C2-stage", name: "BIOS frozen", type: "BIOS Frozen", displayOrder: 260 },
-        { stage: "C2-stage", name: "Golden Run", type: "Golden Run", displayOrder: 270 },
-        { stage: "C2-stage", name: "C-close", type: "Close", displayOrder: 280 },
-        { stage: "RAMP-stage", name: "RAMP G/O", type: "G/O", displayOrder: 290 },
-        { stage: "RAMP-stage", name: "ME signoff", type: "ME Signoff", displayOrder: 300 },
-        { stage: "RAMP-stage", name: "RAMP SMT", type: "SMT", displayOrder: 310 },
-        { stage: "RAMP-stage", name: "RAMP Pre-build", type: "Pre-build", displayOrder: 320 },
-        { stage: "RAMP-stage", name: "RAMP Main build", type: "Main Build", displayOrder: 330 },
-        { stage: "RAMP-stage", name: "FCS", type: "FCS", displayOrder: 340 },
+        { id: "milestone-design-kickoff", stage: "Design", name: "Kickoff", type: "Kickoff", displayOrder: 10 },
+        { id: "milestone-design-id-fix", stage: "Design", name: "ID fix", type: "ID Fix", displayOrder: 20 },
+        { id: "milestone-me-portion-me-drawing", stage: "ME Portion", name: "ME drawing", type: "ME Drawing", displayOrder: 30 },
+        { id: "milestone-me-portion-mockup-dfm", stage: "ME Portion", name: "Mockup & DFM", type: "Mockup & DFM", displayOrder: 40 },
+        { id: "milestone-me-portion-tooling-start-t1", stage: "ME Portion", name: "Tooling start + T1", type: "Tooling", displayOrder: 50 },
+        { id: "milestone-me-portion-me-material-c", stage: "ME Portion", name: "ME material for C", type: "ME Material", displayOrder: 60 },
+        { id: "milestone-thermal-module-c", stage: "Thermal", name: "Thermal module for C", type: "Thermal Module", displayOrder: 70 },
+        { id: "milestone-a1-a-g-o", stage: "A1-stage", name: "A1 G/O", type: "G/O", displayOrder: 80 },
+        { id: "milestone-a1-a-smt", stage: "A1-stage", name: "A1 SMT", type: "SMT", displayOrder: 90 },
+        { id: "milestone-a1-a-test", stage: "A1-stage", name: "A1 Test", type: "Test", displayOrder: 100 },
+        { id: "milestone-a1-a-close", stage: "A1-stage", name: "A1 Close", type: "Close", displayOrder: 110 },
+        { id: "milestone-c1-c-g-o", stage: "C1-stage", name: "C1 G/O", type: "G/O", displayOrder: 120 },
+        { id: "milestone-c1-c-smt", stage: "C1-stage", name: "C1 SMT", type: "SMT", displayOrder: 130 },
+        { id: "milestone-c1-c-pre-build", stage: "C1-stage", name: "C1 Pre-Build", type: "Pre-build", displayOrder: 140 },
+        { id: "milestone-c1-c-main-build", stage: "C1-stage", name: "C1 System Build", type: "System Build", displayOrder: 150 },
+        { id: "milestone-c1-c-test", stage: "C1-stage", name: "C1 Test", type: "Test", displayOrder: 160 },
+        { id: "milestone-c1-close", stage: "C1-stage", name: "C1 Close", type: "Close", displayOrder: 170 },
+        { id: "milestone-c2-c-g-o", stage: "C2-stage", name: "C2 G/O", type: "G/O", displayOrder: 180 },
+        { id: "milestone-c2-c-smt", stage: "C2-stage", name: "C2 SMT", type: "SMT", displayOrder: 190 },
+        { id: "milestone-c2-c-pre-build", stage: "C2-stage", name: "C2 Pre-Build", type: "Pre-build", displayOrder: 200 },
+        { id: "milestone-c2-c-main-build", stage: "C2-stage", name: "C2 System Build", type: "System Build", displayOrder: 210 },
+        { id: "milestone-c2-c-test", stage: "C2-stage", name: "C2 Test", type: "Test", displayOrder: 220 },
+        { id: "milestone-c2-c-close", stage: "C2-stage", name: "C2 Close", type: "Close", displayOrder: 230 },
+        { id: "milestone-ramp-g-o", stage: "RAMP-stage", name: "RAMP G/O", type: "G/O", displayOrder: 240 },
+        { id: "milestone-ramp-me-signoff", stage: "RAMP-stage", name: "ME signoff", type: "ME Signoff", displayOrder: 250 },
+        { id: "milestone-ramp-smt", stage: "RAMP-stage", name: "RAMP SMT", type: "SMT", displayOrder: 260 },
+        { id: "milestone-ramp-pre-build", stage: "RAMP-stage", name: "RAMP Pre-build", type: "Pre-build", displayOrder: 270 },
+        { id: "milestone-ramp-main-build", stage: "RAMP-stage", name: "RAMP Main build", type: "Main Build", displayOrder: 280 },
+        { id: "milestone-ramp-fcs", stage: "RAMP-stage", name: "FCS", type: "FCS", displayOrder: 290 },
+        { id: "milestone-mdrr", stage: "MDRR", name: "MDRR", type: "MDRR", displayOrder: 300 },
       ]);
     });
 
-    it("marks exactly 34 definitions for Portfolio and only MDRR as hidden", () => {
-      expect(portfolioMilestoneDefinitions).toHaveLength(34);
+    it("separates active Portfolio, active selection, and compatibility definitions", () => {
+      expect(portfolioMilestoneDefinitions).toHaveLength(29);
       expect(
         portfolioMilestoneDefinitions.every(
           (definition) => definition.showInPortfolio,
         ),
       ).toBe(true);
-      expect(milestoneDefinitions).toHaveLength(35);
+      expect(activeMilestoneDefinitions).toHaveLength(30);
+      expect(compatibilityOnlyMilestoneDefinitions).toHaveLength(6);
+      expect(milestoneDefinitions).toHaveLength(36);
+      expect(activeMilestoneDefinitions.at(-1)).toBe(mdrrMilestoneDefinition);
+      expect(compatibilityOnlyMilestoneDefinitions.map(({ id }) => id)).toEqual([
+        "milestone-a-a2-a-g-o",
+        "milestone-a-a2-a-smt",
+        "milestone-a-a2-a-test",
+        "milestone-a-a2-a-close",
+        "milestone-c2-bios-frozen",
+        "milestone-c2-golden-run",
+      ]);
       expect(
-        milestoneDefinitions.filter(
-          (definition) => !definition.showInPortfolio,
+        compatibilityOnlyMilestoneDefinitions.every(
+          (definition) => !definition.active && !definition.showInPortfolio,
         ),
-      ).toEqual([mdrrMilestoneDefinition]);
+      ).toBe(true);
+      expect(new Set(activeMilestoneDefinitions.map(({ id }) => id))).toEqual(
+        new Set(portfolioMilestoneDefinitions.map(({ id }) => id).concat(mdrrMilestoneDefinition.id)),
+      );
+      expect(
+        activeMilestoneDefinitions.some(({ id }) =>
+          compatibilityOnlyMilestoneDefinitions.some((definition) => definition.id === id),
+        ),
+      ).toBe(false);
       expect(mdrrMilestoneDefinition).toEqual({
         id: "milestone-mdrr",
         name: "MDRR",
         stageGroupId: "stage-mdrr",
         milestoneTypeId: "type-mdrr",
-        displayOrder: 350,
+        displayOrder: 300,
         active: true,
         reviewStatus: "reviewed",
         aliases: [],
@@ -355,10 +376,8 @@ describe("authoritative V2 reference data", () => {
       });
     });
 
-    it("uses explicit unique IDs and display orders for active reviewed definitions", () => {
-      expect(
-        portfolioMilestoneDefinitions.map((definition) => definition.id),
-      ).toEqual([
+    it("uses stable IDs, unique display orders, and reviewed metadata", () => {
+      expect(activeMilestoneDefinitions.map(({ id }) => id)).toEqual([
         "milestone-design-kickoff",
         "milestone-design-id-fix",
         "milestone-me-portion-me-drawing",
@@ -369,10 +388,7 @@ describe("authoritative V2 reference data", () => {
         "milestone-a1-a-g-o",
         "milestone-a1-a-smt",
         "milestone-a1-a-test",
-        "milestone-a-a2-a-g-o",
-        "milestone-a-a2-a-smt",
-        "milestone-a-a2-a-test",
-        "milestone-a-a2-a-close",
+        "milestone-a1-a-close",
         "milestone-c1-c-g-o",
         "milestone-c1-c-smt",
         "milestone-c1-c-pre-build",
@@ -384,8 +400,6 @@ describe("authoritative V2 reference data", () => {
         "milestone-c2-c-pre-build",
         "milestone-c2-c-main-build",
         "milestone-c2-c-test",
-        "milestone-c2-bios-frozen",
-        "milestone-c2-golden-run",
         "milestone-c2-c-close",
         "milestone-ramp-g-o",
         "milestone-ramp-me-signoff",
@@ -393,35 +407,36 @@ describe("authoritative V2 reference data", () => {
         "milestone-ramp-pre-build",
         "milestone-ramp-main-build",
         "milestone-ramp-fcs",
+        "milestone-mdrr",
       ]);
       expectUniqueIds(milestoneDefinitions);
       expect(milestoneDefinitions.map((definition) => definition.displayOrder)).toEqual(
-        Array.from({ length: 35 }, (_, index) => (index + 1) * 10),
+        Array.from({ length: 36 }, (_, index) => (index + 1) * 10),
       );
-      expectActiveReviewedItems(milestoneDefinitions);
+      expectActiveReviewedItems(activeMilestoneDefinitions);
+      expect(
+        compatibilityOnlyMilestoneDefinitions.every(
+          ({ aliases, reviewStatus }) => aliases.length === 0 && reviewStatus === "reviewed",
+        ),
+      ).toBe(true);
+      expect(dashboardAttentionMilestoneTypeIds).toEqual([
+        "type-g-o",
+        "type-smt",
+        "type-close",
+        "type-mdrr",
+      ]);
     });
 
     it("keeps repeated names distinct across Stage / Group identities", () => {
-      const a1Go = portfolioMilestoneDefinitions.find(
-        (definition) =>
-          definition.name === "A G/O" && definition.stageGroupId === "stage-a1",
+      const a1Go = milestoneDefinitions.find((definition) => definition.id === "milestone-a1-a-g-o");
+      const a2Go = milestoneDefinitions.find((definition) => definition.id === "milestone-a-a2-a-g-o");
+      const c1Smt = milestoneDefinitions.find(
+        (definition) => definition.id === "milestone-c1-c-smt",
       );
-      const a2Go = portfolioMilestoneDefinitions.find(
-        (definition) =>
-          definition.name === "A G/O" &&
-          definition.stageGroupId === "stage-a-a2",
-      );
-      const c1Smt = portfolioMilestoneDefinitions.find(
-        (definition) =>
-          definition.name === "C-SMT" && definition.stageGroupId === "stage-c1",
-      );
-      const c2Smt = portfolioMilestoneDefinitions.find(
-        (definition) =>
-          definition.name === "C-SMT" && definition.stageGroupId === "stage-c2",
+      const c2Smt = milestoneDefinitions.find(
+        (definition) => definition.id === "milestone-c2-c-smt",
       );
 
-      expect(a1Go?.id).toBe("milestone-a1-a-g-o");
-      expect(a2Go?.id).toBe("milestone-a-a2-a-g-o");
       expect(a1Go?.id).not.toBe(a2Go?.id);
       expect(c1Smt?.id).toBe("milestone-c1-c-smt");
       expect(c2Smt?.id).toBe("milestone-c2-c-smt");

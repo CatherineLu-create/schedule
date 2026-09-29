@@ -5,7 +5,11 @@ import type {
   CurrentPublishedScheduleRead,
   ScheduleWorkingDraftMilestoneRow,
 } from "./application/selectors/scheduleSelectors";
-import { milestoneDefinitions } from "./config/v2/referenceData";
+import {
+  activeMilestoneDefinitions,
+  compatibilityOnlyMilestoneDefinitions,
+  milestoneDefinitions,
+} from "./config/v2/referenceData";
 import type { CanonicalPublishedScheduleVersion } from "./domain/schedule/officialSchedule";
 import { toScheduleVersionNumber } from "./domain/schedule/schedule";
 import { parseDateOnly, type DateOnly } from "./domain/shared/dateOnly";
@@ -544,18 +548,35 @@ describe("Schedule Workspace presentation", () => {
     expect(onUpdateMilestone).toHaveBeenCalledTimes(1);
     expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveValue("2026-09-15");
     const catalog = screen.getByLabelText("Milestone definition");
-    expect(within(catalog).getByRole("option", { name: "Kickoff" })).toBeInTheDocument();
+    expect(within(catalog).queryByRole("option", { name: "Kickoff" })).not.toBeInTheDocument();
+    expect(within(catalog).getByRole("option", { name: "ID fix" })).toBeInTheDocument();
     expect(within(screen.getByLabelText("Applicability for Kickoff"))
       .getByRole("option", { name: "Not Applicable" })).toHaveValue("notApplicable");
     expect(screen.queryByLabelText("Milestone name")).not.toBeInTheDocument();
-    fireEvent.change(catalog, { target: { value: "milestone-design-kickoff" } });
+    fireEvent.change(catalog, { target: { value: "milestone-design-id-fix" } });
     fireEvent.click(screen.getByRole("button", { name: "Add Milestone" }));
     expect(onAddMilestone).toHaveBeenCalledTimes(1);
     expect(onAddMilestone).toHaveBeenCalledWith(
-      toMilestoneDefinitionId("milestone-design-kickoff"),
+      toMilestoneDefinitionId("milestone-design-id-fix"),
     );
     fireEvent.click(screen.getByRole("button", { name: "Remove Kickoff" }));
     expect(onRemoveMilestone).toHaveBeenCalledWith(toMilestoneId("draft-kickoff"));
+  });
+
+  it("offers all 30 absent active definitions and excludes compatibility-only definitions", () => {
+    render(<ScheduleWorkspace {...workingDraftProps}
+      draftRead={{ kind: "workingDraft", draft: { milestones: [] }, milestoneRows: [] }}
+      milestoneDefinitions={activeMilestoneDefinitions}
+    />);
+
+    const catalog = screen.getByLabelText("Milestone definition");
+    expect(within(catalog).getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "Select milestone",
+      ...activeMilestoneDefinitions.map(({ name }) => name),
+    ]);
+    for (const { name } of compatibilityOnlyMilestoneDefinitions) {
+      expect(within(catalog).queryByRole("option", { name })).not.toBeInTheDocument();
+    }
   });
 
   it("requires Publish confirmation and keeps editing without dispatch", () => {

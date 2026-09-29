@@ -154,6 +154,15 @@ function ScheduleWorkspaceContent({
   projectId,
 }: ScheduleWorkspaceProps): React.ReactElement {
   const [definitionId, setDefinitionId] = React.useState("");
+  const representedDefinitionIds = draftRead.kind === "workingDraft"
+    ? new Set(draftRead.draft.milestones.map(({ milestoneDefinitionId }) =>
+      milestoneDefinitionId))
+    : new Set<MilestoneDefinitionId>();
+  const addableMilestoneDefinitions = milestoneDefinitions.filter(
+    ({ id }) => !representedDefinitionIds.has(id),
+  );
+  const selectedDefinitionIsAddable = definitionId !== "" &&
+    addableMilestoneDefinitions.some(({ id }) => id === definitionId);
   const [confirmation, setConfirmation] = React.useState<"publish" | "discard" | null>(null);
   const [unappliedEditors, setUnappliedEditors] = React.useState<ReadonlySet<string>>(
     () => new Set<string>(),
@@ -290,18 +299,20 @@ function ScheduleWorkspaceContent({
     </div>
     <div className="mt-4 flex flex-wrap items-end gap-3">
       <label className="grid gap-1 text-sm">Milestone definition
-        <select className="max-w-64 rounded border border-slate-300 bg-white px-2 py-1.5" onChange={(event) => setDefinitionId(event.target.value)} value={definitionId}>
+        <select className="max-w-64 rounded border border-slate-300 bg-white px-2 py-1.5" onChange={(event) => setDefinitionId(event.target.value)} value={selectedDefinitionIsAddable ? definitionId : ""}>
           <option value="">Select milestone</option>
-          {milestoneDefinitions.map((definition) => (
+          {addableMilestoneDefinitions.map((definition) => (
             <option key={definition.id} value={definition.id}>{definition.name}</option>
           ))}
         </select>
       </label>
       <button
         className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:text-slate-400"
-        disabled={definitionId === ""}
+        disabled={!selectedDefinitionIsAddable}
         onClick={() => {
-          if (definitionId !== "") onAddMilestone(toMilestoneDefinitionId(definitionId));
+          if (!selectedDefinitionIsAddable) return;
+          onAddMilestone(toMilestoneDefinitionId(definitionId));
+          setDefinitionId("");
         }}
         type="button"
       >Add Milestone</button>

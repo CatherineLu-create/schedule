@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { startScheduleWorkingDraft } from "../application/commands/canonicalScheduleCommands";
 import { selectDashboardAttention } from "../application/selectors/dashboardAttention";
 import { selectPortfolioDashboardRows } from "../application/selectors/portfolioDashboardRows";
 import { milestoneDefinitions } from "../config/v2/referenceData";
@@ -174,5 +175,23 @@ describe("createUserTrialDemoSeed", () => {
       "DEMO - MDRR Due Soon",
       "DEMO - Completed Milestone",
     ]);
+  });
+
+  it("keeps Demo Published snapshots sparse while first Draft clones only Published rows", () => {
+    const seed = createUserTrialDemoSeed(REFERENCE_DATE);
+
+    for (const [scheduleIndex, schedule] of seed.schedules.entries()) {
+      const originalPublished = schedule.publishedVersions;
+      const originalMilestones = originalPublished[0]!.milestones;
+      const result = startScheduleWorkingDraft(schedule, { milestoneDefinitions });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error("Expected Demo Draft creation");
+      expect(schedule.publishedVersions).toBe(originalPublished);
+      expect(schedule.publishedVersions[0]!.milestones).toBe(originalMilestones);
+      expect(schedule.workingDraft).toBeNull();
+      expect(result.draft.milestones).toEqual(originalMilestones);
+      expect(result.draft.milestones).toHaveLength(1);
+    }
   });
 });

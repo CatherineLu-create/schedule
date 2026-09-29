@@ -657,7 +657,7 @@ describe("Current Published milestone projection", () => {
           milestoneId: laterDefinition.milestoneId,
           phase: "-",
           stage: "C1-stage",
-          milestone: "C-SMT",
+          milestone: "C1 SMT",
           applicability: "applicable",
           plan: "-",
           actual: "2026/10/15",
@@ -816,7 +816,7 @@ describe("canonical Working Draft read", () => {
     expect(read.milestoneRows).toEqual([
       { milestoneId: earlier.milestoneId, phase: "-", stage: "Design", milestone: "Kickoff",
         applicability: "notApplicable", plan: null, actual: dateOnly("2026-09-11") },
-      { milestoneId: later.milestoneId, phase: "-", stage: "C1-stage", milestone: "C-SMT",
+      { milestoneId: later.milestoneId, phase: "-", stage: "C1-stage", milestone: "C1 SMT",
         applicability: "applicable", plan: dateOnly("2026-10-15"), actual: null },
     ]);
     expect(draft.milestones).toEqual([later, earlier]);

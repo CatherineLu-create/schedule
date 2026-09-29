@@ -94,7 +94,7 @@ Dashboard 目前包含：
 - `Upcoming Milestones`：Current Published Schedule 未來 14 天內到期的唯一 Project 數量
 - `Overdue`：Current Published Schedule 已逾期的唯一 Project 數量
 
-Upcoming / Overdue 會依 Project 分組顯示 Project Name、符合條件的 Milestone Type 與 Plan Date；點擊 Project Name 會開啟既有 Project Workspace。這兩張卡片不讀取 Working Draft；成功 Publish 後才會反映新的 Current Published Schedule。
+Upcoming / Overdue 會依 Project 分組顯示 Project Name、符合條件的具體 Milestone Definition Name 與 Plan Date；點擊 Project Name 會開啟既有 Project Workspace。資格判定仍只依 `G/O`、`SMT`、`Close`、`MDRR` type，包含 RAMP G/O 與 RAMP SMT；這兩張卡片不讀取 Working Draft，成功 Publish 後才會反映新的 Current Published Schedule。
 
 Dashboard Filters 實際包含：
 
@@ -121,6 +121,10 @@ Project List 欄位來自 `src/dashboardColumns.ts`：
 - MDRR
 
 既有 MDRR 欄位從 Current Published Schedule 顯示 MDRR 的 Plan / Actual；Not Applicable、缺少 MDRR 或沒有可顯示日期時顯示 `—`。Working Draft 不影響此欄位，直到成功 Publish。
+
+目前 Schedule 使用 30 個 active milestone definitions：Design 2 個、ME Portion 4 個、Thermal 1 個、A1 4 個、C1 6 個、C2 6 個、RAMP 6 個及 MDRR。完整 validation catalog 另保留 6 個 compatibility-only historical definitions，讓既有 Published / Draft occurrences 仍可解析，但不出現在一般 Add choices 或 active Portfolio columns。建立 Working Draft 時只原樣複製 Current Published occurrences；沒有 Published 時 Draft 保持空白。系統不會自動補齊 active rows，使用者透過 Select Milestone / Add Milestone 手動加入未出現的 active definition。
+
+Portfolio Schedule schema 固定為 30 個 exact-definition columns（Design 2、ME Portion 4、Thermal 1、A1 4、C1 6、C2 6、RAMP 6、MDRR 1），不再依 A/A2 occurrence 動態改變。C1 / C2 使用 `System Build`，RAMP 保留 `Main Build`。目前沒有 active runtime parser / alias resolver，也沒有新增 persistence。
 
 ### Project Workspace
 

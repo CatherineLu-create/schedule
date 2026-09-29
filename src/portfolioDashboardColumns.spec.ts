@@ -8,39 +8,62 @@ import {
 
 describe("Portfolio visual schema", () => {
   // Mutation: dropping/reordering a stage or using same-name definition matching.
-  it("maps the 35 ordered visual leaves to 34 Portfolio definitions and the active MDRR projection", () => {
-    expect(portfolioScheduleColumnMappings.map((entry) => entry.key)).toEqual([
-      "schedule:design:kickoff", "schedule:design:id-fix",
-      "schedule:me-portion:me-drawing", "schedule:me-portion:mockup-dfm", "schedule:me-portion:tooling-start-t1", "schedule:me-portion:me-material-c",
-      "schedule:thermal:thermal-module-c", "schedule:a1-stage:a-g-o", "schedule:a1-stage:a-smt", "schedule:a1-stage:a-test",
-      "schedule:a-a2-stage:a-g-o", "schedule:a-a2-stage:a-smt", "schedule:a-a2-stage:a-test", "schedule:a-a2-stage:a-close",
-      "schedule:c1-stage:c-g-o", "schedule:c1-stage:c-smt", "schedule:c1-stage:c-pre-build", "schedule:c1-stage:c-main-build", "schedule:c1-stage:c-test", "schedule:c1-stage:c1-close",
-      "schedule:c2-stage:c-g-o", "schedule:c2-stage:c-smt", "schedule:c2-stage:c-pre-build", "schedule:c2-stage:c-main-build", "schedule:c2-stage:c-test", "schedule:c2-stage:bios-frozen", "schedule:c2-stage:golden-run", "schedule:c2-stage:c-close",
-      "schedule:ramp-stage:ramp-g-o", "schedule:ramp-stage:me-signoff", "schedule:ramp-stage:ramp-smt", "schedule:ramp-stage:ramp-pre-build", "schedule:ramp-stage:ramp-main-build", "schedule:ramp-stage:fcs", "schedule:mdrr:mdrr",
+  it("maps the 30 ordered visual leaves to 29 Portfolio definitions and the active MDRR projection", () => {
+    expect(portfolioScheduleColumnMappings.map(({ key, label, milestoneDefinitionId }) => [key, label, milestoneDefinitionId])).toEqual([
+      ["schedule:design:kickoff", "Kickoff", "milestone-design-kickoff"],
+      ["schedule:design:id-fix", "ID fix", "milestone-design-id-fix"],
+      ["schedule:me-portion:me-drawing", "ME drawing", "milestone-me-portion-me-drawing"],
+      ["schedule:me-portion:mockup-dfm", "Mockup & DFM", "milestone-me-portion-mockup-dfm"],
+      ["schedule:me-portion:tooling-start-t1", "Tooling start + T1", "milestone-me-portion-tooling-start-t1"],
+      ["schedule:me-portion:me-material-c", "ME material for C", "milestone-me-portion-me-material-c"],
+      ["schedule:thermal:thermal-module-c", "Thermal module for C", "milestone-thermal-module-c"],
+      ["schedule:a1-stage:a-g-o", "A1 G/O", "milestone-a1-a-g-o"],
+      ["schedule:a1-stage:a-smt", "A1 SMT", "milestone-a1-a-smt"],
+      ["schedule:a1-stage:a-test", "A1 Test", "milestone-a1-a-test"],
+      ["schedule:a1-stage:a-close", "A1 Close", "milestone-a1-a-close"],
+      ["schedule:c1-stage:c-g-o", "C1 G/O", "milestone-c1-c-g-o"],
+      ["schedule:c1-stage:c-smt", "C1 SMT", "milestone-c1-c-smt"],
+      ["schedule:c1-stage:c-pre-build", "C1 Pre-Build", "milestone-c1-c-pre-build"],
+      ["schedule:c1-stage:c-main-build", "C1 System Build", "milestone-c1-c-main-build"],
+      ["schedule:c1-stage:c-test", "C1 Test", "milestone-c1-c-test"],
+      ["schedule:c1-stage:c1-close", "C1 Close", "milestone-c1-close"],
+      ["schedule:c2-stage:c-g-o", "C2 G/O", "milestone-c2-c-g-o"],
+      ["schedule:c2-stage:c-smt", "C2 SMT", "milestone-c2-c-smt"],
+      ["schedule:c2-stage:c-pre-build", "C2 Pre-Build", "milestone-c2-c-pre-build"],
+      ["schedule:c2-stage:c-main-build", "C2 System Build", "milestone-c2-c-main-build"],
+      ["schedule:c2-stage:c-test", "C2 Test", "milestone-c2-c-test"],
+      ["schedule:c2-stage:c-close", "C2 Close", "milestone-c2-c-close"],
+      ["schedule:ramp-stage:ramp-g-o", "RAMP G/O", "milestone-ramp-g-o"],
+      ["schedule:ramp-stage:me-signoff", "ME signoff", "milestone-ramp-me-signoff"],
+      ["schedule:ramp-stage:ramp-smt", "RAMP SMT", "milestone-ramp-smt"],
+      ["schedule:ramp-stage:ramp-pre-build", "RAMP Pre-build", "milestone-ramp-pre-build"],
+      ["schedule:ramp-stage:ramp-main-build", "RAMP Main build", "milestone-ramp-main-build"],
+      ["schedule:ramp-stage:fcs", "FCS", "milestone-ramp-fcs"],
+      ["schedule:mdrr:mdrr", "MDRR", "milestone-mdrr"],
     ]);
-    const active = portfolioScheduleColumnMappings.slice(0, 34);
+    const active = portfolioScheduleColumnMappings.slice(0, 29);
     expect(active.map((entry) => entry.milestoneDefinitionId)).toEqual(portfolioMilestoneDefinitions.map((definition) => definition.id));
-    expect(new Set(active.map((entry) => entry.milestoneDefinitionId)).size).toBe(34);
+    expect(new Set(active.map((entry) => entry.milestoneDefinitionId)).size).toBe(29);
     for (const entry of active) {
       expect(milestoneDefinitions.find((definition) => definition.id === entry.milestoneDefinitionId)?.showInPortfolio).toBe(true);
       expect(entry.portfolioVisible).toBe(true);
       expect(entry.valueMode).toBe("planActual");
     }
-    expect(portfolioScheduleColumnMappings[34]).toMatchObject({
+    expect(portfolioScheduleColumnMappings[29]).toMatchObject({
       milestoneDefinitionId: mdrrMilestoneDefinition.id,
       portfolioVisible: false,
       valueMode: "planActual",
       emptyWhenNotApplicableOrUndated: true,
     });
     // Mutation: the active visual projection changes the catalog flag or loses its exact definition.
-    const mappedMdrrDefinitions = milestoneDefinitions.filter((definition) => definition.id === portfolioScheduleColumnMappings[34].milestoneDefinitionId);
+    const mappedMdrrDefinitions = milestoneDefinitions.filter((definition) => definition.id === portfolioScheduleColumnMappings[29].milestoneDefinitionId);
     expect(mappedMdrrDefinitions).toHaveLength(1);
     expect(mappedMdrrDefinitions[0]).toEqual(mdrrMilestoneDefinition);
     expect(mappedMdrrDefinitions[0].showInPortfolio).toBe(false);
   });
 
   // Mutation: flattening domains, wrong colspans or adding a diagnostic leaf.
-  it("keeps the 11/35/7 schema and subgroup hierarchy without diagnostics", () => {
+  it("keeps the fixed 11/30/7 schema and subgroup hierarchy without diagnostics", () => {
     expect(portfolioProjectInfoColumns.map(({ key, label }) => [key, label])).toEqual([
       ["projectStatus", "Status"], ["year", "Year"], ["name", "STN Project Name"], ["qciProjectName", "QCI Model Name"],
       ["customer", "Customer"], ["category", "Category"], ["productLine", "Product Line"], ["size", "Panel Size"], ["cpu", "CPU"], ["gpu", "GPU"], ["pcbNumber", "PCB#"],
@@ -50,15 +73,15 @@ describe("Portfolio visual schema", () => {
       ["team:qciPm", "QCI PM"], ["team:qciPjm", "QCI PjM"], ["team:acerPm", "Acer PM"],
       ["team:meOwner", "ME Owner"], ["team:eeOwner", "EE Owner"], ["team:thermalOwner", "Thermal Owner"], ["team:biosOwner", "BIOS Owner"],
     ]);
-    expect(portfolioColumns).toHaveLength(53);
-    expect(new Set(portfolioColumns.map((column) => column.key)).size).toBe(53);
+    expect(portfolioColumns).toHaveLength(48);
+    expect(new Set(portfolioColumns.map((column) => column.key)).size).toBe(48);
     expect(portfolioDomainGroups).toEqual([
       { key: "project", label: "PROJECT INFORMATION", colSpan: 11 },
-      { key: "schedule", label: "SCHEDULE", colSpan: 35 },
+      { key: "schedule", label: "SCHEDULE", colSpan: 30 },
       { key: "team", label: "TEAM MEMBER", colSpan: 7 },
     ]);
     expect(portfolioSubgroups.map(({ label, colSpan }) => [label, colSpan])).toEqual([
-      ["Core fields", 11], ["Design", 2], ["ME Portion", 4], ["Thermal", 1], ["A", 3], ["A2", 4], ["C1-stage", 6], ["C2-stage", 8], ["RAMP-stage", 6], ["MDRR", 1], ["Project Roles", 3], ["Standard Function Owners", 4],
+      ["Core fields", 11], ["Design", 2], ["ME Portion", 4], ["Thermal", 1], ["A1", 4], ["C1-stage", 6], ["C2-stage", 6], ["RAMP-stage", 6], ["MDRR", 1], ["Project Roles", 3], ["Standard Function Owners", 4],
     ]);
     expect(portfolioColumns.some(({ key, label }) => /Current Published|Official|Schedule Status|Diagnostic/i.test(`${key} ${label}`))).toBe(false);
   });

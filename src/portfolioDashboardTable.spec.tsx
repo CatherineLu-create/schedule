@@ -32,102 +32,135 @@ function leaf(key: string) { return renderedRow().querySelector<HTMLTableCellEle
 
 describe("PortfolioDashboardTable", () => {
   // Mutation: rendering the rejected flat Project-only table or a diagnostic column.
-  it("renders the data-driven grouped schema without unused A2 or legacy Team terminology", () => {
+  it("renders the fixed active-baseline grouped schema without compatibility-only milestones or legacy Team terminology", () => {
     render(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
     const table = screen.getByRole("table", { name: "Projects" });
     const headerRows = table.querySelectorAll("thead tr");
     expect(headerRows).toHaveLength(3);
     expect([...headerRows[0].children].map((header) => [header.textContent, header.getAttribute("colspan")])).toEqual([
-      ["PROJECT INFORMATION", "11"], ["SCHEDULE", "31"], ["TEAM MEMBER", "7"],
+      ["PROJECT INFORMATION", "11"], ["SCHEDULE", "30"], ["TEAM MEMBER", "7"],
     ]);
     expect([...headerRows[1].children].map((header) => header.textContent)).toEqual([
-      "Core fields", "Design", "ME Portion", "Thermal", "A", "C1-stage", "C2-stage", "RAMP-stage", "MDRR", "Project Roles", "Standard Function Owners",
+      "Core fields", "Design", "ME Portion", "Thermal", "A1", "C1-stage", "C2-stage", "RAMP-stage", "MDRR", "Project Roles", "Standard Function Owners",
     ]);
     const headers = [...headerRows[2].querySelectorAll("th")];
-    expect(headers).toHaveLength(49);
+    expect(headers).toHaveLength(48);
     expect(headers.slice(0, 11).map((header) => header.textContent)).toEqual(["Status", "Year", "STN Project Name", "QCI Model Name", "Customer", "Category", "Product Line", "Panel Size", "CPU", "GPU", "PCB#"]);
-    expect(headers.filter((header) => header.dataset.columnKey?.startsWith("schedule:"))).toHaveLength(31);
+    expect(headers.filter((header) => header.dataset.columnKey?.startsWith("schedule:"))).toHaveLength(30);
     expect(headers.some((header) => header.dataset.columnKey?.startsWith("schedule:a-a2-stage:"))).toBe(false);
-    expect(screen.queryByRole("columnheader", { name: "A1-stage" })).not.toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "A1" })).toHaveAttribute("colspan", "4");
     expect(screen.queryByRole("columnheader", { name: "A/A2-stage" })).not.toBeInTheDocument();
     expect(headers.slice(-7).map((header) => header.textContent)).toEqual(["QCI PM", "QCI PjM", "Acer PM", "ME Owner", "EE Owner", "Thermal Owner", "BIOS Owner"]);
     expect([...table.querySelectorAll("thead th")].every((header) => ["colgroup", "col"].includes(header.getAttribute("scope") ?? ""))).toBe(true);
     expect(screen.queryByText(/Current Published|Schedule Status|Diagnostic/)).not.toBeInTheDocument();
     expect(screen.getAllByTestId("portfolio-table-scroll")).toHaveLength(1);
-    expect(screen.getByRole("region", { name: "Projects table scroll area" })).toContainElement(table);
+    const scrollViewport = screen.getByRole("region", { name: "Projects table scroll area" });
+    expect(scrollViewport).toContainElement(table);
+    expect(scrollViewport).toHaveClass("max-h-[70vh]", "overflow-auto", "overscroll-contain", "max-w-full", "min-w-0");
+    expect(table.querySelector("thead")).toHaveClass("sticky", "top-0", "z-40");
+    const bottomScroller = screen.getByTestId("portfolio-bottom-scroll");
+    expect(bottomScroller).toHaveClass("fixed", "bottom-0", "overflow-x-auto", "overflow-y-hidden");
+    expect(bottomScroller).toHaveAttribute("hidden");
     expect(screen.queryByRole("scrollbar")).not.toBeInTheDocument();
   });
 
-  // Mutation: showing A2 permanently, hiding an applicable A2 with null dates, or matching by display text.
-  it("shows the stable-ID A2 group only when a Current Published A2 occurrence is applicable", () => {
-    const a2DefinitionId = toMilestoneDefinitionId("milestone-a-a2-a-g-o");
-    const applicable: PortfolioCurrentPublishedRead = {
+  // Mutation: always showing the proxy, aligning it to the page, or syncing in only one direction.
+  it("shows an aligned bottom proxy only while the native scrollbar is below the viewport and synchronizes both directions", () => {
+    const originalInnerHeight = window.innerHeight;
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 700 });
+    const { rerender } = render(
+      <PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />,
+    );
+    const viewport = screen.getByTestId("portfolio-table-scroll");
+    const bottomScroller = screen.getByTestId("portfolio-bottom-scroll");
+    let rectBottom = 900;
+    let rectLeft = 40;
+    let rectTop = 100;
+    let scrollWidth = 4200;
+    vi.spyOn(viewport, "getBoundingClientRect").mockImplementation(() => ({
+      bottom: rectBottom,
+      height: rectBottom - rectTop,
+      left: rectLeft,
+      right: rectLeft + 817,
+      top: rectTop,
+      width: 817,
+      x: rectLeft,
+      y: rectTop,
+      toJSON: () => ({}),
+    }));
+    Object.defineProperty(viewport, "clientWidth", { configurable: true, value: 800 });
+    Object.defineProperty(viewport, "scrollWidth", {
+      configurable: true,
+      get: () => scrollWidth,
+    });
+
+    fireEvent.scroll(window);
+    expect(bottomScroller).toBeVisible();
+    expect(bottomScroller).toHaveStyle({ left: "40px", width: "817px" });
+    expect(bottomScroller.firstElementChild).toHaveStyle({ width: "4217px" });
+
+    fireEvent.scroll(viewport, { target: { scrollLeft: 640 } });
+    expect(bottomScroller.scrollLeft).toBe(640);
+    fireEvent.scroll(bottomScroller, { target: { scrollLeft: 1280 } });
+    expect(viewport.scrollLeft).toBe(1280);
+
+    rectBottom = 650;
+    rerender(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
+    expect(bottomScroller).toHaveAttribute("hidden");
+
+    rectBottom = 900;
+    rerender(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
+    expect(bottomScroller).toBeVisible();
+
+    rectLeft = -40;
+    rerender(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
+    expect(bottomScroller).toHaveStyle({ left: "0px", width: "777px" });
+    expect(bottomScroller.firstElementChild).toHaveStyle({ width: "4177px" });
+
+    rectLeft = 40;
+    rectTop = 750;
+    rerender(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
+    expect(bottomScroller).toHaveAttribute("hidden");
+
+    rectTop = 100;
+    rectBottom = 650;
+    fireEvent.scroll(window);
+    expect(bottomScroller).toHaveAttribute("hidden");
+
+    rectBottom = 900;
+    scrollWidth = 800;
+    fireEvent.resize(window);
+    expect(bottomScroller).toHaveAttribute("hidden");
+    expect(viewport).toHaveClass("max-h-[70vh]", "overflow-auto");
+    expect(viewport.querySelector("thead")).toHaveClass("sticky", "top-0", "z-40");
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: originalInnerHeight });
+  });
+
+  // Mutation: deriving the active Portfolio schema from row contents or exposing compatibility-only definitions.
+  it("keeps the exact 30 active Schedule columns regardless of compatibility-only Published occurrences", () => {
+    const compatibilityOnly: PortfolioCurrentPublishedRead = {
       kind: "published",
       versionLabel: "Published v01",
       milestoneCount: 1,
       cells: [{
-        milestoneDefinitionId: a2DefinitionId,
+        milestoneDefinitionId: toMilestoneDefinitionId("milestone-a-a2-a-g-o"),
         occurrences: [{
-          milestoneId: toMilestoneId("applicable-a2-with-null-dates"),
+          milestoneId: toMilestoneId("compatibility-only-a2"),
           applicability: "applicable",
-          plan: "-",
+          plan: "2027/01/01",
           actual: "-",
         }],
       }],
     };
-    const notApplicable: PortfolioCurrentPublishedRead = {
-      ...applicable,
-      cells: [{
-        milestoneDefinitionId: a2DefinitionId,
-        occurrences: [{
-          milestoneId: toMilestoneId("not-applicable-a2"),
-          applicability: "notApplicable",
-          plan: "2027/01/01",
-          actual: "2027/01/02",
-        }],
-      }],
-    };
-    const { rerender } = render(<PortfolioDashboardTable rows={[rowWith(notApplicable)]} onOpenProject={() => {}} />);
+    const { rerender } = render(<PortfolioDashboardTable rows={[rowWith(compatibilityOnly)]} onOpenProject={() => {}} />);
 
+    expect(scheduleCells()).toHaveLength(30);
     expect(screen.queryByRole("columnheader", { name: "A2" })).not.toBeInTheDocument();
-    expect(scheduleCells()).toHaveLength(31);
+    expect(leaf("schedule:a1-stage:a-close")).toHaveTextContent(/^—$/);
 
-    rerender(<PortfolioDashboardTable rows={[rowWith(applicable)]} onOpenProject={() => {}} />);
-    expect(screen.getByRole("columnheader", { name: "A2" })).toHaveAttribute("colspan", "4");
-    expect(scheduleCells()).toHaveLength(35);
-    expect(leaf("schedule:a-a2-stage:a-g-o")).toHaveTextContent("Applicable");
-    expect(leaf("schedule:a-a2-stage:a-g-o")).toHaveTextContent("P: —");
-  });
-
-  it("shows mixed Published A2 values across exact Projects only while an applicable occurrence exists", () => {
-    const a2DefinitionId = toMilestoneDefinitionId("milestone-a-a2-a-g-o");
-    const withProjectId = (id: string, schedule: PortfolioCurrentPublishedRead): PortfolioDashboardRow => ({
-      ...rowWith(schedule), projectId: toProjectId(id),
-      project: { ...baseRow.project, projectId: toProjectId(id) },
-    });
-    const applicable = withProjectId("applicable-project", {
-      kind: "published", versionLabel: "Published v01", milestoneCount: 1,
-      cells: [{ milestoneDefinitionId: a2DefinitionId, occurrences: [{
-        milestoneId: toMilestoneId("applicable-a2"), applicability: "applicable", plan: "-", actual: "-",
-      }] }],
-    });
-    const notApplicable = withProjectId("not-applicable-project", {
-      kind: "published", versionLabel: "Published v02", milestoneCount: 1,
-      cells: [{ milestoneDefinitionId: a2DefinitionId, occurrences: [{
-        milestoneId: toMilestoneId("not-applicable-a2"), applicability: "notApplicable", plan: "2027/01/01", actual: "2027/01/02",
-      }] }],
-    });
-    const noPublished = withProjectId("no-published-project", { kind: "noPublishedSchedule" });
-    const { rerender } = render(<PortfolioDashboardTable rows={[applicable, notApplicable, noPublished]} onOpenProject={() => {}} />);
-    expect(screen.getByRole("columnheader", { name: "A2" })).toHaveAttribute("colspan", "4");
-    const a2Cell = (id: string) => screen.getByRole("table", { name: "Projects" })
-      .querySelector(`[data-project-id="${id}"] [data-column-key="schedule:a-a2-stage:a-g-o"]`);
-    expect(a2Cell("applicable-project")).toHaveTextContent("P: —");
-    expect(a2Cell("applicable-project")).toHaveTextContent("A: —");
-    expect(a2Cell("not-applicable-project")?.querySelector('[data-milestone-id="not-applicable-a2"]')).toHaveTextContent(/^N\/A$/);
-    expect(a2Cell("no-published-project")).toHaveTextContent(/^—$/);
-    rerender(<PortfolioDashboardTable rows={[notApplicable]} onOpenProject={() => {}} />);
-    expect(screen.queryByRole("columnheader", { name: "A2" })).not.toBeInTheDocument();
+    rerender(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
+    expect(scheduleCells()).toHaveLength(30);
+    expect(screen.getByRole("columnheader", { name: "A1 Close" })).toBeInTheDocument();
   });
 
   // Mutation: restoring unconditional inline sticky positioning or dropping the approved 1024px CSS breakpoint.
@@ -169,14 +202,14 @@ describe("PortfolioDashboardTable", () => {
   // Mutation: forcing long leaf labels onto one overflowing line or removing the full-label tooltip/accessibility text.
   it("contains long Schedule labels within two lines while preserving the full label", () => {
     render(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
-    const header = screen.getByRole("columnheader", { name: "Thermal module for C" });
-    const label = within(header).getByText("Thermal module for C");
+    const header = screen.getByRole("columnheader", { name: "C1 System Build" });
+    const label = within(header).getByText("C1 System Build");
 
     expect(header).not.toHaveClass("whitespace-nowrap");
     expect(label).toHaveClass("line-clamp-2", "whitespace-normal", "break-words");
     expect(label).not.toHaveClass("block");
-    expect(label).toHaveAttribute("title", "Thermal module for C");
-    expect(header).toHaveAccessibleName("Thermal module for C");
+    expect(label).toHaveAttribute("title", "C1 System Build");
+    expect(header).toHaveAccessibleName("C1 System Build");
   });
 
   // Mutation: collapsing unavailable, valid empty history, or zero milestones to one empty state.
@@ -186,7 +219,7 @@ describe("PortfolioDashboardTable", () => {
     [{ kind: "published", versionLabel: "Published v03", milestoneCount: 0, cells: [] }, "Published v03 · No milestones", "publishedEmpty"],
   ] as const)("preserves existing-cell accessibility for %s", (schedule, description, state) => {
     render(<PortfolioDashboardTable rows={[rowWith(schedule)]} onOpenProject={() => {}} />);
-    expect(scheduleCells()).toHaveLength(31);
+    expect(scheduleCells()).toHaveLength(30);
     for (const cell of scheduleCells()) {
       expect(cell).toHaveTextContent(/^—$/);
       expect(cell).toHaveAccessibleDescription(description);
@@ -207,7 +240,7 @@ describe("PortfolioDashboardTable", () => {
       rerender(<PortfolioDashboardTable rows={[rowWith(read)]} onOpenProject={() => {}} />);
       // Compare only the applied color treatment, without prescribing a particular palette or all layout classes.
       const cellTones = scheduleCells().map((cell) => [...cell.classList].filter((token) => /^(bg|text)-/.test(token)).sort().join(" "));
-      expect(cellTones).toHaveLength(31);
+      expect(cellTones).toHaveLength(30);
       expect(new Set(cellTones).size).toBe(1);
       expect(cellTones[0]).not.toBe("");
       return cellTones[0];
@@ -233,7 +266,7 @@ describe("PortfolioDashboardTable", () => {
     const before = structuredClone(row);
     render(<PortfolioDashboardTable rows={[row]} onOpenProject={() => {}} />);
     const cell = leaf("schedule:c2-stage:c-g-o");
-    expect(cell).toHaveAccessibleDescription("Published v03 · C G/O");
+    expect(cell).toHaveAccessibleDescription("Published v03 · C2 G/O");
     expect([...cell.querySelectorAll('[data-milestone-id]')].map((element) => element.getAttribute("data-milestone-id"))).toEqual(["later-id", "earlier-id"]);
     const notApplicableOccurrence = cell.querySelector('[data-milestone-id="later-id"]');
     const applicableOccurrence = cell.querySelector('[data-milestone-id="earlier-id"]');
@@ -407,8 +440,8 @@ describe("PortfolioDashboardTable", () => {
   });
 
   // Mutation: removing the table schema or showing a misleading blank when filters return no rows.
-  it("renders an explicit empty result across the currently visible 49 columns", () => {
+  it("renders an explicit empty result across the fixed 48 columns", () => {
     render(<PortfolioDashboardTable rows={[]} onOpenProject={() => {}} />);
-    expect(screen.getByText("No projects match the current search and filters")).toHaveAttribute("colspan", "49");
+    expect(screen.getByText("No projects match the current search and filters")).toHaveAttribute("colspan", "48");
   });
 });

@@ -149,10 +149,12 @@ describe("selectDashboardAttention", () => {
           actual: dateOnly("2026-09-23"),
         }),
         milestone("missing-plan", "milestone-a1-a-smt", null),
-        milestone("not-applicable", "milestone-a-a2-a-close", "2026-09-24", {
+        milestone("not-applicable", "milestone-a1-a-close", "2026-09-24", {
           applicability: "notApplicable",
         }),
         milestone("non-participating", "milestone-a1-a-test", "2026-09-24"),
+        milestone("system-build", "milestone-c1-c-main-build", "2026-09-25"),
+        milestone("ramp-main-build", "milestone-ramp-main-build", "2026-09-26"),
       ]),
     ]), REFERENCE_DATE));
 
@@ -172,7 +174,9 @@ describe("selectDashboardAttention", () => {
       schedule(owner.id, [
         milestone("go", "milestone-a1-a-g-o", "2026-09-24"),
         milestone("smt", "milestone-a1-a-smt", "2026-09-25"),
-        milestone("close", "milestone-a-a2-a-close", "2026-09-26"),
+        milestone("close", "milestone-a1-a-close", "2026-09-26"),
+        milestone("ramp-go", "milestone-ramp-g-o", "2026-09-26"),
+        milestone("ramp-smt", "milestone-ramp-smt", "2026-09-26"),
         milestone("mdrr", "milestone-mdrr", "2026-09-27"),
       ]),
     ]), REFERENCE_DATE));
@@ -181,6 +185,8 @@ describe("selectDashboardAttention", () => {
       "go",
       "smt",
       "close",
+      "ramp-go",
+      "ramp-smt",
       "mdrr",
     ]);
     expect(read.due.projectCount).toBe(1);

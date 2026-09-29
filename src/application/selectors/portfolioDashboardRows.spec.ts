@@ -58,7 +58,7 @@ describe("canonical Portfolio Dashboard read projection", () => {
       {
         milestoneId: toMilestoneId("portfolio-official"),
         milestoneDefinitionId: toMilestoneDefinitionId(
-          "milestone-a-a2-a-g-o",
+          "milestone-a1-a-g-o",
         ),
         applicability: "applicable",
         plan: null,
@@ -87,7 +87,7 @@ describe("canonical Portfolio Dashboard read projection", () => {
     expect(withDraft.schedule).toEqual(baseline.schedule);
   });
 
-  it("projects every Published result through the 34 Portfolio definitions and MDRR", () => {
+  it("projects every Published result through the 29 active Portfolio definitions and MDRR", () => {
     const rows = selectPortfolioDashboardRows(fixtureState());
     const expectedIds = [
       ...portfolioMilestoneDefinitions.map((definition) => definition.id),
@@ -97,10 +97,10 @@ describe("canonical Portfolio Dashboard read projection", () => {
     for (const row of rows) {
       if (row.schedule.kind !== "published") continue;
       const ids = row.schedule.cells.map((cell) => cell.milestoneDefinitionId);
-      expect(ids).toHaveLength(35);
+      expect(ids).toHaveLength(30);
       expect(ids).toEqual(expectedIds);
-      expect(new Set(ids).size).toBe(35);
-      expect(ids.slice(0, 34).every((id) => milestoneDefinitions.some(
+      expect(new Set(ids).size).toBe(30);
+      expect(ids.slice(0, 29).every((id) => milestoneDefinitions.some(
         (definition) => definition.id === id && definition.showInPortfolio,
       ))).toBe(true);
       expect(mdrrMilestoneDefinition.showInPortfolio).toBe(false);
@@ -250,7 +250,7 @@ describe("canonical Portfolio Dashboard read projection", () => {
   it("preserves repeated same-definition snapshot occurrences in order and retains notApplicable dated values", () => {
     const first = {
       milestoneId: toMilestoneId("portfolio-repeat-1"),
-      milestoneDefinitionId: toMilestoneDefinitionId("milestone-design-kickoff"),
+      milestoneDefinitionId: toMilestoneDefinitionId("milestone-a1-a-g-o"),
       applicability: "notApplicable" as const,
       plan: dateOnly("2026-10-05"),
       actual: dateOnly("2026-10-06"),
@@ -261,14 +261,16 @@ describe("canonical Portfolio Dashboard read projection", () => {
 
     expect(schedule.kind).toBe("published");
     if (schedule.kind !== "published") return;
-    const occurrences = schedule.cells[0]!.occurrences;
+    const occurrences = schedule.cells.find(
+      ({ milestoneDefinitionId }) => milestoneDefinitionId === "milestone-a1-a-g-o",
+    )?.occurrences;
     expect(occurrences).toEqual([
       { milestoneId: first.milestoneId, applicability: "notApplicable", plan: "2026/10/05", actual: "2026/10/06" },
       { milestoneId: second.milestoneId, applicability: "notApplicable", plan: "2026/10/07", actual: "2026/10/06" },
     ]);
   });
 
-  it("rejects label-based matching: a C2 C G/O occurrence must not populate the same-named C1 C G/O cell", () => {
+  it("rejects type-based matching: a C2 G/O occurrence must not populate the C1 G/O cell", () => {
     // Mutation caught: replacing exact milestoneDefinitionId matching with definition-label matching.
     const c2Go = {
       milestoneId: toMilestoneId("portfolio-c2-go-only"),

@@ -58,7 +58,12 @@ function definition(id: string, displayOrder: number): MilestoneDefinition {
 
 const definitionA = definition("definition-a", 10);
 const definitionB = definition("definition-b", 20);
-const definitions = [definitionA, definitionB] as const;
+const definitionC = definition("definition-c", 30);
+const legacyDefinition = {
+  ...definition("definition-legacy", 40),
+  active: false,
+} as const;
+const definitions = [definitionA, definitionB, definitionC, legacyDefinition] as const;
 
 function draftMilestone(
   id: string,
@@ -137,7 +142,7 @@ function freezeScheduleGraph(
 }
 
 describe("canonical Schedule Working Draft lifecycle commands", () => {
-  it("starts an empty Draft without Published history and reuses it", () => {
+  it("starts an empty sparse Draft without Published history and reuses it", () => {
     const original = schedule([]);
     const first = startScheduleWorkingDraft(original, context);
     expect(first.ok).toBe(true);
@@ -155,9 +160,14 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
     expect(second.draft).toBe(first.draft);
   });
 
-  it("copies the maximum Current Published snapshot without aliases", () => {
-    const v3Row = Object.freeze(publishedMilestone("lineage"));
-    const v3 = Object.freeze(version(3, Object.freeze([v3Row])));
+  it("clones only repeated and legacy Current Published occurrences", () => {
+    const publishedRows = Object.freeze([
+      Object.freeze(publishedMilestone("lineage", definitionA.id)),
+      Object.freeze(publishedMilestone("repeat-one", definitionB.id)),
+      Object.freeze(publishedMilestone("repeat-two", definitionB.id)),
+      Object.freeze(publishedMilestone("legacy", legacyDefinition.id)),
+    ]);
+    const v3 = Object.freeze(version(3, publishedRows));
     const v1 = Object.freeze(version(1, [publishedMilestone("old")]));
     const original = Object.freeze(schedule(Object.freeze([v3, v1])));
     const result = startScheduleWorkingDraft(original, context);
@@ -167,9 +177,11 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
     expect(result.schedule).not.toBe(original);
     expect(result.schedule.publishedVersions).toBe(original.publishedVersions);
     expect(result.draft.milestones).not.toBe(v3.milestones);
-    expect(result.draft.milestones[0]).not.toBe(v3Row);
-    expect(result.draft.milestones[0]).toEqual(v3Row);
-    expect(result.draft.milestones[0]?.milestoneId).toBe(v3Row.milestoneId);
+    expect(result.draft.milestones.slice(0, 4)).toEqual(publishedRows);
+    for (const [index, publishedRow] of publishedRows.entries()) {
+      expect(result.draft.milestones[index]).not.toBe(publishedRow);
+    }
+    expect(result.draft.milestones).toHaveLength(4);
     expect(original.workingDraft).toBeNull();
   });
 

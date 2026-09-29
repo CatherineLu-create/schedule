@@ -53,6 +53,7 @@ import {
   type DuplicateProjectDecisionRequest,
 } from "./application/workflow/workflowInterpretation";
 import {
+  activeMilestoneDefinitions,
   milestoneDefinitions,
   statusCatalog,
   teamFunctionCatalog,
@@ -291,7 +292,10 @@ export function App({
       setScheduleFeedback(owner.issues.map(({ message }) => message));
       return;
     }
-    const result = startScheduleWorkingDraft(owner.schedule, canonicalScheduleCommandContext);
+    const result = startScheduleWorkingDraft(
+      owner.schedule,
+      canonicalScheduleCommandContext,
+    );
     if (!result.ok) {
       setScheduleFeedback(scheduleFailureMessages(result));
       return;
@@ -414,7 +418,7 @@ export function App({
       : {
           draftRead: selectedDraftRead,
           feedback: scheduleFeedback,
-          milestoneDefinitions,
+          milestoneDefinitions: activeMilestoneDefinitions,
           nextVersionLabel,
           officialRead: selectedScheduleRead,
           onAddMilestone: addScheduleDraftMilestone,

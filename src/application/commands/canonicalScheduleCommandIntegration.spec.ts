@@ -78,15 +78,19 @@ it("applies Start, Update, Add, and Remove through exact replacement", () => {
     projects: [devProject003, devProject001],
     schedules: [publishedScheduleForIntegration, unrelated],
   };
-  const started = startScheduleWorkingDraft(publishedScheduleForIntegration, context);
+  const started = startScheduleWorkingDraft(
+    publishedScheduleForIntegration,
+    context,
+  );
   expect(started.ok).toBe(true);
   if (!started.ok) throw new Error("Expected Start success");
   const afterStart = applySuccessfulReplacement(initial, devProject003.id, started);
   const officialHistory = publishedScheduleForIntegration.publishedVersions;
   const currentOfficialVersion = officialHistory[0]!;
   const currentOfficialMilestone = currentOfficialVersion.milestones[0]!;
-  expect(afterStart.schedules[0]?.workingDraft?.milestones)
+  expect(afterStart.schedules[0]?.workingDraft?.milestones.slice(0, 1))
     .toEqual(publishedScheduleForIntegration.publishedVersions[0]!.milestones);
+  expect(afterStart.schedules[0]?.workingDraft?.milestones).toHaveLength(1);
   expect(afterStart.schedules[0]?.workingDraft?.milestones)
     .not.toBe(publishedScheduleForIntegration.publishedVersions[0]!.milestones);
   expect(afterStart.schedules[1]).toBe(unrelated);
@@ -145,7 +149,10 @@ it("applies Publish as one appended-version-plus-null-Draft state", () => {
     projects: [devProject003],
     schedules: [publishedScheduleForIntegration],
   };
-  const started = startScheduleWorkingDraft(publishedScheduleForIntegration, context);
+  const started = startScheduleWorkingDraft(
+    publishedScheduleForIntegration,
+    context,
+  );
   expect(started.ok).toBe(true);
   if (!started.ok) throw new Error("Expected Start success");
   const withDraft = applySuccessfulReplacement(initial, devProject003.id, started);
@@ -178,7 +185,10 @@ it("applies Publish as one appended-version-plus-null-Draft state", () => {
 });
 
 it("applies Cancel once and leaves Published history untouched", () => {
-  const started = startScheduleWorkingDraft(publishedScheduleForIntegration, context);
+  const started = startScheduleWorkingDraft(
+    publishedScheduleForIntegration,
+    context,
+  );
   expect(started.ok).toBe(true);
   if (!started.ok) throw new Error("Expected Start success");
   const current: PrototypeState = {
@@ -223,7 +233,7 @@ it("publishes an empty no-Published Draft as v1 through one replacement", () => 
     versionNumber: 1,
     versionNote: null,
     publishedAt: "first-publication",
-    milestones: [],
+    milestones: started.draft.milestones,
   });
   expect(next.schedules[0]!.workingDraft).toBeNull();
 });
@@ -237,7 +247,10 @@ it("omits reducer work for existing Start and failed commands", () => {
     projects: [devProject003],
     schedules: [withDraft],
   };
-  const existing = startScheduleWorkingDraft(withDraft, context);
+  const existing = startScheduleWorkingDraft(
+    withDraft,
+    context,
+  );
   expect(existing.ok).toBe(true);
   if (!existing.ok) throw new Error("Expected existing Draft");
   expect(existing.status).toBe("existing");

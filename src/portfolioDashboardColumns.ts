@@ -48,27 +48,22 @@ export const portfolioScheduleColumnMappings = [
   scheduleMapping("schedule:me-portion:tooling-start-t1", "me-portion", "ME Portion", "Tooling start + T1", "milestone-me-portion-tooling-start-t1"),
   scheduleMapping("schedule:me-portion:me-material-c", "me-portion", "ME Portion", "ME material for C", "milestone-me-portion-me-material-c"),
   scheduleMapping("schedule:thermal:thermal-module-c", "thermal", "Thermal", "Thermal module for C", "milestone-thermal-module-c"),
-  scheduleMapping("schedule:a1-stage:a-g-o", "a1-stage", "A", "A G/O", "milestone-a1-a-g-o"),
-  scheduleMapping("schedule:a1-stage:a-smt", "a1-stage", "A", "A-SMT", "milestone-a1-a-smt"),
-  scheduleMapping("schedule:a1-stage:a-test", "a1-stage", "A", "A-Test", "milestone-a1-a-test"),
-  scheduleMapping("schedule:a-a2-stage:a-g-o", "a2-stage", "A2", "A G/O", "milestone-a-a2-a-g-o"),
-  scheduleMapping("schedule:a-a2-stage:a-smt", "a2-stage", "A2", "A-SMT", "milestone-a-a2-a-smt"),
-  scheduleMapping("schedule:a-a2-stage:a-test", "a2-stage", "A2", "A-Test", "milestone-a-a2-a-test"),
-  scheduleMapping("schedule:a-a2-stage:a-close", "a2-stage", "A2", "A-Close", "milestone-a-a2-a-close"),
-  scheduleMapping("schedule:c1-stage:c-g-o", "c1-stage", "C1-stage", "C G/O", "milestone-c1-c-g-o"),
-  scheduleMapping("schedule:c1-stage:c-smt", "c1-stage", "C1-stage", "C-SMT", "milestone-c1-c-smt"),
-  scheduleMapping("schedule:c1-stage:c-pre-build", "c1-stage", "C1-stage", "C Pre-build", "milestone-c1-c-pre-build"),
-  scheduleMapping("schedule:c1-stage:c-main-build", "c1-stage", "C1-stage", "C-Main Build", "milestone-c1-c-main-build"),
-  scheduleMapping("schedule:c1-stage:c-test", "c1-stage", "C1-stage", "C-Test", "milestone-c1-c-test"),
-  scheduleMapping("schedule:c1-stage:c1-close", "c1-stage", "C1-stage", "C1-close", "milestone-c1-close"),
-  scheduleMapping("schedule:c2-stage:c-g-o", "c2-stage", "C2-stage", "C G/O", "milestone-c2-c-g-o"),
-  scheduleMapping("schedule:c2-stage:c-smt", "c2-stage", "C2-stage", "C-SMT", "milestone-c2-c-smt"),
-  scheduleMapping("schedule:c2-stage:c-pre-build", "c2-stage", "C2-stage", "C Pre-build", "milestone-c2-c-pre-build"),
-  scheduleMapping("schedule:c2-stage:c-main-build", "c2-stage", "C2-stage", "C-Main Build", "milestone-c2-c-main-build"),
-  scheduleMapping("schedule:c2-stage:c-test", "c2-stage", "C2-stage", "C-Test", "milestone-c2-c-test"),
-  scheduleMapping("schedule:c2-stage:bios-frozen", "c2-stage", "C2-stage", "BIOS frozen", "milestone-c2-bios-frozen"),
-  scheduleMapping("schedule:c2-stage:golden-run", "c2-stage", "C2-stage", "Golden Run", "milestone-c2-golden-run"),
-  scheduleMapping("schedule:c2-stage:c-close", "c2-stage", "C2-stage", "C-close", "milestone-c2-c-close"),
+  scheduleMapping("schedule:a1-stage:a-g-o", "a1-stage", "A1", "A1 G/O", "milestone-a1-a-g-o"),
+  scheduleMapping("schedule:a1-stage:a-smt", "a1-stage", "A1", "A1 SMT", "milestone-a1-a-smt"),
+  scheduleMapping("schedule:a1-stage:a-test", "a1-stage", "A1", "A1 Test", "milestone-a1-a-test"),
+  scheduleMapping("schedule:a1-stage:a-close", "a1-stage", "A1", "A1 Close", "milestone-a1-a-close"),
+  scheduleMapping("schedule:c1-stage:c-g-o", "c1-stage", "C1-stage", "C1 G/O", "milestone-c1-c-g-o"),
+  scheduleMapping("schedule:c1-stage:c-smt", "c1-stage", "C1-stage", "C1 SMT", "milestone-c1-c-smt"),
+  scheduleMapping("schedule:c1-stage:c-pre-build", "c1-stage", "C1-stage", "C1 Pre-Build", "milestone-c1-c-pre-build"),
+  scheduleMapping("schedule:c1-stage:c-main-build", "c1-stage", "C1-stage", "C1 System Build", "milestone-c1-c-main-build"),
+  scheduleMapping("schedule:c1-stage:c-test", "c1-stage", "C1-stage", "C1 Test", "milestone-c1-c-test"),
+  scheduleMapping("schedule:c1-stage:c1-close", "c1-stage", "C1-stage", "C1 Close", "milestone-c1-close"),
+  scheduleMapping("schedule:c2-stage:c-g-o", "c2-stage", "C2-stage", "C2 G/O", "milestone-c2-c-g-o"),
+  scheduleMapping("schedule:c2-stage:c-smt", "c2-stage", "C2-stage", "C2 SMT", "milestone-c2-c-smt"),
+  scheduleMapping("schedule:c2-stage:c-pre-build", "c2-stage", "C2-stage", "C2 Pre-Build", "milestone-c2-c-pre-build"),
+  scheduleMapping("schedule:c2-stage:c-main-build", "c2-stage", "C2-stage", "C2 System Build", "milestone-c2-c-main-build"),
+  scheduleMapping("schedule:c2-stage:c-test", "c2-stage", "C2-stage", "C2 Test", "milestone-c2-c-test"),
+  scheduleMapping("schedule:c2-stage:c-close", "c2-stage", "C2-stage", "C2 Close", "milestone-c2-c-close"),
   scheduleMapping("schedule:ramp-stage:ramp-g-o", "ramp-stage", "RAMP-stage", "RAMP G/O", "milestone-ramp-g-o"),
   scheduleMapping("schedule:ramp-stage:me-signoff", "ramp-stage", "RAMP-stage", "ME signoff", "milestone-ramp-me-signoff"),
   scheduleMapping("schedule:ramp-stage:ramp-smt", "ramp-stage", "RAMP-stage", "RAMP SMT", "milestone-ramp-smt"),
@@ -150,46 +145,14 @@ export interface PortfolioVisibleSchema {
   readonly subgroups: readonly { key: string; label: string; domain: PortfolioColumnDomain; colSpan: number }[];
 }
 
-const a2DefinitionIds = new Set(
-  portfolioScheduleColumnMappings
-    .filter((mapping) => mapping.groupKey === "a2-stage")
-    .map((mapping) => mapping.milestoneDefinitionId),
-);
-
-function hasApplicableA2(rows: readonly PortfolioDashboardRow[]): boolean {
-  return rows.some((row) => row.schedule.kind === "published" && row.schedule.cells.some(
-    (cell) => a2DefinitionIds.has(cell.milestoneDefinitionId) &&
-      cell.occurrences.some((occurrence) => occurrence.applicability === "applicable"),
-  ));
-}
-
 export function getPortfolioVisibleSchema(
-  rows: readonly PortfolioDashboardRow[],
+  _rows: readonly PortfolioDashboardRow[],
 ): PortfolioVisibleSchema {
-  const scheduleMappings = hasApplicableA2(rows)
-    ? portfolioScheduleColumnMappings
-    : portfolioScheduleColumnMappings.filter((mapping) => mapping.groupKey !== "a2-stage");
-  const scheduleGroups = scheduleColumnGroups(scheduleMappings);
-  const teamColumnCount = portfolioTeamColumnGroups.reduce((count, group) => count + group.columns.length, 0);
-  const columns = [
-    ...portfolioProjectInfoColumns,
-    ...scheduleGroups.flatMap((group) => group.columns),
-    ...portfolioTeamColumnGroups.flatMap((group) => group.columns),
-  ];
-
   return {
-    columns,
-    domainGroups: [
-      { key: "project", label: "PROJECT INFORMATION", colSpan: portfolioProjectInfoColumns.length },
-      { key: "schedule", label: "SCHEDULE", colSpan: scheduleMappings.length },
-      { key: "team", label: "TEAM MEMBER", colSpan: teamColumnCount },
-    ],
-    scheduleMappings,
-    subgroups: [
-      { key: "core-fields", label: "Core fields", domain: "project", colSpan: portfolioProjectInfoColumns.length },
-      ...scheduleGroups.map((group) => ({ key: group.key, label: group.label, domain: "schedule" as const, colSpan: group.columns.length })),
-      ...portfolioTeamColumnGroups.map((group) => ({ key: group.key, label: group.label, domain: "team" as const, colSpan: group.columns.length })),
-    ],
+    columns: portfolioColumns,
+    domainGroups: portfolioDomainGroups,
+    scheduleMappings: portfolioScheduleColumnMappings,
+    subgroups: portfolioSubgroups,
   };
 }
 export function resizePortfolioColumnWidth(currentWidth: number, deltaX: number, minWidth: number): number {

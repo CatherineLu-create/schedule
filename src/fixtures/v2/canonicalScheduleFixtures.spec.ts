@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { startScheduleWorkingDraft } from "../../application/commands/canonicalScheduleCommands";
 import { milestoneDefinitions } from "../../config/v2/referenceData";
 import {
   validateCanonicalProjectSchedule,
@@ -72,5 +73,21 @@ describe("canonical Schedule fixtures", () => {
         validateCanonicalProjectSchedule(schedule, milestoneDefinitions),
       ).toEqual([]);
     }
+  });
+
+  it("keeps sparse Published fixtures unchanged while first Draft clones only Published rows", () => {
+    const originalPublished = devSchedule001.publishedVersions;
+    const originalMilestones = originalPublished[0]!.milestones;
+    const result = startScheduleWorkingDraft(devSchedule001, { milestoneDefinitions });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected fixture Draft creation");
+    expect(devSchedule001.publishedVersions).toBe(originalPublished);
+    expect(devSchedule001.publishedVersions[0]!.milestones).toBe(originalMilestones);
+    expect(devSchedule001.workingDraft).toBeNull();
+    expect(result.draft.milestones).toEqual(originalMilestones);
+    expect(result.draft.milestones).toHaveLength(4);
+    expect(result.draft.milestones.filter(({ milestoneDefinitionId }) =>
+      milestoneDefinitionId === "milestone-a1-a-g-o")).toHaveLength(1);
   });
 });

@@ -80,6 +80,7 @@ const milestoneTypeIds = {
   close: toMilestoneTypeId("type-close"),
   preBuild: toMilestoneTypeId("type-pre-build"),
   mainBuild: toMilestoneTypeId("type-main-build"),
+  systemBuild: toMilestoneTypeId("type-system-build"),
   biosFrozen: toMilestoneTypeId("type-bios-frozen"),
   goldenRun: toMilestoneTypeId("type-golden-run"),
   meSignoff: toMilestoneTypeId("type-me-signoff"),
@@ -350,6 +351,13 @@ export const milestoneTypeCatalog: readonly CatalogItem<MilestoneTypeId>[] = [
     reviewStatus: "reviewed",
   },
   {
+    id: milestoneTypeIds.systemBuild,
+    displayName: "System Build",
+    aliases: [],
+    active: true,
+    reviewStatus: "reviewed",
+  },
+  {
     id: milestoneTypeIds.biosFrozen,
     displayName: "BIOS Frozen",
     aliases: [],
@@ -386,12 +394,14 @@ export const milestoneTypeCatalog: readonly CatalogItem<MilestoneTypeId>[] = [
   },
 ];
 
-function portfolioMilestone(
+function milestoneDefinition(
   id: MilestoneDefinitionId,
   name: string,
   stageGroupId: StageGroupId,
   milestoneTypeId: MilestoneTypeId,
   displayOrder: number,
+  active: boolean,
+  showInPortfolio: boolean,
 ): MilestoneDefinition {
   return {
     id,
@@ -399,251 +409,192 @@ function portfolioMilestone(
     stageGroupId,
     milestoneTypeId,
     displayOrder,
-    active: true,
+    active,
     reviewStatus: "reviewed",
     aliases: [],
-    showInPortfolio: true,
+    showInPortfolio,
   };
 }
 
+const activePortfolioMilestone = (
+  id: MilestoneDefinitionId,
+  name: string,
+  stageGroupId: StageGroupId,
+  milestoneTypeId: MilestoneTypeId,
+  displayOrder: number,
+): MilestoneDefinition =>
+  milestoneDefinition(id, name, stageGroupId, milestoneTypeId, displayOrder, true, true);
+
+const compatibilityMilestone = (
+  id: MilestoneDefinitionId,
+  name: string,
+  stageGroupId: StageGroupId,
+  milestoneTypeId: MilestoneTypeId,
+  displayOrder: number,
+): MilestoneDefinition =>
+  milestoneDefinition(id, name, stageGroupId, milestoneTypeId, displayOrder, false, false);
+
 export const portfolioMilestoneDefinitions: readonly MilestoneDefinition[] = [
-  portfolioMilestone(
-    toMilestoneDefinitionId("milestone-design-kickoff"),
-    "Kickoff",
-    stageGroupIds.design,
-    milestoneTypeIds.kickoff,
-    10,
-  ),
-  portfolioMilestone(
-    toMilestoneDefinitionId("milestone-design-id-fix"),
-    "ID fix",
-    stageGroupIds.design,
-    milestoneTypeIds.idFix,
-    20,
-  ),
-  portfolioMilestone(
-    toMilestoneDefinitionId("milestone-me-portion-me-drawing"),
-    "ME drawing",
-    stageGroupIds.mePortion,
-    milestoneTypeIds.meDrawing,
-    30,
-  ),
-  portfolioMilestone(
-    toMilestoneDefinitionId("milestone-me-portion-mockup-dfm"),
-    "Mockup & DFM",
-    stageGroupIds.mePortion,
-    milestoneTypeIds.mockupDfm,
-    40,
-  ),
-  portfolioMilestone(
-    toMilestoneDefinitionId("milestone-me-portion-tooling-start-t1"),
-    "Tooling start + T1",
-    stageGroupIds.mePortion,
-    milestoneTypeIds.tooling,
-    50,
-  ),
-  portfolioMilestone(
-    toMilestoneDefinitionId("milestone-me-portion-me-material-c"),
-    "ME material for C",
-    stageGroupIds.mePortion,
-    milestoneTypeIds.meMaterial,
-    60,
-  ),
-  portfolioMilestone(
-    toMilestoneDefinitionId("milestone-thermal-module-c"),
-    "Thermal module for C",
-    stageGroupIds.thermal,
-    milestoneTypeIds.thermalModule,
-    70,
-  ),
-  portfolioMilestone(
+  activePortfolioMilestone(toMilestoneDefinitionId("milestone-design-kickoff"), "Kickoff", stageGroupIds.design, milestoneTypeIds.kickoff, 10),
+  activePortfolioMilestone(toMilestoneDefinitionId("milestone-design-id-fix"), "ID fix", stageGroupIds.design, milestoneTypeIds.idFix, 20),
+  activePortfolioMilestone(toMilestoneDefinitionId("milestone-me-portion-me-drawing"), "ME drawing", stageGroupIds.mePortion, milestoneTypeIds.meDrawing, 30),
+  activePortfolioMilestone(toMilestoneDefinitionId("milestone-me-portion-mockup-dfm"), "Mockup & DFM", stageGroupIds.mePortion, milestoneTypeIds.mockupDfm, 40),
+  activePortfolioMilestone(toMilestoneDefinitionId("milestone-me-portion-tooling-start-t1"), "Tooling start + T1", stageGroupIds.mePortion, milestoneTypeIds.tooling, 50),
+  activePortfolioMilestone(toMilestoneDefinitionId("milestone-me-portion-me-material-c"), "ME material for C", stageGroupIds.mePortion, milestoneTypeIds.meMaterial, 60),
+  activePortfolioMilestone(toMilestoneDefinitionId("milestone-thermal-module-c"), "Thermal module for C", stageGroupIds.thermal, milestoneTypeIds.thermalModule, 70),
+  activePortfolioMilestone(
     toMilestoneDefinitionId("milestone-a1-a-g-o"),
-    "A G/O",
+    "A1 G/O",
     stageGroupIds.a1,
     milestoneTypeIds.go,
     80,
   ),
-  portfolioMilestone(
+  activePortfolioMilestone(
     toMilestoneDefinitionId("milestone-a1-a-smt"),
-    "A-SMT",
+    "A1 SMT",
     stageGroupIds.a1,
     milestoneTypeIds.smt,
     90,
   ),
-  portfolioMilestone(
+  activePortfolioMilestone(
     toMilestoneDefinitionId("milestone-a1-a-test"),
-    "A-Test",
+    "A1 Test",
     stageGroupIds.a1,
     milestoneTypeIds.test,
     100,
   ),
-  portfolioMilestone(
-    toMilestoneDefinitionId("milestone-a-a2-a-g-o"),
-    "A G/O",
-    stageGroupIds.aA2,
-    milestoneTypeIds.go,
+  activePortfolioMilestone(
+    toMilestoneDefinitionId("milestone-a1-a-close"),
+    "A1 Close",
+    stageGroupIds.a1,
+    milestoneTypeIds.close,
     110,
   ),
-  portfolioMilestone(
-    toMilestoneDefinitionId("milestone-a-a2-a-smt"),
-    "A-SMT",
-    stageGroupIds.aA2,
-    milestoneTypeIds.smt,
+  activePortfolioMilestone(
+    toMilestoneDefinitionId("milestone-c1-c-g-o"),
+    "C1 G/O",
+    stageGroupIds.c1,
+    milestoneTypeIds.go,
     120,
   ),
-  portfolioMilestone(
-    toMilestoneDefinitionId("milestone-a-a2-a-test"),
-    "A-Test",
-    stageGroupIds.aA2,
-    milestoneTypeIds.test,
+  activePortfolioMilestone(
+    toMilestoneDefinitionId("milestone-c1-c-smt"),
+    "C1 SMT",
+    stageGroupIds.c1,
+    milestoneTypeIds.smt,
     130,
   ),
-  portfolioMilestone(
-    toMilestoneDefinitionId("milestone-a-a2-a-close"),
-    "A-Close",
-    stageGroupIds.aA2,
-    milestoneTypeIds.close,
+  activePortfolioMilestone(
+    toMilestoneDefinitionId("milestone-c1-c-pre-build"),
+    "C1 Pre-Build",
+    stageGroupIds.c1,
+    milestoneTypeIds.preBuild,
     140,
   ),
-  portfolioMilestone(
-    toMilestoneDefinitionId("milestone-c1-c-g-o"),
-    "C G/O",
+  activePortfolioMilestone(
+    toMilestoneDefinitionId("milestone-c1-c-main-build"),
+    "C1 System Build",
     stageGroupIds.c1,
-    milestoneTypeIds.go,
+    milestoneTypeIds.systemBuild,
     150,
   ),
-  portfolioMilestone(
-    toMilestoneDefinitionId("milestone-c1-c-smt"),
-    "C-SMT",
+  activePortfolioMilestone(
+    toMilestoneDefinitionId("milestone-c1-c-test"),
+    "C1 Test",
     stageGroupIds.c1,
-    milestoneTypeIds.smt,
+    milestoneTypeIds.test,
     160,
   ),
-  portfolioMilestone(
-    toMilestoneDefinitionId("milestone-c1-c-pre-build"),
-    "C Pre-build",
+  activePortfolioMilestone(
+    toMilestoneDefinitionId("milestone-c1-close"),
+    "C1 Close",
     stageGroupIds.c1,
-    milestoneTypeIds.preBuild,
+    milestoneTypeIds.close,
     170,
   ),
-  portfolioMilestone(
-    toMilestoneDefinitionId("milestone-c1-c-main-build"),
-    "C-Main Build",
-    stageGroupIds.c1,
-    milestoneTypeIds.mainBuild,
-    180,
-  ),
-  portfolioMilestone(
-    toMilestoneDefinitionId("milestone-c1-c-test"),
-    "C-Test",
-    stageGroupIds.c1,
-    milestoneTypeIds.test,
-    190,
-  ),
-  portfolioMilestone(
-    toMilestoneDefinitionId("milestone-c1-close"),
-    "C1-close",
-    stageGroupIds.c1,
-    milestoneTypeIds.close,
-    200,
-  ),
-  portfolioMilestone(
+  activePortfolioMilestone(
     toMilestoneDefinitionId("milestone-c2-c-g-o"),
-    "C G/O",
+    "C2 G/O",
     stageGroupIds.c2,
     milestoneTypeIds.go,
-    210,
+    180,
   ),
-  portfolioMilestone(
+  activePortfolioMilestone(
     toMilestoneDefinitionId("milestone-c2-c-smt"),
-    "C-SMT",
+    "C2 SMT",
     stageGroupIds.c2,
     milestoneTypeIds.smt,
-    220,
+    190,
   ),
-  portfolioMilestone(
+  activePortfolioMilestone(
     toMilestoneDefinitionId("milestone-c2-c-pre-build"),
-    "C Pre-build",
+    "C2 Pre-Build",
     stageGroupIds.c2,
     milestoneTypeIds.preBuild,
-    230,
+    200,
   ),
-  portfolioMilestone(
+  activePortfolioMilestone(
     toMilestoneDefinitionId("milestone-c2-c-main-build"),
-    "C-Main Build",
+    "C2 System Build",
     stageGroupIds.c2,
-    milestoneTypeIds.mainBuild,
-    240,
+    milestoneTypeIds.systemBuild,
+    210,
   ),
-  portfolioMilestone(
+  activePortfolioMilestone(
     toMilestoneDefinitionId("milestone-c2-c-test"),
-    "C-Test",
+    "C2 Test",
     stageGroupIds.c2,
     milestoneTypeIds.test,
-    250,
+    220,
   ),
-  portfolioMilestone(
-    toMilestoneDefinitionId("milestone-c2-bios-frozen"),
-    "BIOS frozen",
-    stageGroupIds.c2,
-    milestoneTypeIds.biosFrozen,
-    260,
-  ),
-  portfolioMilestone(
-    toMilestoneDefinitionId("milestone-c2-golden-run"),
-    "Golden Run",
-    stageGroupIds.c2,
-    milestoneTypeIds.goldenRun,
-    270,
-  ),
-  portfolioMilestone(
+  activePortfolioMilestone(
     toMilestoneDefinitionId("milestone-c2-c-close"),
-    "C-close",
+    "C2 Close",
     stageGroupIds.c2,
     milestoneTypeIds.close,
-    280,
+    230,
   ),
-  portfolioMilestone(
+  activePortfolioMilestone(
     toMilestoneDefinitionId("milestone-ramp-g-o"),
     "RAMP G/O",
     stageGroupIds.ramp,
     milestoneTypeIds.go,
-    290,
+    240,
   ),
-  portfolioMilestone(
+  activePortfolioMilestone(
     toMilestoneDefinitionId("milestone-ramp-me-signoff"),
     "ME signoff",
     stageGroupIds.ramp,
     milestoneTypeIds.meSignoff,
-    300,
+    250,
   ),
-  portfolioMilestone(
+  activePortfolioMilestone(
     toMilestoneDefinitionId("milestone-ramp-smt"),
     "RAMP SMT",
     stageGroupIds.ramp,
     milestoneTypeIds.smt,
-    310,
+    260,
   ),
-  portfolioMilestone(
+  activePortfolioMilestone(
     toMilestoneDefinitionId("milestone-ramp-pre-build"),
     "RAMP Pre-build",
     stageGroupIds.ramp,
     milestoneTypeIds.preBuild,
-    320,
+    270,
   ),
-  portfolioMilestone(
+  activePortfolioMilestone(
     toMilestoneDefinitionId("milestone-ramp-main-build"),
     "RAMP Main build",
     stageGroupIds.ramp,
     milestoneTypeIds.mainBuild,
-    330,
+    280,
   ),
-  portfolioMilestone(
+  activePortfolioMilestone(
     toMilestoneDefinitionId("milestone-ramp-fcs"),
     "FCS",
     stageGroupIds.ramp,
     milestoneTypeIds.fcs,
-    340,
+    290,
   ),
 ];
 
@@ -652,14 +603,28 @@ export const mdrrMilestoneDefinition: MilestoneDefinition = {
   name: "MDRR",
   stageGroupId: stageGroupIds.mdrr,
   milestoneTypeId: milestoneTypeIds.mdrr,
-  displayOrder: 350,
+  displayOrder: 300,
   active: true,
   reviewStatus: "reviewed",
   aliases: [],
   showInPortfolio: false,
 };
 
-export const milestoneDefinitions: readonly MilestoneDefinition[] = [
+export const activeMilestoneDefinitions: readonly MilestoneDefinition[] = [
   ...portfolioMilestoneDefinitions,
   mdrrMilestoneDefinition,
+];
+
+export const compatibilityOnlyMilestoneDefinitions: readonly MilestoneDefinition[] = [
+  compatibilityMilestone(toMilestoneDefinitionId("milestone-a-a2-a-g-o"), "A G/O", stageGroupIds.aA2, milestoneTypeIds.go, 310),
+  compatibilityMilestone(toMilestoneDefinitionId("milestone-a-a2-a-smt"), "A-SMT", stageGroupIds.aA2, milestoneTypeIds.smt, 320),
+  compatibilityMilestone(toMilestoneDefinitionId("milestone-a-a2-a-test"), "A-Test", stageGroupIds.aA2, milestoneTypeIds.test, 330),
+  compatibilityMilestone(toMilestoneDefinitionId("milestone-a-a2-a-close"), "A-Close", stageGroupIds.aA2, milestoneTypeIds.close, 340),
+  compatibilityMilestone(toMilestoneDefinitionId("milestone-c2-bios-frozen"), "BIOS frozen", stageGroupIds.c2, milestoneTypeIds.biosFrozen, 350),
+  compatibilityMilestone(toMilestoneDefinitionId("milestone-c2-golden-run"), "Golden Run", stageGroupIds.c2, milestoneTypeIds.goldenRun, 360),
+];
+
+export const milestoneDefinitions: readonly MilestoneDefinition[] = [
+  ...activeMilestoneDefinitions,
+  ...compatibilityOnlyMilestoneDefinitions,
 ];
