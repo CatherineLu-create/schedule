@@ -9,9 +9,10 @@ import type { CanonicalProjectSchedule, CanonicalPublishedScheduleMilestone } fr
 import type { ProjectRoleAssignment } from "../../domain/team/team";
 import { toScheduleVersionNumber, type ScheduleVersionNumber } from "../../domain/schedule/schedule";
 import { parseDateOnly, type DateOnly } from "../../domain/shared/dateOnly";
-import { toMilestoneDefinitionId, toMilestoneId, toPersonAssignmentId, toProjectId } from "../../domain/shared/ids";
+import { toCatalogItemId, toMilestoneDefinitionId, toMilestoneId, toPersonAssignmentId, toProjectId } from "../../domain/shared/ids";
 import { canonicalProjectFixtures, devProject002, devProject003 } from "../../fixtures/v2/canonicalProjectFixtures";
 import { canonicalScheduleFixtures } from "../../fixtures/v2/canonicalScheduleFixtures";
+import { createInitialSelfServiceReferenceCatalogs } from "../reference-data/selfServiceCatalogs";
 import type { PrototypeState } from "../state/prototypeState";
 import { selectPortfolioDashboardRows } from "./portfolioDashboardRows";
 
@@ -53,6 +54,36 @@ function publishedSchedule(
 }
 
 describe("canonical Portfolio Dashboard read projection", () => {
+  it("passes supplied runtime catalogs through the Portfolio Project projection", () => {
+    const runtimeProductLineId = toCatalogItemId("portfolio-runtime-product-line");
+    const catalogs = createInitialSelfServiceReferenceCatalogs();
+    const runtimeCatalogs = {
+      ...catalogs,
+      productLine: [...catalogs.productLine, {
+        id: runtimeProductLineId,
+        displayName: "Portfolio Runtime Line",
+        aliases: [],
+        active: true,
+        reviewStatus: "reviewed" as const,
+      }],
+    };
+    const runtimeProject = {
+      ...devProject002,
+      master: {
+        ...devProject002.master,
+        basicInformation: {
+          ...devProject002.master.basicInformation,
+          productLine: runtimeProductLineId,
+        },
+      },
+    };
+
+    expect(selectPortfolioDashboardRows(
+      fixtureState([runtimeProject], [canonicalScheduleFixtures[1]!]),
+      runtimeCatalogs,
+    )[0]?.project.productLine).toBe("Portfolio Runtime Line");
+  });
+
   it("keeps Current Published Portfolio cells unchanged beside a malformed Draft", () => {
     const base = publishedSchedule(devProject002.id, [
       {

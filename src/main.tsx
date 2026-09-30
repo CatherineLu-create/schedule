@@ -27,6 +27,12 @@ import {
 } from "./application/commands/canonicalScheduleCommands";
 import { prototypeReducer } from "./application/state/prototypeReducer";
 import type { PrototypeState } from "./application/state/prototypeState";
+import {
+  addSelfServiceCatalogItem,
+  createInitialSelfServiceReferenceCatalogs,
+  type SelfServiceCatalogKey,
+  type SelfServiceReferenceCatalogs,
+} from "./application/reference-data/selfServiceCatalogs";
 import { saveProjectTeamForState, type ProjectMismatchResult } from "./application/commands/teamSaveState";
 import type { SaveProjectTeamResult } from "./application/commands/teamCommands";
 import type { TeamEditCandidate } from "./application/teamImport/teamCandidate";
@@ -70,6 +76,7 @@ import {
   toPersonAssignmentId,
   toProjectId,
   toTeamFunctionId,
+  type CatalogItemId,
   type MilestoneDefinitionId,
   type MilestoneId,
   type ProjectId,
@@ -80,11 +87,7 @@ import { createUserTrialDemoSeed } from "./fixtures/userTrialDemoSeed";
 import { canonicalProjectFixtures } from "./fixtures/v2/canonicalProjectFixtures";
 import { canonicalScheduleFixtures } from "./fixtures/v2/canonicalScheduleFixtures";
 import {
-  cpuReferenceFixtures,
   customerReferenceFixtures,
-  gpuReferenceFixtures,
-  panelSizeReferenceFixtures,
-  productLineReferenceFixtures,
 } from "./fixtures/v2/referenceFixtures";
 import { devTeamTemplateV2 } from "./fixtures/v2/teamTemplateFixtures";
 import {
@@ -96,7 +99,12 @@ import {
   type ProjectMasterFormErrors,
   type ProjectMasterForm,
 } from "./projectMasterForm";
-import { ProjectCatalogSelect, ProjectFieldInput } from "./projectMasterControls";
+import {
+  ProjectCatalogSelect,
+  ProjectFieldInput,
+  ProjectSelfServiceCatalogSelect,
+  type ProjectSelfServiceCatalogAddResult,
+} from "./projectMasterControls";
 import { ProjectMasterDetail } from "./projectMasterDetail";
 import { ScheduleWorkspace, type ScheduleWorkspaceProps } from "./scheduleWorkspace";
 import { TeamMemberWorkspace, type TeamMemberWorkspaceProps } from "./teamMemberWorkspace";
@@ -188,12 +196,14 @@ function exportDashboardProjectListToExcel(projects: readonly DashboardProjectRo
 }
 
 export interface AppProps {
+  readonly createCatalogItemId?: () => CatalogItemId;
   readonly initialState?: PrototypeState;
   readonly initialSelectedProjectId?: ProjectId | null;
   readonly referenceDate?: DateOnly;
 }
 
 export function App({
+  createCatalogItemId = () => toCatalogItemId(globalThis.crypto.randomUUID()),
   initialState = initialPrototypeState,
   initialSelectedProjectId = null,
   referenceDate,
@@ -202,6 +212,8 @@ export function App({
     initialSelectedProjectId === null ? "dashboard" : "workspace",
   );
   const [state, dispatch] = React.useReducer(prototypeReducer, initialState);
+  const [selfServiceCatalogs, setSelfServiceCatalogs] =
+    React.useState<SelfServiceReferenceCatalogs>(createInitialSelfServiceReferenceCatalogs);
   const [dashboardReferenceDate] = React.useState<DateOnly>(
     () => referenceDate ?? toLocalDateOnly(new Date()),
   );
@@ -226,14 +238,16 @@ export function App({
 
   const selectedCanonicalProject =
     selectedProjectId === null ? null : getProjectById(state, selectedProjectId);
-  const dashboardRows = selectDashboardProjectRows(state);
-  const portfolioDashboardRows = selectPortfolioDashboardRows(state);
+  const dashboardRows = selectDashboardProjectRows(state, selfServiceCatalogs);
+  const portfolioDashboardRows = selectPortfolioDashboardRows(state, selfServiceCatalogs);
   const dashboardAttention = selectDashboardAttention(
     state,
     dashboardReferenceDate,
   );
   const selectedDashboardRow =
-    selectedProjectId === null ? null : selectDashboardProjectRow(state, selectedProjectId);
+    selectedProjectId === null
+      ? null
+      : selectDashboardProjectRow(state, selectedProjectId, selfServiceCatalogs);
   const selectedScheduleRead =
     selectedProjectId === null
       ? null
@@ -248,6 +262,21 @@ export function App({
     ? null
     : selectProjectLeverageDisplay(state, selectedProjectId);
   const projectReferenceOptions = selectProjectReferenceOptions(state);
+
+  const addSelfServiceOption = (
+    key: SelfServiceCatalogKey,
+    label: string,
+  ): ProjectSelfServiceCatalogAddResult => {
+    const result = addSelfServiceCatalogItem(
+      selfServiceCatalogs,
+      key,
+      label,
+      createCatalogItemId,
+    );
+    if (!result.ok) return { ok: false, message: result.message };
+    setSelfServiceCatalogs(result.catalogs);
+    return { ok: true, id: result.item.id };
+  };
 
   const saveTeam = (
     projectId: ProjectId,
@@ -588,7 +617,7 @@ export function App({
     : pendingDuplicateCreate.decision.matchingProjectIds
         .map((projectId) => getProjectById(state, projectId))
         .filter((project): project is Project => project !== null)
-        .map((project) => selectDashboardProjectRow(state, project.id))
+        .map((project) => selectDashboardProjectRow(state, project.id, selfServiceCatalogs))
         .filter((row): row is DashboardProjectRow => row !== null);
   const renderWorkspace =
     page === "workspace" &&
@@ -647,9 +676,11 @@ export function App({
               setEditForm(nextForm);
             }}
             onSave={saveEdit}
+            onAddCatalogOption={addSelfServiceOption}
             project={selectedCanonicalProject}
             projectReferenceOptions={projectReferenceOptions}
             row={selectedDashboardRow}
+            selfServiceCatalogs={selfServiceCatalogs}
           />
         ) : (
           <ProjectMasterDetail
@@ -674,6 +705,8 @@ export function App({
             onCancel={closeCreate}
             onChange={setCreateForm}
             onSave={saveCreate}
+            onAddCatalogOption={addSelfServiceOption}
+            selfServiceCatalogs={selfServiceCatalogs}
             value={createForm}
           />
         ) : (
@@ -710,8 +743,13 @@ type CreateProjectDialogProps = {
   readonly feedback: string | null;
   readonly issues: readonly ValidationIssue[];
   readonly onCancel: () => void;
+  readonly onAddCatalogOption: (
+    key: SelfServiceCatalogKey,
+    label: string,
+  ) => ProjectSelfServiceCatalogAddResult;
   readonly onChange: (form: ProjectMasterForm) => void;
   readonly onSave: () => void;
+  readonly selfServiceCatalogs: SelfServiceReferenceCatalogs;
   readonly value: ProjectMasterForm;
 };
 
@@ -720,9 +758,11 @@ function CreateProjectDialog(props: CreateProjectDialogProps) {
   fieldErrors,
   feedback,
   issues,
+  onAddCatalogOption,
   onCancel,
   onChange,
   onSave,
+  selfServiceCatalogs,
   value,
   } = props;
   const updateForm = <TKey extends keyof ProjectMasterForm>(
@@ -759,14 +799,14 @@ function CreateProjectDialog(props: CreateProjectDialogProps) {
             <legend className="px-1 text-sm font-semibold">Project Classification</legend>
             <ProjectFieldInput error={fieldErrors.year} label="Year" value={value.year} onChange={(nextValue) => updateForm("year", nextValue)} />
             <ProjectCatalogSelect emptyLabel="Select Customer" label="Customer" options={customerReferenceFixtures} value={value.customerId} onChange={(nextValue) => updateForm("customerId", nextValue)} />
-            <ProjectCatalogSelect error={fieldErrors.productLine} emptyLabel="Select Product Line" label="Product Line" options={productLineReferenceFixtures} value={value.productLineId} onChange={(nextValue) => updateForm("productLineId", nextValue)} />
+            <ProjectSelfServiceCatalogSelect error={fieldErrors.productLine} emptyLabel="Select Product Line" label="Product Line" options={selfServiceCatalogs.productLine} value={value.productLineId} onAddOption={(label) => onAddCatalogOption("productLine", label)} onChange={(nextValue) => updateForm("productLineId", nextValue)} />
           </fieldset>
 
           <fieldset className="grid gap-3 rounded-md border border-slate-200 p-4">
             <legend className="px-1 text-sm font-semibold">Hardware</legend>
-            <ProjectCatalogSelect emptyLabel="Select Panel Size" label="Panel Size" options={panelSizeReferenceFixtures} value={value.panelSizeId} onChange={(nextValue) => updateForm("panelSizeId", nextValue)} />
-            <ProjectCatalogSelect emptyLabel="Select CPU" label="CPU" options={cpuReferenceFixtures} value={value.cpuId} onChange={(nextValue) => updateForm("cpuId", nextValue)} />
-            <ProjectCatalogSelect emptyLabel="Select GPU" label="GPU" options={gpuReferenceFixtures} value={value.gpuId} onChange={(nextValue) => updateForm("gpuId", nextValue)} />
+            <ProjectSelfServiceCatalogSelect emptyLabel="Select Panel Size" label="Panel Size" options={selfServiceCatalogs.panelSize} value={value.panelSizeId} onAddOption={(label) => onAddCatalogOption("panelSize", label)} onChange={(nextValue) => updateForm("panelSizeId", nextValue)} />
+            <ProjectSelfServiceCatalogSelect emptyLabel="Select CPU" label="CPU" options={selfServiceCatalogs.cpu} value={value.cpuId} onAddOption={(label) => onAddCatalogOption("cpu", label)} onChange={(nextValue) => updateForm("cpuId", nextValue)} />
+            <ProjectSelfServiceCatalogSelect emptyLabel="Select GPU" label="GPU" options={selfServiceCatalogs.gpu} value={value.gpuId} onAddOption={(label) => onAddCatalogOption("gpu", label)} onChange={(nextValue) => updateForm("gpuId", nextValue)} />
           </fieldset>
 
           <fieldset className="grid gap-3 rounded-md border border-slate-200 p-4">

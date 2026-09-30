@@ -148,6 +148,18 @@ function fillCreateIdentity(
   }
 }
 
+function addSelfServiceOption(
+  container: HTMLElement,
+  field: "Product Line" | "Panel Size" | "CPU" | "GPU",
+  displayName: string,
+): void {
+  fireEvent.click(within(container).getByRole("button", { name: `Add new ${field}` }));
+  fireEvent.change(within(container).getByRole("textbox", { name: `New ${field}` }), {
+    target: { value: displayName },
+  });
+  fireEvent.click(within(container).getByRole("button", { name: `Add ${field} option` }));
+}
+
 function projectHeader(): HTMLElement {
   return screen.getByRole("region", { name: "Project Header" });
 }
@@ -1665,6 +1677,137 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(within(dialog).getByText("STN Project Name is required.")).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Create Project" })).toBeInTheDocument();
     expect(dashboardRows()).toHaveLength(5);
+  });
+
+  it("keeps a Create-added option after Project Cancel, shares it with Edit, and resets it on remount", () => {
+    const runtimeProductLineId = toCatalogItemId("runtime-shared-product-line");
+    const runtimePanelSizeId = toCatalogItemId("runtime-shared-panel-size");
+    const createCatalogItemId = vi.fn()
+      .mockReturnValueOnce(runtimeProductLineId)
+      .mockReturnValueOnce(runtimePanelSizeId);
+    const first = render(
+      <App createCatalogItemId={createCatalogItemId} />,
+    );
+    let dialog = openCreateDialog();
+
+    expect(within(dialog).getAllByRole("button", { name: /^Add new / }).map(
+      (button) => button.getAttribute("aria-label"),
+    )).toEqual([
+      "Add new Product Line",
+      "Add new Panel Size",
+      "Add new CPU",
+      "Add new GPU",
+    ]);
+    expect(within(dialog).getByRole("button", { name: "Add new Product Line" })).toBeVisible();
+    expect(within(dialog).getByRole("button", { name: "Add new Panel Size" })).toBeVisible();
+    expect(within(dialog).getByRole("button", { name: "Add new CPU" })).toBeVisible();
+    expect(within(dialog).getByRole("button", { name: "Add new GPU" })).toBeVisible();
+    expect(within(dialog).queryByRole("button", { name: "Add new Customer" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Add new Category" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Add new Project Status" })).not.toBeInTheDocument();
+
+    addSelfServiceOption(dialog, "Product Line", "Session Shared Line");
+    expect(within(dialog).getByLabelText("Product Line")).toHaveValue(runtimeProductLineId);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    openProjectByQci("ZOR");
+    const detail = openEditMaster();
+    expect(within(detail).getByRole("option", { name: "Session Shared Line" })).toBeInTheDocument();
+    expect(within(detail).getByRole("button", { name: "Add new Product Line" })).toBeVisible();
+    expect(within(detail).getByRole("button", { name: "Add new Panel Size" })).toBeVisible();
+    expect(within(detail).getByRole("button", { name: "Add new CPU" })).toBeVisible();
+    expect(within(detail).getByRole("button", { name: "Add new GPU" })).toBeVisible();
+    expect(within(detail).queryByRole("button", { name: "Add new Customer" })).not.toBeInTheDocument();
+    expect(within(detail).queryByRole("button", { name: "Add new Category" })).not.toBeInTheDocument();
+    expect(within(detail).queryByRole("button", { name: /Add new .*Cover/ })).not.toBeInTheDocument();
+
+    addSelfServiceOption(detail, "Panel Size", "Session Shared Panel");
+    expect(within(detail).getByLabelText("Panel Size")).toHaveValue(runtimePanelSizeId);
+    fireEvent.click(within(detail).getByRole("button", { name: "Cancel" }));
+    const reopenedDetail = openEditMaster();
+    expect(within(reopenedDetail).getByRole("option", { name: "Session Shared Panel" }))
+      .toBeInTheDocument();
+
+    first.unmount();
+    render(<App createCatalogItemId={() => runtimeProductLineId} />);
+    dialog = openCreateDialog();
+    expect(within(dialog).queryByRole("option", { name: "Session Shared Line" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("option", { name: "Session Shared Panel" })).not.toBeInTheDocument();
+  });
+
+  it("creates with all four runtime catalog values and projects them into filters, search, and export", () => {
+    const ids = [
+      toCatalogItemId("runtime-line"),
+      toCatalogItemId("runtime-panel"),
+      toCatalogItemId("runtime-cpu"),
+      toCatalogItemId("runtime-gpu"),
+    ];
+    const createCatalogItemId = vi.fn()
+      .mockReturnValueOnce(ids[0])
+      .mockReturnValueOnce(ids[1])
+      .mockReturnValueOnce(ids[2])
+      .mockReturnValueOnce(ids[3]);
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(fixedUuid);
+    render(<App createCatalogItemId={createCatalogItemId} />);
+    const dialog = openCreateDialog();
+
+    addSelfServiceOption(dialog, "Product Line", "Runtime Line Label");
+    addSelfServiceOption(dialog, "Panel Size", "Runtime Panel Label");
+    addSelfServiceOption(dialog, "CPU", "Runtime CPU Label");
+    addSelfServiceOption(dialog, "GPU", "Runtime GPU Label");
+    expect(within(dialog).getByLabelText("Product Line")).toHaveValue(ids[0]);
+    expect(within(dialog).getByLabelText("Panel Size")).toHaveValue(ids[1]);
+    expect(within(dialog).getByLabelText("CPU")).toHaveValue(ids[2]);
+    expect(within(dialog).getByLabelText("GPU")).toHaveValue(ids[3]);
+    fireEvent.change(within(dialog).getByLabelText("Year"), { target: { value: "2033" } });
+    fireEvent.change(within(dialog).getByLabelText("STN Project Name"), {
+      target: { value: "Runtime Catalog Project" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("QCI Model Name"), {
+      target: { value: "ZRC" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    expect(within(projectHeader()).getByText("Product Line: Runtime Line Label")).toBeVisible();
+    expect(within(projectHeader()).getByText("Panel Size: Runtime Panel Label")).toBeVisible();
+    expect(within(projectHeader()).getByText("CPU: Runtime CPU Label")).toBeVisible();
+    expect(within(projectHeader()).getByText("GPU: Runtime GPU Label")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+
+    const filters = screen.getByRole("region", { name: "Search / Filters" });
+    for (const [field, label] of [
+      ["Product Line", "Runtime Line Label"],
+      ["Panel Size", "Runtime Panel Label"],
+      ["CPU", "Runtime CPU Label"],
+      ["GPU", "Runtime GPU Label"],
+    ] as const) {
+      expect(within(filters).getByLabelText(field)).toContainElement(
+        within(filters).getByRole("option", { name: label }),
+      );
+    }
+    const search = within(filters).getByRole("searchbox");
+    for (const searchableLabel of [
+      "Runtime Line Label",
+      "Runtime CPU Label",
+      "Runtime GPU Label",
+    ]) {
+      fireEvent.change(search, { target: { value: searchableLabel } });
+      expect(within(dashboardTable()).getByText("Runtime Catalog Project")).toBeInTheDocument();
+    }
+    fireEvent.change(search, { target: { value: "Runtime Panel Label" } });
+    expect(screen.getByText("No projects match the current search and filters")).toBeVisible();
+    fireEvent.change(search, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Export to Excel" }));
+    const exportedRows = vi.mocked(XLSX.utils.json_to_sheet).mock.calls.at(-1)?.[0] as
+      | Array<Record<string, string>>
+      | undefined;
+    expect(exportedRows?.find((row) => row["Project Name"] === "Runtime Catalog Project"))
+      .toMatchObject({
+        "Product Line": "Runtime Line Label",
+        "Panel Size": "Runtime Panel Label",
+        CPU: "Runtime CPU Label",
+        GPU: "Runtime GPU Label",
+      });
   });
 
   it("creates an ordinary canonical Project with one UUID and opens Project Master", () => {

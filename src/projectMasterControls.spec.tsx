@@ -2,11 +2,127 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ProjectReferenceOption } from "./application/selectors/projectReferenceOptions";
-import { toProjectId, type ProjectId } from "./domain/shared/ids";
-import type { ProjectSelection } from "./projectMasterForm";
-import { ProjectReferencePicker } from "./projectMasterControls";
+import type { CatalogItem } from "./domain/reference-data/catalog";
+import {
+  toCatalogItemId,
+  toProjectId,
+  type CatalogItemId,
+  type ProjectId,
+} from "./domain/shared/ids";
+import type { CatalogSelection, ProjectSelection } from "./projectMasterForm";
+import {
+  ProjectCatalogSelect,
+  ProjectReferencePicker,
+  ProjectSelfServiceCatalogSelect,
+} from "./projectMasterControls";
 
 afterEach(cleanup);
+
+const catalogOptions: readonly CatalogItem<CatalogItemId>[] = [
+  {
+    id: toCatalogItemId("catalog-existing"),
+    displayName: "Existing Option",
+    aliases: [],
+    active: true,
+    reviewStatus: "reviewed",
+  },
+];
+
+describe("Project self-service catalog select", () => {
+  it("keeps governed catalog selects free of Add New behavior", () => {
+    render(
+      <ProjectCatalogSelect
+        emptyLabel="Select Customer"
+        label="Customer"
+        onChange={() => {}}
+        options={catalogOptions}
+        value=""
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /add new/i })).not.toBeInTheDocument();
+  });
+
+  it("opens and cancels the inline editor without changing the selection", () => {
+    const onChange = vi.fn<(value: CatalogSelection) => void>();
+    render(
+      <ProjectSelfServiceCatalogSelect
+        emptyLabel="Select CPU"
+        label="CPU"
+        onAddOption={() => ({ ok: true, id: toCatalogItemId("unused") })}
+        onChange={onChange}
+        options={catalogOptions}
+        value={catalogOptions[0]!.id}
+      />,
+    );
+
+    const addNew = screen.getByRole("button", { name: "Add new CPU" });
+    fireEvent.click(addNew);
+    const input = screen.getByRole("textbox", { name: "New CPU" });
+    expect(input).toHaveFocus();
+    fireEvent.change(input, { target: { value: "Canceled CPU" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel adding CPU" }));
+
+    expect(screen.queryByRole("textbox", { name: "New CPU" })).not.toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(addNew).toHaveFocus();
+  });
+
+  it("keeps invalid Add input open and preserves the current selection", () => {
+    const onChange = vi.fn<(value: CatalogSelection) => void>();
+    const onAddOption = vi.fn(() => ({
+      ok: false as const,
+      message: "This catalog option already exists.",
+    }));
+    render(
+      <ProjectSelfServiceCatalogSelect
+        emptyLabel="Select GPU"
+        label="GPU"
+        onAddOption={onAddOption}
+        onChange={onChange}
+        options={catalogOptions}
+        value={catalogOptions[0]!.id}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Add new GPU" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "New GPU" }), {
+      target: { value: "existing option" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add GPU option" }));
+
+    expect(onAddOption).toHaveBeenCalledWith("existing option");
+    expect(screen.getByText("This catalog option already exists.")).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "New GPU" })).toHaveValue("existing option");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("automatically selects a successful addition and closes the editor", () => {
+    const onChange = vi.fn<(value: CatalogSelection) => void>();
+    const runtimeId = toCatalogItemId("runtime-panel-size");
+    render(
+      <ProjectSelfServiceCatalogSelect
+        emptyLabel="Select Panel Size"
+        label="Panel Size"
+        onAddOption={() => ({ ok: true, id: runtimeId })}
+        onChange={onChange}
+        options={catalogOptions}
+        value=""
+      />,
+    );
+
+    const addNew = screen.getByRole("button", { name: "Add new Panel Size" });
+    fireEvent.click(addNew);
+    fireEvent.change(screen.getByRole("textbox", { name: "New Panel Size" }), {
+      target: { value: "14 inch" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add Panel Size option" }));
+
+    expect(onChange).toHaveBeenCalledWith(runtimeId);
+    expect(screen.queryByRole("textbox", { name: "New Panel Size" })).not.toBeInTheDocument();
+    expect(addNew).toHaveFocus();
+  });
+});
 
 const currentProjectId = toProjectId("project-current");
 const firstProjectId = toProjectId("project-first");

@@ -4,6 +4,10 @@ import type {
   ProjectLeverageDisplay,
   ProjectReferenceOption,
 } from "./application/selectors/projectReferenceOptions";
+import type {
+  SelfServiceCatalogKey,
+  SelfServiceReferenceCatalogs,
+} from "./application/reference-data/selfServiceCatalogs";
 import {
   coverCatalog,
   statusCatalog,
@@ -12,16 +16,14 @@ import type { Project } from "./domain/project/project";
 import type { CatalogItemId } from "./domain/shared/ids";
 import type { ValidationIssue } from "./domain/validation/validationIssue";
 import {
-  cpuReferenceFixtures,
   customerReferenceFixtures,
-  gpuReferenceFixtures,
-  panelSizeReferenceFixtures,
-  productLineReferenceFixtures,
 } from "./fixtures/v2/referenceFixtures";
 import {
   ProjectCatalogSelect,
   ProjectFieldInput,
   ProjectReferencePicker,
+  ProjectSelfServiceCatalogSelect,
+  type ProjectSelfServiceCatalogAddResult,
 } from "./projectMasterControls";
 import type {
   CatalogSelection,
@@ -74,9 +76,14 @@ interface EditProps extends CommonProps {
   readonly form: ProjectMasterForm;
   readonly issues: readonly ValidationIssue[];
   readonly mode: "edit";
+  readonly onAddCatalogOption: (
+    key: SelfServiceCatalogKey,
+    label: string,
+  ) => ProjectSelfServiceCatalogAddResult;
   readonly onCancel: () => void;
   readonly onChange: (form: ProjectMasterForm) => void;
   readonly onSave: () => void;
+  readonly selfServiceCatalogs: SelfServiceReferenceCatalogs;
 }
 
 export type ProjectMasterDetailProps = ReadProps | EditProps;
@@ -194,11 +201,15 @@ function updateFormValue<TKey extends keyof ProjectMasterForm>(
 function BasicInformationEdit({
   fieldErrors,
   form,
+  onAddCatalogOption,
   onChange,
+  selfServiceCatalogs,
 }: {
   readonly fieldErrors: ProjectMasterFormErrors;
   readonly form: ProjectMasterForm;
+  readonly onAddCatalogOption: EditProps["onAddCatalogOption"];
   readonly onChange: (form: ProjectMasterForm) => void;
+  readonly selfServiceCatalogs: SelfServiceReferenceCatalogs;
 }): React.ReactElement {
   const update = <TKey extends keyof ProjectMasterForm>(
     key: TKey,
@@ -217,13 +228,13 @@ function BasicInformationEdit({
         <legend className="px-1 text-sm font-semibold">Project Classification</legend>
         <ProjectFieldInput error={fieldErrors.year} label="Year" value={form.year} onChange={(value) => update("year", value)} />
         <ProjectCatalogSelect emptyLabel="Select Customer" label="Customer" options={customerReferenceFixtures} value={form.customerId} onChange={(value) => update("customerId", value)} />
-        <ProjectCatalogSelect error={fieldErrors.productLineId} emptyLabel="Select Product Line" label="Product Line" options={productLineReferenceFixtures} value={form.productLineId} onChange={(value) => update("productLineId", value)} />
+        <ProjectSelfServiceCatalogSelect error={fieldErrors.productLineId} emptyLabel="Select Product Line" label="Product Line" options={selfServiceCatalogs.productLine} value={form.productLineId} onAddOption={(label) => onAddCatalogOption("productLine", label)} onChange={(value) => update("productLineId", value)} />
       </fieldset>
       <fieldset className="grid min-w-0 gap-3 rounded-md border border-slate-200 p-4">
         <legend className="px-1 text-sm font-semibold">Hardware</legend>
-        <ProjectCatalogSelect emptyLabel="Select Panel Size" label="Panel Size" options={panelSizeReferenceFixtures} value={form.panelSizeId} onChange={(value) => update("panelSizeId", value)} />
-        <ProjectCatalogSelect emptyLabel="Select CPU" label="CPU" options={cpuReferenceFixtures} value={form.cpuId} onChange={(value) => update("cpuId", value)} />
-        <ProjectCatalogSelect emptyLabel="Select GPU" label="GPU" options={gpuReferenceFixtures} value={form.gpuId} onChange={(value) => update("gpuId", value)} />
+        <ProjectSelfServiceCatalogSelect emptyLabel="Select Panel Size" label="Panel Size" options={selfServiceCatalogs.panelSize} value={form.panelSizeId} onAddOption={(label) => onAddCatalogOption("panelSize", label)} onChange={(value) => update("panelSizeId", value)} />
+        <ProjectSelfServiceCatalogSelect emptyLabel="Select CPU" label="CPU" options={selfServiceCatalogs.cpu} value={form.cpuId} onAddOption={(label) => onAddCatalogOption("cpu", label)} onChange={(value) => update("cpuId", value)} />
+        <ProjectSelfServiceCatalogSelect emptyLabel="Select GPU" label="GPU" options={selfServiceCatalogs.gpu} value={form.gpuId} onAddOption={(label) => onAddCatalogOption("gpu", label)} onChange={(value) => update("gpuId", value)} />
       </fieldset>
       <fieldset className="grid min-w-0 gap-3 rounded-md border border-slate-200 p-4">
         <legend className="px-1 text-sm font-semibold">Internal Identifier</legend>
@@ -476,7 +487,7 @@ export function ProjectMasterDetail(props: ProjectMasterDetailProps): React.Reac
         <CollapsibleSection expanded={expanded[section]} id={section} key={section} onToggle={() => toggle(section)}>
           {section === "basic" && (props.mode === "read"
             ? <BasicInformationRead row={props.row} />
-            : <BasicInformationEdit fieldErrors={props.fieldErrors} form={props.form} onChange={props.onChange} />)}
+            : <BasicInformationEdit fieldErrors={props.fieldErrors} form={props.form} onAddCatalogOption={props.onAddCatalogOption} onChange={props.onChange} selfServiceCatalogs={props.selfServiceCatalogs} />)}
           {section === "mechanical" && (props.mode === "read"
             ? <MechanicalRead project={props.project} />
             : <MechanicalEdit fieldErrors={props.fieldErrors} form={props.form} onChange={props.onChange} />)}

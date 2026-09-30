@@ -7,6 +7,7 @@ import {
   selectProjectReferenceOptions,
 } from "./application/selectors/projectReferenceOptions";
 import type { PrototypeState } from "./application/state/prototypeState";
+import { createInitialSelfServiceReferenceCatalogs } from "./application/reference-data/selfServiceCatalogs";
 import { canonicalProjectFixtures } from "./fixtures/v2/canonicalProjectFixtures";
 import { toProjectMasterForm } from "./projectMasterForm";
 import { ProjectMasterDetail } from "./projectMasterDetail";
@@ -18,6 +19,13 @@ const state: PrototypeState = { projects: canonicalProjectFixtures, schedules: [
 const row = selectDashboardProjectRow(state, project.id)!;
 const leverageDisplay = selectProjectLeverageDisplay(state, project.id)!;
 const projectReferenceOptions = selectProjectReferenceOptions(state);
+const editCatalogProps = {
+  onAddCatalogOption: vi.fn(() => ({
+    ok: false as const,
+    message: "Not used by this test.",
+  })),
+  selfServiceCatalogs: createInitialSelfServiceReferenceCatalogs(),
+};
 
 const readProps = {
   feedback: [],
@@ -81,6 +89,7 @@ describe("ProjectMasterDetail", () => {
 
     rerender(
       <ProjectMasterDetail
+        {...editCatalogProps}
         fieldErrors={{}}
         form={toProjectMasterForm(project.master)}
         issues={[]}
@@ -104,6 +113,7 @@ describe("ProjectMasterDetail", () => {
   it("automatically expands Mechanical when validation errors would otherwise be hidden", () => {
     render(
       <ProjectMasterDetail
+        {...editCatalogProps}
         fieldErrors={{ productLengthMm: "Must be 0 or greater." }}
         form={{ ...toProjectMasterForm(project.master), productLengthMm: "-1" }}
         issues={[]}

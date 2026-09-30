@@ -8,6 +8,7 @@ import { formatDateOnly, type DateOnly } from "../../domain/shared/dateOnly";
 import type { CatalogItemId, MilestoneDefinitionId, MilestoneId, ProjectId } from "../../domain/shared/ids";
 import type { ValidationIssue } from "../../domain/validation/validationIssue";
 import { categoryReferenceFixtures } from "../../fixtures/v2/referenceFixtures";
+import type { SelfServiceReferenceCatalogs } from "../reference-data/selfServiceCatalogs";
 import type { PrototypeState } from "../state/prototypeState";
 import { getProjectById } from "./projectSelectors";
 import { selectDashboardProjectRows, type DashboardProjectRow } from "./dashboardProjectRows";
@@ -81,8 +82,9 @@ function resolveQciPm(
 
 export function selectPortfolioDashboardRows(
   state: PrototypeState,
+  selfServiceCatalogs?: SelfServiceReferenceCatalogs,
 ): readonly PortfolioDashboardRow[] {
-  return selectDashboardProjectRows(state).map((projectRow) => {
+  return selectDashboardProjectRows(state, selfServiceCatalogs).map((projectRow) => {
     const project = getProjectById(state, projectRow.projectId);
     if (project === null) {
       throw new Error(`Dashboard row Project is absent: ${projectRow.projectId}`);

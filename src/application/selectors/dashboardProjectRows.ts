@@ -2,14 +2,17 @@ import { statusCatalog } from "../../config/v2/referenceData";
 import type { CatalogItem } from "../../domain/reference-data/catalog";
 import type { CatalogItemId, ProjectId } from "../../domain/shared/ids";
 import {
-	cpuReferenceFixtures,
 	customerReferenceFixtures,
-	gpuReferenceFixtures,
-	panelSizeReferenceFixtures,
-	productLineReferenceFixtures,
 } from "../../fixtures/v2/referenceFixtures";
+import {
+	createInitialSelfServiceReferenceCatalogs,
+	type SelfServiceReferenceCatalogs,
+} from "../reference-data/selfServiceCatalogs";
 import type { PrototypeState } from "../state/prototypeState";
 import { selectOfficialProjectSources } from "./portfolioSources";
+
+const defaultSelfServiceReferenceCatalogs =
+	createInitialSelfServiceReferenceCatalogs();
 
 export interface DashboardProjectRow {
 	readonly projectId: ProjectId;
@@ -52,6 +55,7 @@ function resolveCatalogDisplay(
 export function selectDashboardProjectRow(
 	state: PrototypeState,
 	projectId: ProjectId,
+	selfServiceCatalogs: SelfServiceReferenceCatalogs = defaultSelfServiceReferenceCatalogs,
 ): DashboardProjectRow | null {
 	const sources = selectOfficialProjectSources(state, projectId);
 
@@ -69,7 +73,7 @@ export function selectDashboardProjectRow(
 		customer: resolveCatalogDisplay(basic.customer, customerReferenceFixtures),
 		productLine: resolveCatalogDisplay(
 			basic.productLine,
-			productLineReferenceFixtures,
+			selfServiceCatalogs.productLine,
 		),
 		projectName: displayText(basic.stnProjectName),
 		qciModelName: displayText(basic.qciModelName),
@@ -77,10 +81,10 @@ export function selectDashboardProjectRow(
 		acerMarketingName: displayText(regulatory.acerMarketingName),
 		panelSize: resolveCatalogDisplay(
 			basic.panelSize,
-			panelSizeReferenceFixtures,
+			selfServiceCatalogs.panelSize,
 		),
-		cpu: resolveCatalogDisplay(hardware.cpu, cpuReferenceFixtures),
-		gpu: resolveCatalogDisplay(hardware.gpu, gpuReferenceFixtures),
+		cpu: resolveCatalogDisplay(hardware.cpu, selfServiceCatalogs.cpu),
+		gpu: resolveCatalogDisplay(hardware.gpu, selfServiceCatalogs.gpu),
 		ssid: displayText(regulatory.ssid),
 		rmn: displayText(regulatory.rmn),
 		projectStatus: resolveCatalogDisplay(basic.status, statusCatalog),
@@ -91,9 +95,10 @@ export function selectDashboardProjectRow(
 
 export function selectDashboardProjectRows(
 	state: PrototypeState,
+	selfServiceCatalogs: SelfServiceReferenceCatalogs = defaultSelfServiceReferenceCatalogs,
 ): readonly DashboardProjectRow[] {
 	return state.projects.flatMap((project) => {
-		const row = selectDashboardProjectRow(state, project.id);
+		const row = selectDashboardProjectRow(state, project.id, selfServiceCatalogs);
 		return row === null ? [] : [row];
 	});
 }

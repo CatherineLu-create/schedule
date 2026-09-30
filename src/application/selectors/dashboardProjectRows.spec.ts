@@ -1,6 +1,11 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { Project } from "../../domain/project/project";
+import type { CatalogItem } from "../../domain/reference-data/catalog";
 import { toCatalogItemId, type ProjectId } from "../../domain/shared/ids";
+import {
+	createInitialSelfServiceReferenceCatalogs,
+	type SelfServiceReferenceCatalogs,
+} from "../reference-data/selfServiceCatalogs";
 import {
 	canonicalProjectFixtures,
 	devProject001,
@@ -19,6 +24,56 @@ import {
 } from "./dashboardProjectRows";
 
 describe("Dashboard Project row projection", () => {
+	it("resolves all four self-service fields from supplied runtime catalogs", () => {
+		const ids = {
+			productLine: toCatalogItemId("runtime-product-line"),
+			panelSize: toCatalogItemId("runtime-panel-size"),
+			cpu: toCatalogItemId("runtime-cpu"),
+			gpu: toCatalogItemId("runtime-gpu"),
+		};
+		const item = (id: typeof ids.productLine, displayName: string): CatalogItem => ({
+			id,
+			displayName,
+			aliases: [],
+			active: true,
+			reviewStatus: "reviewed",
+		});
+		const fixtureCatalogs = createInitialSelfServiceReferenceCatalogs();
+		const runtimeCatalogs: SelfServiceReferenceCatalogs = {
+			productLine: [...fixtureCatalogs.productLine, item(ids.productLine, "Runtime Product Line")],
+			panelSize: [...fixtureCatalogs.panelSize, item(ids.panelSize, "Runtime Panel Size")],
+			cpu: [...fixtureCatalogs.cpu, item(ids.cpu, "Runtime CPU")],
+			gpu: [...fixtureCatalogs.gpu, item(ids.gpu, "Runtime GPU")],
+		};
+		const runtimeProject: Project = {
+			...devProject002,
+			master: {
+				...devProject002.master,
+				basicInformation: {
+					...devProject002.master.basicInformation,
+					productLine: ids.productLine,
+					panelSize: ids.panelSize,
+				},
+				platformHardware: {
+					...devProject002.master.platformHardware,
+					cpu: ids.cpu,
+					gpu: ids.gpu,
+				},
+			},
+		};
+		const state: PrototypeState = {
+			projects: [runtimeProject],
+			schedules: [canonicalScheduleFixtures[1]!],
+		};
+
+		expect(selectDashboardProjectRow(state, runtimeProject.id, runtimeCatalogs)).toMatchObject({
+			productLine: "Runtime Product Line",
+			panelSize: "Runtime Panel Size",
+			cpu: "Runtime CPU",
+			gpu: "Runtime GPU",
+		});
+	});
+
 	it("projects current canonical Master values into the preserved Dashboard and export fields", () => {
 		expectTypeOf<DashboardProjectRow>().toEqualTypeOf<{
 			readonly projectId: ProjectId;

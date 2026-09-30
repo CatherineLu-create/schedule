@@ -200,6 +200,8 @@ Create Project 使用獨立 modal；Edit Master 使用 Project Master Detail 的
 
 目前沒有永久儲存；Browser Refresh 後 Project Master 的新增與修改會重置。
 
+Product Line, Panel Size, CPU, and GPU are self-service reference catalogs in the current User Trial. A PM can add a trimmed, non-duplicate option from Create Project or Edit Master; the option is immediately selected and remains available to other Project forms for the rest of the mounted application session, even if the surrounding Project form is cancelled. These runtime catalog additions are not persisted or synchronized: refreshing/remounting restores the source-bundled catalogs and resets the existing Prototype state.
+
 ### Schedule
 
 Schedule Row type 實際欄位：

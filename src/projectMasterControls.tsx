@@ -101,6 +101,105 @@ export function ProjectCatalogSelect({
   );
 }
 
+export type ProjectSelfServiceCatalogAddResult =
+  | { readonly ok: true; readonly id: CatalogItemId }
+  | { readonly ok: false; readonly message: string };
+
+export interface ProjectSelfServiceCatalogSelectProps extends ProjectCatalogSelectProps {
+  readonly onAddOption: (label: string) => ProjectSelfServiceCatalogAddResult;
+}
+
+export function ProjectSelfServiceCatalogSelect({
+  onAddOption,
+  ...selectProps
+}: ProjectSelfServiceCatalogSelectProps): React.ReactElement {
+  const [adding, setAdding] = React.useState(false);
+  const [label, setLabel] = React.useState("");
+  const [addError, setAddError] = React.useState<string | null>(null);
+  const addTriggerRef = React.useRef<HTMLButtonElement>(null);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (adding) inputRef.current?.focus();
+  }, [adding]);
+
+  const closeEditor = (): void => {
+    setAdding(false);
+    setLabel("");
+    setAddError(null);
+    addTriggerRef.current?.focus();
+  };
+  const addOption = (): void => {
+    const result = onAddOption(label);
+    if (!result.ok) {
+      setAddError(result.message);
+      return;
+    }
+    selectProps.onChange(result.id);
+    closeEditor();
+  };
+
+  return (
+    <div className="grid min-w-0 gap-2">
+      <ProjectCatalogSelect {...selectProps} />
+      <div className="flex justify-end">
+        <button
+          aria-label={`Add new ${selectProps.label}`}
+          className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm"
+          onClick={() => {
+            setAdding(true);
+            setAddError(null);
+          }}
+          ref={addTriggerRef}
+          type="button"
+        >
+          + Add new
+        </button>
+      </div>
+      {adding && (
+        <div
+          aria-label={`Add new ${selectProps.label} option`}
+          className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-start"
+          role="group"
+        >
+          <span className="grid min-w-0 gap-1">
+            <input
+              aria-label={`New ${selectProps.label}`}
+              className="min-w-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+              onChange={(event) => {
+                setLabel(event.target.value);
+                setAddError(null);
+              }}
+              ref={inputRef}
+              type="text"
+              value={label}
+            />
+            {addError !== null && (
+              <span className="text-xs text-rose-700" role="alert">{addError}</span>
+            )}
+          </span>
+          <button
+            aria-label={`Add ${selectProps.label} option`}
+            className="rounded-md border border-slate-900 bg-slate-900 px-3 py-2 text-sm text-white"
+            onClick={addOption}
+            type="button"
+          >
+            Add
+          </button>
+          <button
+            aria-label={`Cancel adding ${selectProps.label}`}
+            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+            onClick={closeEditor}
+            type="button"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export interface ProjectReferencePickerProps {
   readonly currentProjectId: ProjectId;
   readonly label: string;
