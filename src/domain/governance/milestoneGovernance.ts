@@ -65,6 +65,49 @@ export interface MilestoneGovernanceRuntimeState {
 
 export type GovernanceValidationIssue = ValidationIssue & { readonly domain: "governance" };
 
+export type CommandResult<T, TCode extends string> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly code: TCode; readonly issues: readonly ValidationIssue[] };
+
+export type GovernanceCommandFailureCode =
+  | "no-draft"
+  | "draft-already-exists"
+  | "stale-base-release"
+  | "invalid-reference"
+  | "duplicate-id"
+  | "retire-requirement-conflict"
+  | "no-legal-fulfillment-path";
+
+export type GovernanceDraftUpdate =
+  | { readonly kind: "replace-candidate-release"; readonly candidateRelease: MilestoneGovernanceDraft["candidateRelease"] }
+  | { readonly kind: "replace-existing-project-assignments"; readonly assignments: MilestoneGovernanceDraft["existingProjectAssignments"] }
+  | { readonly kind: "replace-withdrawals"; readonly enrollmentIds: readonly RequirementEnrollmentId[] };
+
+export interface GovernancePublishDiff {
+  readonly addedDefinitionIds: readonly MilestoneDefinitionId[];
+  readonly changedDefinitionIds: readonly MilestoneDefinitionId[];
+  readonly retiredDefinitionIds: readonly MilestoneDefinitionId[];
+  readonly addableDefinitionIdsBefore: readonly MilestoneDefinitionId[];
+  readonly addableDefinitionIdsAfter: readonly MilestoneDefinitionId[];
+  readonly portfolioDefinitionIdsBefore: readonly MilestoneDefinitionId[];
+  readonly portfolioDefinitionIdsAfter: readonly MilestoneDefinitionId[];
+  readonly additionalAttentionIdsBefore: readonly MilestoneDefinitionId[];
+  readonly additionalAttentionIdsAfter: readonly MilestoneDefinitionId[];
+}
+
+/** Preview cannot allocate the release ID that will eventually issue the grant. */
+export type RetiredDraftOccurrenceGrantProposal = Omit<RetiredDraftOccurrenceGrant, "retiredByReleaseId">;
+
+export interface GovernancePublishPreview {
+  readonly candidateRelease: MilestoneGovernanceDraft["candidateRelease"] | null;
+  readonly diff: GovernancePublishDiff | null;
+  readonly proposedAssignments: MilestoneGovernanceDraft["existingProjectAssignments"];
+  readonly proposedWithdrawalEnrollmentIds: readonly RequirementEnrollmentId[];
+  readonly proposedRetiredDraftOccurrenceGrants: readonly RetiredDraftOccurrenceGrantProposal[];
+  readonly blockingIssues: readonly ValidationIssue[];
+  readonly warnings: readonly ValidationIssue[];
+}
+
 function continuityIssue(
   code: string,
   definitionId: MilestoneDefinitionId,
