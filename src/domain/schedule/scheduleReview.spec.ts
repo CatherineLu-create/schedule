@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { parseDateOnly } from "../shared/dateOnly";
 import {
@@ -15,6 +15,7 @@ import {
 import { toScheduleVersionNumber } from "./schedule";
 import type {
   ApplicabilityApplyAction,
+  ConfirmProjectLocalMilestoneDefinitionInput,
   DateApplyAction,
   ImportDecisionEvent,
   LocalToPublicEquivalenceAssertion,
@@ -32,6 +33,17 @@ import type {
 } from "./scheduleReview";
 
 describe("Schedule review compatibility contract", () => {
+  it("accepts_injected_local_identity_and_evidence_references_without_draft_or_order_input", () => {
+    expectTypeOf<ConfirmProjectLocalMilestoneDefinitionInput>().toEqualTypeOf<{
+      readonly definitionId: ProjectLocalMilestoneDefinition["id"];
+      readonly name: string;
+      readonly stageGroupId: ProjectLocalMilestoneDefinition["stageGroupId"];
+      readonly milestoneTypeId: ProjectLocalMilestoneDefinition["milestoneTypeId"];
+      readonly source: "manual" | "import";
+      readonly evidenceIds: ProjectLocalMilestoneDefinition["evidenceIds"];
+    }>();
+  });
+
   it("constructs every ledger entry with exact identities and immutable raw values", () => {
     const plan = parseDateOnly("2026-10-15");
     if (plan === null) throw new Error("Expected valid test date");

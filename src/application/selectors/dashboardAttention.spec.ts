@@ -1,4 +1,5 @@
 import { initialScheduleCommandContext } from "../../test/governanceTestUtils";
+import { confirmProjectLocalMilestoneDefinition } from "../commands/scheduleReviewCommands";
 import { describe, expect, it } from "vitest";
 import { initialGovernanceContext } from "../../test/governanceTestUtils";
 import type { ProjectLocalMilestoneDefinition } from "../../domain/schedule/scheduleReview";
@@ -133,6 +134,89 @@ function expectAvailable(
   }
   return read;
 }
+
+describe("Attention from real local confirmation and Publish", () => {
+  const governance = initialGovernanceContext();
+  function confirmed(owner: Project, type: string) {
+    const result = confirmProjectLocalMilestoneDefinition(createEmptyCanonicalProjectSchedule(owner.id), {
+      definitionId: toMilestoneDefinitionId(`confirmed-local-${type}`), name: `Local ${type}`,
+      stageGroupId: toStageGroupId("stage-a1"), milestoneTypeId: toMilestoneTypeId(type), source: "manual", evidenceIds: [],
+    }, governance);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    return result.value;
+  }
+  function published(item: CanonicalProjectSchedule, milestones: readonly CanonicalScheduleWorkingDraftMilestone[]) {
+    // Canonical test setup supplies occurrences; public-only Normal Add is deliberately unchanged.
+    const result = publishScheduleWorkingDraft({ ...item, workingDraft: { ...draftIdentity, milestones } },
+      { publishedAt: "2026-09-23T00:00:00Z" }, { governance, localDefinitions: item.localDefinitions, retiredDraftOccurrenceGrants: [] });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    return result.schedule;
+  }
+
+  it.each(["type-g-o", "type-smt", "type-close", "type-mdrr"])("real_command_created_local_automatic_type_resolves_in_current_published_attention: %s", type => {
+    const owner = project(`confirmed-attention-${type}`);
+    const registered = confirmed(owner, type);
+    const definitionId = registered.localDefinitions[0].id;
+    const first = published(registered, [draftMilestone("old-due", definitionId, "2026-09-23")]);
+    const current = published(first, [
+      draftMilestone("today", definitionId, "2026-09-23"),
+      draftMilestone("plus-14", definitionId, "2026-10-07"),
+      draftMilestone("plus-15", definitionId, "2026-10-08"),
+      draftMilestone("overdue", definitionId, "2026-09-22"),
+      draftMilestone("complete", definitionId, "2026-09-22", { actual: dateOnly("2026-09-23") }),
+      draftMilestone("not-applicable", definitionId, "2026-09-23", { applicability: "notApplicable" }),
+      draftMilestone("no-plan", definitionId, null),
+    ]);
+    const read = expectAvailable(selectDashboardAttention(state([owner], [current]), REFERENCE_DATE, governance));
+    expect(read.due.projectIds).toEqual([owner.id]);
+    expect(read.due.projectCount).toBe(1);
+    expect(read.due.matches.map(match => [match.milestoneId, match.milestoneDefinitionId, match.milestoneName, match.plan])).toEqual([
+      ["today", definitionId, `Local ${type}`, "2026-09-23"],
+      ["plus-14", definitionId, `Local ${type}`, "2026-10-07"],
+    ]);
+    expect(read.overdue.projectIds).toEqual([owner.id]);
+    expect(read.overdue.matches.map(match => match.milestoneId)).toEqual(["overdue"]);
+    expect(current.publishedVersions[0]).toBe(first.publishedVersions[0]);
+    const portfolio = selectPortfolioDashboardRows(state([{ ...devProject001, id: owner.id }], [current]), createInitialSelfServiceReferenceCatalogs(), governance);
+    expect(portfolio[0].schedule.kind).toBe("published");
+    if (portfolio[0].schedule.kind !== "published") throw new Error("Expected Published portfolio");
+    expect(portfolio[0].schedule.cells.map(cell => cell.milestoneDefinitionId)).toEqual(governance.portfolioColumnDefinitions.map(definition => definition.id));
+    expect(portfolio[0].schedule.cells.some(cell => cell.milestoneDefinitionId === definitionId)).toBe(false);
+  });
+
+  it("real_command_created_local_draft_only_occurrence_is_not_attention", () => {
+    const owner = project("local-draft-only");
+    const registered = confirmed(owner, "type-close");
+    const draft = { ...registered, workingDraft: { ...draftIdentity, milestones: [draftMilestone("draft-due", registered.localDefinitions[0].id, "2026-09-23")] } };
+    const read = expectAvailable(selectDashboardAttention(state([owner], [draft]), REFERENCE_DATE, governance));
+    expect(read.due).toEqual({ projectIds: [], projectCount: 0, matches: [] });
+    expect(read.overdue).toEqual({ projectIds: [], projectCount: 0, matches: [] });
+  });
+
+  it("real_command_created_local_test_type_is_not_automatic_attention", () => {
+    const owner = project("local-test-only");
+    const registered = confirmed(owner, "type-test");
+    const current = published(registered, [draftMilestone("local-test", registered.localDefinitions[0].id, "2026-09-23")]);
+    const read = expectAvailable(selectDashboardAttention(state([owner], [current]), REFERENCE_DATE, governance));
+    expect(read.due.matches).toEqual([]);
+    expect(read.overdue.matches).toEqual([]);
+    expect(governance.additionalAttentionDefinitionIds.has(registered.localDefinitions[0].id)).toBe(false);
+  });
+
+  it("another_project_local_registry_cannot_resolve_attention_occurrence", () => {
+    const owner = project("confirmed-local-source");
+    const foreign = project("confirmed-local-foreign");
+    const registered = confirmed(owner, "type-smt");
+    const current = published(registered, [draftMilestone("local-smt", registered.localDefinitions[0].id, "2026-09-23")]);
+    const other = { ...createEmptyCanonicalProjectSchedule(foreign.id), publishedVersions: current.publishedVersions };
+    const read = selectDashboardAttention(state([owner, foreign], [registered, other]), REFERENCE_DATE, governance);
+    expect(read).toMatchObject({ kind: "unavailable", issues: [expect.objectContaining({ code: "schedule.integrity.unresolved-milestone-definition" })] });
+    expect("due" in read).toBe(false);
+    expect(other.localDefinitions).toEqual([]);
+  });
+});
 
 describe("selectDashboardAttention", () => {
   it.each(["type-g-o", "type-smt", "type-close", "type-mdrr"])("resolves Published same-Project local %s by exact identity", (type) => {

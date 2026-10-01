@@ -75,6 +75,23 @@ export interface ProjectLocalMilestoneDefinition {
   readonly evidenceIds: readonly ScheduleEvidenceId[];
 }
 
+export interface ConfirmProjectLocalMilestoneDefinitionInput {
+  readonly definitionId: MilestoneDefinitionId;
+  readonly name: string;
+  readonly stageGroupId: StageGroupId;
+  readonly milestoneTypeId: MilestoneTypeId;
+  readonly source: "manual" | "import";
+  readonly evidenceIds: readonly ScheduleEvidenceId[];
+}
+
+export type ScheduleReviewFailureCode =
+  | "no-working-draft" | "candidate-not-found" | "already-confirmed"
+  | "target-not-found" | "target-definition-mismatch" | "duplicate-milestone-id"
+  | "duplicate-target-definition" | "invalid-action-for-new-occurrence"
+  | "invalid-date-or-applicability" | "invalid-local-classification"
+  | "definition-not-addable" | "retired-definition-not-retained"
+  | "stale-governance-context" | "id-collision";
+
 export interface ScheduleImportCandidate {
   readonly id: ScheduleImportCandidateId;
   readonly evidenceId: ScheduleEvidenceId;

@@ -1,4 +1,8 @@
 import { initialGovernanceContext } from "../../test/governanceTestUtils";
+import { confirmProjectLocalMilestoneDefinition } from "../commands/scheduleReviewCommands";
+import { cancelScheduleWorkingDraft, publishScheduleWorkingDraft, removeScheduleWorkingDraftMilestone, startScheduleWorkingDraft, updateScheduleWorkingDraftMilestone } from "../commands/canonicalScheduleCommands";
+import { resolveScheduleDefinitions } from "../governance/scheduleDefinitionResolution";
+import { toMilestoneTypeId, toStageGroupId } from "../../domain/shared/ids";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import type { Project } from "../../domain/project/project";
@@ -103,6 +107,131 @@ function schedule(
     workingDraft: null,
   };
 }
+
+describe("command-confirmed local definition resolution and history", () => {
+  const governance = initialGovernanceContext();
+  const localId = toMilestoneDefinitionId("local-exact-history");
+  function confirmed(owner: ProjectId, id = localId, name = "A1 Test", original = schedule(owner)) {
+    const result = confirmProjectLocalMilestoneDefinition(original, {
+      definitionId: id, name, stageGroupId: toStageGroupId("stage-a1"),
+      milestoneTypeId: toMilestoneTypeId("type-test"), source: "manual", evidenceIds: [],
+    }, governance);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    return result.value;
+  }
+  function context(value: CanonicalProjectSchedule) {
+    return { governance, localDefinitions: value.localDefinitions, retiredDraftOccurrenceGrants: [] };
+  }
+  function withOccurrence(value: CanonicalProjectSchedule) {
+    const started = startScheduleWorkingDraft(value, { workingDraftId: toCanonicalScheduleWorkingDraftId("local-history-draft") }, context(value));
+    if (!started.ok) throw new Error(JSON.stringify(started));
+    // Normal Add remains public-only; the existing canonical test builder sets up the occurrence.
+    return { ...started.schedule, workingDraft: { ...started.draft, milestones: [draftMilestone("local-history-row", localId)] } };
+  }
+  function published(value: CanonicalProjectSchedule) {
+    const result = publishScheduleWorkingDraft(value, { publishedAt: "2026-10-01T00:00:00Z" }, context(value));
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    return result.schedule;
+  }
+
+  it("same_project_resolves_local_definition_by_exact_id", () => {
+    const owner = project("local-same-project");
+    const item = withOccurrence(confirmed(owner.id));
+    expect(selectScheduleWorkingDraft(state([owner], [item]), owner.id, governance)).toMatchObject({
+      kind: "workingDraft", milestoneRows: [{ milestoneId: "local-history-row", stage: "A1-stage", milestone: "A1 Test" }],
+    });
+    const edited = updateScheduleWorkingDraftMilestone(item, { milestoneId: toMilestoneId("local-history-row"), field: "plan", value: dateOnly("2026-10-15") }, context(item));
+    if (!edited.ok) throw new Error(JSON.stringify(edited));
+    const next = published(edited.schedule);
+    expect(selectCurrentPublishedSchedule(state([owner], [next]), owner.id, governance)).toMatchObject({
+      kind: "published", milestoneRows: [{ milestoneId: "local-history-row", stage: "A1-stage", milestone: "A1 Test", plan: "2026/10/15" }],
+    });
+    expect(next.publishedVersions[0].milestones[0].milestoneDefinitionId).toBe(localId);
+  });
+
+  it("other_project_does_not_resolve_or_inherit_local_definition", () => {
+    const owner = project("local-owner");
+    const other = project("local-other");
+    const owned = published(withOccurrence(confirmed(owner.id)));
+    const foreign = { ...schedule(other.id, owned.publishedVersions), workingDraft: withOccurrence(owned).workingDraft };
+    const current = state([owner, other], [owned, foreign]);
+    expect(selectCurrentPublishedSchedule(current, other.id, governance)).toMatchObject({ kind: "unavailable" });
+    expect(selectScheduleWorkingDraft(current, other.id, governance)).toMatchObject({ kind: "unavailable" });
+    expect(selectCurrentPublishedSchedule(current, owner.id, governance).kind).toBe("published");
+    expect(foreign.localDefinitions).toEqual([]);
+    const independentlyConfirmed = confirmed(other.id, localId, "Other Project work");
+    expect(resolveScheduleDefinitions(governance, independentlyConfirmed.localDefinitions).find(definition => definition.id === localId)?.name).toBe("Other Project work");
+    expect(owned.localDefinitions[0].name).toBe("A1 Test");
+  });
+
+  it("same_name_does_not_create_identity_or_mapping", () => {
+    const owner = project("same-name-owner");
+    const first = confirmed(owner.id);
+    const secondId = toMilestoneDefinitionId("same-name-distinct-id");
+    const second = confirmed(owner.id, secondId, "A1 Test", first);
+    expect(second.localDefinitions.map(definition => definition.id)).toEqual([localId, secondId]);
+    const definitions = resolveScheduleDefinitions(governance, second.localDefinitions);
+    expect(definitions.filter(definition => definition.name === "A1 Test").map(definition => definition.id))
+      .toEqual(["milestone-a1-a-test", localId, secondId]);
+    const seeded = withOccurrence(second);
+    const missingExactId = { ...seeded, localDefinitions: [second.localDefinitions[1]] };
+    expect(selectScheduleWorkingDraft(state([owner], [missingExactId]), owner.id, governance).kind).toBe("unavailable");
+    expect(second.reviewDecisions).toEqual([]);
+    expect(second.reviewSessions).toEqual([]);
+  });
+
+  it("local_registry_survives_working_draft_discard", () => {
+    const owner = project("discard-local");
+    const registered = confirmed(owner.id);
+    const seeded = withOccurrence(registered);
+    const discarded = cancelScheduleWorkingDraft(seeded);
+    if (!discarded.ok) throw new Error(JSON.stringify(discarded));
+    expect(discarded.schedule.localDefinitions).toBe(registered.localDefinitions);
+    expect(discarded.schedule.workingDraft).toBeNull();
+    const restarted = startScheduleWorkingDraft(discarded.schedule, { workingDraftId: toCanonicalScheduleWorkingDraftId("after-discard") }, context(discarded.schedule));
+    if (!restarted.ok) throw new Error(JSON.stringify(restarted));
+    expect(restarted.draft.milestones).toEqual([]);
+    expect(restarted.schedule.localDefinitions).toBe(registered.localDefinitions);
+    expect(resolveScheduleDefinitions(governance, restarted.schedule.localDefinitions).some(definition => definition.id === localId)).toBe(true);
+  });
+
+  it("local_registry_survives_schedule_publish_and_new_draft", () => {
+    const owner = project("publish-local");
+    const registered = confirmed(owner.id);
+    const first = published(withOccurrence(registered));
+    const started = startScheduleWorkingDraft(first, { workingDraftId: toCanonicalScheduleWorkingDraftId("after-publish") }, context(first));
+    if (!started.ok) throw new Error(JSON.stringify(started));
+    expect(started.schedule.localDefinitions).toBe(registered.localDefinitions);
+    expect(started.draft.milestones).toEqual(first.publishedVersions[0].milestones);
+    expect(started.draft.milestones[0]).not.toBe(first.publishedVersions[0].milestones[0]);
+    const second = published(started.schedule);
+    expect(second.localDefinitions).toBe(registered.localDefinitions);
+    expect(second.publishedVersions[0]).toBe(first.publishedVersions[0]);
+    expect(second.publishedVersions.map(version => version.versionNumber)).toEqual([1, 2]);
+  });
+
+  it("removing_current_occurrence_does_not_delete_historical_local_definition", () => {
+    const owner = project("remove-local");
+    const first = published(withOccurrence(confirmed(owner.id)));
+    const historicalSnapshot = structuredClone(first.publishedVersions[0]);
+    const started = startScheduleWorkingDraft(first, { workingDraftId: toCanonicalScheduleWorkingDraftId("remove-local-draft") }, context(first));
+    if (!started.ok) throw new Error(JSON.stringify(started));
+    const removed = removeScheduleWorkingDraftMilestone(started.schedule, { milestoneId: toMilestoneId("local-history-row") }, context(started.schedule));
+    if (!removed.ok) throw new Error(JSON.stringify(removed));
+    const next = published(removed.schedule);
+    expect(next.localDefinitions).toBe(first.localDefinitions);
+    expect(next.publishedVersions[0]).toBe(first.publishedVersions[0]);
+    expect(next.publishedVersions[0]).toEqual(historicalSnapshot);
+    expect(next.publishedVersions[1].milestones).toEqual([]);
+    expect(selectCurrentPublishedSchedule(state([owner], [next]), owner.id, governance)).toMatchObject({ kind: "published", milestoneRows: [] });
+    expect(resolveScheduleDefinitions(governance, next.localDefinitions).find(definition => definition.id === historicalSnapshot.milestones[0].milestoneDefinitionId))
+      .toMatchObject({ name: "A1 Test", showInPortfolio: false });
+    // Root validation still visits the older Published version even after removal from Current Published.
+    expect(validateCanonicalScheduleState(state([owner], [next]), governance)).toEqual([]);
+  });
+});
 
 const draftIdentity = {
   workingDraftId: toCanonicalScheduleWorkingDraftId("selector-draft"),
