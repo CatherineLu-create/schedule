@@ -4,11 +4,17 @@ import { dashboardAttentionMilestoneTypeIds, milestoneTypeCatalog, stageGroupCat
 import { devProject001, devProject002 } from "../../fixtures/v2/canonicalProjectFixtures";
 import { cpuReferenceFixtures, gpuReferenceFixtures, panelSizeReferenceFixtures, productLineReferenceFixtures } from "../../fixtures/v2/referenceFixtures";
 import { createEmptyCanonicalProjectSchedule, type CanonicalProjectSchedule, type CanonicalPublishedScheduleMilestone } from "../../domain/schedule/officialSchedule";
+import type { ProjectLocalMilestoneDefinition } from "../../domain/schedule/scheduleReview";
+import { parseDateOnly } from "../../domain/shared/dateOnly";
 import { toScheduleVersionNumber } from "../../domain/schedule/schedule";
 import { toCanonicalScheduleWorkingDraftId, toGovernanceDraftId, toGovernanceReleaseId, toMilestoneDefinitionId, toMilestoneId, toMilestoneTypeId, toProjectId, toRequirementEnrollmentId, toRequirementWithdrawalId, toScheduleEvidenceId, toScheduleImportCandidateId, toStageGroupId } from "../../domain/shared/ids";
 import type { PrototypeState } from "../state/prototypeState";
 import { createInitialMilestoneGovernanceRuntimeState } from "./milestoneGovernanceInitializer";
 import { discardGovernanceDraft, previewGovernancePublish, publishGovernanceDraft, startGovernanceDraft, updateGovernanceDraft, type GovernanceCommandFactories } from "./milestoneGovernanceCommands";
+import { selectEffectiveMilestoneGovernanceContext } from "./effectiveMilestoneGovernanceContext";
+import { resolveScheduleDefinitions } from "./scheduleDefinitionResolution";
+import { selectCurrentPublishedSchedule } from "../selectors/scheduleSelectors";
+import { selectDashboardAttention } from "../selectors/dashboardAttention";
 
 type State = MilestoneGovernanceRuntimeState;
 type Candidate = MilestoneGovernanceDraft["candidateRelease"];
@@ -312,6 +318,166 @@ describe("complete release integrity and immutable historical meaning", () => {
     const next = value(publishGovernanceDraft(state, emptyPrototype, factories()));
     expect(next.releases[1].definitions.at(-1)).toEqual(definition);
     expect(next.requirementEnrollments[0].milestoneDefinitionId).toBe(definition.id);
+  });
+});
+
+describe("public and Project-local definition identity boundary", () => {
+  // Root contracts predate GOV-06: these fixtures deliberately do not call its uncommitted command.
+  const local: ProjectLocalMilestoneDefinition = {
+    id: toMilestoneDefinitionId("local-fix-boundary"), name: "Local acceptance",
+    stageGroupId: toStageGroupId("stage-a1"), milestoneTypeId: toMilestoneTypeId("type-test"),
+    displayOrder: 370, source: "manual", confirmation: "confirmed", evidenceIds: [],
+  };
+  const referenceDate = parseDateOnly("2026-10-01")!;
+  function localSchedule(definition = local): CanonicalProjectSchedule {
+    return { ...createEmptyCanonicalProjectSchedule(projectId), localDefinitions: [definition] };
+  }
+  function localPublished(definition = local): CanonicalProjectSchedule {
+    return { ...localSchedule(definition), publishedVersions: [published([
+      { ...occurrence("local-published-row", definition.id), plan: referenceDate },
+    ])] };
+  }
+  function completePrototype(item = localSchedule()): PrototypeState {
+    return { ...emptyPrototype, schedules: [item, createEmptyCanonicalProjectSchedule(secondProjectId)] };
+  }
+  function publicDefinition(id = local.id, name = "Public replacement") {
+    return { ...baseline.releases[0].definitions[0], id, name,
+      stageGroupId: toStageGroupId("stage-c1"), milestoneTypeId: toMilestoneTypeId("type-smt") };
+  }
+  function publicDraft(definition = publicDefinition(), state = drafting()): State {
+    return candidate(state, { definitions: [...state.draft!.candidateRelease.definitions, definition] });
+  }
+  function effective(state: State) {
+    const result = selectEffectiveMilestoneGovernanceContext(state);
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    return result.value;
+  }
+  function expectCollision(state: State, input: PrototypeState, definitionId = local.id) {
+    const before = structuredClone({ state, input });
+    const preview = previewGovernancePublish(state, input);
+    const result = publishGovernanceDraft(state, input, factories());
+    expect(preview.blockingIssues).toEqual([expect.objectContaining({
+      code: "duplicate-id", domain: "governance", source: "data", severity: "blocking",
+      target: { section: "definitions", entityId: definitionId },
+    })]);
+    expect(result).toEqual({ ok: false, code: "duplicate-id", issues: preview.blockingIssues });
+    expect({ state, input }).toEqual(before);
+  }
+
+  it("rejects_new_public_definition_id_that_collides_with_project_local_definition", () => {
+    expect(baseline.releases[0].definitions.some(definition => definition.id === local.id)).toBe(false);
+    expectCollision(publicDraft(), completePrototype(localPublished()));
+  });
+
+  it("rejects_collision_with_local_definition_from_another_project", () => {
+    const state = assign(publicDraft(), [{ projectId, milestoneDefinitionId: y }]);
+    const input = { ...emptyPrototype, schedules: [
+      createEmptyCanonicalProjectSchedule(projectId),
+      { ...localSchedule(), projectId: secondProjectId },
+    ] };
+    expectCollision(state, input);
+  });
+
+  it.each(["older-only", "no-occurrence"])("rejects_collision_with_historical_unused_local_definition: %s", usage => {
+    const item = usage === "older-only"
+      ? { ...localPublished(), publishedVersions: [...localPublished().publishedVersions, published([], 2)], workingDraft: schedule([]).workingDraft }
+      : localSchedule();
+    expectCollision(publicDraft(), completePrototype(item));
+  });
+
+  it("rejected_collision_does_not_reinterpret_existing_published_local_occurrence", () => {
+    const state = publicDraft();
+    const item = localPublished();
+    const input = completePrototype(item);
+    const before = structuredClone({ state, input });
+    const beforeRead = selectCurrentPublishedSchedule(input, projectId, effective(state));
+    expect(beforeRead).toMatchObject({ kind: "published", milestoneRows: [{ milestone: "Local acceptance", stage: "A1-stage" }] });
+    const result = publishGovernanceDraft(state, input, factories());
+    const afterContext = effective(result.ok ? result.value : state);
+    expect(resolveScheduleDefinitions(afterContext, item.localDefinitions).find(definition => definition.id === local.id))
+      .toMatchObject({ id: local.id, name: "Local acceptance", stageGroupId: "stage-a1", milestoneTypeId: "type-test" });
+    expect(selectCurrentPublishedSchedule(input, projectId, afterContext)).toEqual(beforeRead);
+    expect(result).toMatchObject({ ok: false, code: "duplicate-id" });
+    expect({ state, input }).toEqual(before);
+  });
+
+  it("rejected_collision_preserves_attention_semantics", () => {
+    const monitored = { ...local, name: "Local monitored SMT", milestoneTypeId: toMilestoneTypeId("type-smt") };
+    const item = localPublished(monitored);
+    const input = completePrototype(item);
+    const state = publicDraft({ ...publicDefinition(), milestoneTypeId: toMilestoneTypeId("type-test") });
+    const before = selectDashboardAttention(input, referenceDate, effective(state));
+    expect(before).toMatchObject({ kind: "available", due: { projectCount: 1, matches: [{
+      projectId, milestoneId: "local-published-row", milestoneDefinitionId: local.id, milestoneName: "Local monitored SMT", plan: "2026-10-01",
+    }] }, overdue: { projectCount: 0, matches: [] } });
+    const result = publishGovernanceDraft(state, input, factories());
+    const afterContext = effective(result.ok ? result.value : state);
+    expect(selectDashboardAttention(input, referenceDate, afterContext)).toEqual(before);
+    expect(resolveScheduleDefinitions(afterContext, item.localDefinitions).find(definition => definition.id === local.id)?.milestoneTypeId).toBe("type-smt");
+    expect(result).toMatchObject({ ok: false, code: "duplicate-id" });
+  });
+
+  it("allows_same_name_with_distinct_definition_ids", () => {
+    const definition = publicDefinition(toMilestoneDefinitionId("public-distinct-identity"), local.name);
+    const state = publicDraft(definition);
+    const input = completePrototype(localPublished());
+    const before = structuredClone({ state, input });
+    expect(previewGovernancePublish(state, input).blockingIssues).toEqual([]);
+    const next = value(publishGovernanceDraft(state, input, factories()));
+    const definitions = resolveScheduleDefinitions(effective(next), input.schedules[0].localDefinitions);
+    expect(definitions.filter(item => item.name === "Local acceptance").map(item => [item.id, item.milestoneTypeId])).toEqual([
+      ["public-distinct-identity", "type-smt"], ["local-fix-boundary", "type-test"],
+    ]);
+    expect(next.releases[1].definitions.at(-1)).toEqual(definition);
+    expect({ state, input }).toEqual(before);
+  });
+
+  it("allows_existing_public_membership_setting_changes_without_local_collision", () => {
+    const state = candidate(retire(), {
+      portfolioColumnDefinitionIds: [y], additionalAttentionDefinitionIds: [y], newProjectRequirementDefinitionIds: [y],
+    });
+    const input = completePrototype();
+    const before = structuredClone({ state, input });
+    expect(previewGovernancePublish(state, input).blockingIssues).toEqual([]);
+    const next = value(publishGovernanceDraft(state, input, factories()));
+    expect(next.releases[1]).toMatchObject({
+      definitions: baseline.releases[0].definitions,
+      portfolioColumnDefinitionIds: [y], additionalAttentionDefinitionIds: [y], newProjectRequirementDefinitionIds: [y],
+    });
+    expect(next.releases[1].addableDefinitionIds).not.toContain(x);
+    expect(next.releases[1].addableDefinitionIds).toContain(y);
+    expect({ state, input }).toEqual(before);
+  });
+
+  it("preview_and_publish_share_the_same_collision_validation", () => {
+    const prior = value(publishGovernanceDraft(withdraw(retire(drafting(enrolled()))), prototype(schedule()), factories("prior")));
+    const state = assign(publicDraft(publicDefinition(), drafting(prior)), [{ projectId, milestoneDefinitionId: y }]);
+    const input = completePrototype();
+    const before = structuredClone({ state, input });
+    expect(state.requirementEnrollments).toHaveLength(1);
+    expect(state.requirementWithdrawals).toHaveLength(1);
+    expect(state.retiredDraftOccurrenceGrants).toHaveLength(1);
+    let allocations = 0;
+    const ids = factories();
+    const injected: GovernanceCommandFactories = {
+      createReleaseId: () => { allocations++; return ids.createReleaseId(); },
+      createEnrollmentId: () => { allocations++; return ids.createEnrollmentId(); },
+      createWithdrawalId: () => { allocations++; return ids.createWithdrawalId(); },
+      nowIso: () => { allocations++; return ids.nowIso(); },
+    };
+    const preview = previewGovernancePublish(state, input);
+    const result = publishGovernanceDraft(state, input, injected);
+    expect(result).toEqual({ ok: false, code: "duplicate-id", issues: preview.blockingIssues });
+    expect(preview.blockingIssues).toEqual([expect.objectContaining({ code: "duplicate-id", target: { section: "definitions", entityId: local.id } })]);
+    expect(allocations).toBe(0);
+    expect({ state, input }).toEqual(before);
+  });
+
+  it("rejects_existing_public_local_collision_across_the_full_candidate_set", () => {
+    const state = candidate(drafting(), { portfolioColumnDefinitionIds: [y] });
+    const input = completePrototype(localSchedule({ ...local, id: x }));
+    expect(previewGovernancePublish(state, input).diff?.addedDefinitionIds).toEqual([]);
+    expectCollision(state, input, x);
   });
 });
 

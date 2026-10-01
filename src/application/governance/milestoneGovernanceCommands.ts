@@ -168,9 +168,14 @@ function buildGovernancePublishTransition(state: State, prototype: PrototypeStat
   uniqueIds(state.releases.map(r => r.id), "releases");
   uniqueIds(candidate.definitions.map(d => d.id), "definitions");
   const definitions = new Map(candidate.definitions.map(d => [d.id, d]));
+  const localDefinitionIds = new Set(prototype.schedules.flatMap(schedule =>
+    schedule.localDefinitions.map(definition => definition.id)));
   const stages = new Set(stageGroupCatalog.map(s => s.id));
   const types = new Set(milestoneTypeCatalog.map(t => t.id));
   for (const definition of candidate.definitions) {
+    if (localDefinitionIds.has(definition.id)) {
+      block("duplicate-id", "A public definition ID must not be used by any Project-local definition.", "definitions", definition.id);
+    }
     if (!stages.has(definition.stageGroupId) || !types.has(definition.milestoneTypeId)) {
       block("invalid-reference", "Definitions must use an existing Stage and Type.", "definitions", definition.id);
     }
