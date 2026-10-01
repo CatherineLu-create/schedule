@@ -3,10 +3,11 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import type { Project } from "../../domain/project/project";
 import type { ProjectMaster } from "../../domain/project/projectMaster";
 import type { CanonicalScheduleWorkingDraftMilestone } from "../../domain/schedule/canonicalScheduleWorkingDraft";
-import type {
-  CanonicalProjectSchedule,
-  CanonicalPublishedScheduleMilestone,
-  CanonicalPublishedScheduleVersion,
+import {
+  createEmptyCanonicalProjectSchedule,
+  type CanonicalProjectSchedule,
+  type CanonicalPublishedScheduleMilestone,
+  type CanonicalPublishedScheduleVersion,
 } from "../../domain/schedule/officialSchedule";
 import {
   toScheduleVersionNumber,
@@ -14,6 +15,7 @@ import {
 } from "../../domain/schedule/schedule";
 import { parseDateOnly, type DateOnly } from "../../domain/shared/dateOnly";
 import {
+  toCanonicalScheduleWorkingDraftId,
   toMilestoneDefinitionId,
   toMilestoneId,
   toProjectId,
@@ -94,11 +96,18 @@ function schedule(
   publishedVersions: readonly CanonicalPublishedScheduleVersion[] = [],
 ): CanonicalProjectSchedule {
   return {
+    ...createEmptyCanonicalProjectSchedule(owner),
     projectId: owner,
     publishedVersions,
     workingDraft: null,
   };
 }
+
+const draftIdentity = {
+  workingDraftId: toCanonicalScheduleWorkingDraftId("selector-draft"),
+  reviewSessionIds: [],
+  importCandidates: [],
+};
 
 function draftMilestone(
   id: string,
@@ -717,6 +726,7 @@ describe("canonical Working Draft read", () => {
     const malformed = {
       ...schedule(owner.id),
       workingDraft: {
+        ...draftIdentity,
         milestones: [draftMilestone("bad", toMilestoneDefinitionId("missing"))],
       },
     };
@@ -727,7 +737,7 @@ describe("canonical Working Draft read", () => {
     );
     expect(malformed.workingDraft.milestones).toHaveLength(1);
 
-    const draft = Object.freeze({ milestones: Object.freeze([draftMilestone("valid")]) });
+    const draft = Object.freeze({ ...draftIdentity, milestones: Object.freeze([draftMilestone("valid")]) });
     const read = selectScheduleWorkingDraft(
       state([owner], [{ ...schedule(owner.id), workingDraft: draft }]), owner.id,
     );
@@ -741,7 +751,7 @@ describe("canonical Working Draft read", () => {
 
   it("reports duplicate Draft milestone identity without normalizing rows", () => {
     const owner = project("duplicate-draft-row");
-    const draft = Object.freeze({ milestones: Object.freeze([
+    const draft = Object.freeze({ ...draftIdentity, milestones: Object.freeze([
       draftMilestone("same"), draftMilestone("same"),
     ]) });
     const read = selectScheduleWorkingDraft(
@@ -753,7 +763,7 @@ describe("canonical Working Draft read", () => {
 
   it("keeps a selected Draft readable despite unrelated ownership and content defects", () => {
     const selected = project("selected", "Renamed selected Project");
-    const selectedDraft = Object.freeze({ milestones: Object.freeze([draftMilestone("selected-row")]) });
+    const selectedDraft = Object.freeze({ ...draftIdentity, milestones: Object.freeze([draftMilestone("selected-row")]) });
     const malformedOwner = project("malformed");
     const duplicateOwner = project("duplicate-unrelated");
     const duplicate = schedule(duplicateOwner.id);
@@ -762,6 +772,7 @@ describe("canonical Working Draft read", () => {
       [
         { ...schedule(selected.id), workingDraft: selectedDraft },
         { ...withInvalidVersionNumber(malformedOwner.id, 0), workingDraft: {
+          ...draftIdentity,
           milestones: [draftMilestone("bad", toMilestoneDefinitionId("missing"))],
         } },
         duplicate, { ...duplicate }, schedule(toProjectId("orphan")),
@@ -776,10 +787,10 @@ describe("canonical Working Draft read", () => {
     const first = project("first");
     const second = project("second");
     const value = state([first, second], [
-      { ...schedule(first.id), workingDraft: { milestones: [
+      { ...schedule(first.id), workingDraft: { ...draftIdentity, milestones: [
         draftMilestone("same-raw-id", undefined, { plan: dateOnly("2030-01-01") }),
       ] } },
-      { ...schedule(second.id), workingDraft: { milestones: [
+      { ...schedule(second.id), workingDraft: { ...draftIdentity, milestones: [
         draftMilestone("same-raw-id", undefined, { plan: dateOnly("2040-02-02") }),
       ] } },
     ]);
@@ -806,7 +817,7 @@ describe("canonical Working Draft read", () => {
     const earlier = Object.freeze(draftMilestone("earlier", toMilestoneDefinitionId("milestone-design-kickoff"), {
       applicability: "notApplicable", plan: null, actual: dateOnly("2026-09-11"),
     }));
-    const draft = Object.freeze({ milestones: Object.freeze([later, earlier]) });
+    const draft = Object.freeze({ ...draftIdentity, milestones: Object.freeze([later, earlier]) });
     const read = selectScheduleWorkingDraft(
       state([owner], [{ ...schedule(owner.id), workingDraft: draft }]), owner.id,
     );
@@ -824,7 +835,7 @@ describe("canonical Working Draft read", () => {
 
   it("keeps valid Draft independent from malformed Published history", () => {
     const owner = project("bad-published");
-    const draft = { milestones: [draftMilestone("valid-draft-row")] };
+    const draft = { ...draftIdentity, milestones: [draftMilestone("valid-draft-row")] };
     const current = state([owner], [{ ...withInvalidVersionNumber(owner.id, 0), workingDraft: draft }]);
     const read = selectScheduleWorkingDraft(current, owner.id);
     expect(read.kind).toBe("workingDraft");
@@ -839,7 +850,7 @@ describe("Draft diagnostics and Official isolation", () => {
   it("does not add diagnostics for a valid Draft", () => {
     const owner = project("healthy-draft");
     expect(validateCanonicalScheduleState(state([owner], [
-      { ...schedule(owner.id), workingDraft: { milestones: [draftMilestone("valid")] } },
+      { ...schedule(owner.id), workingDraft: { ...draftIdentity, milestones: [draftMilestone("valid")] } },
     ]))).toEqual([]);
   });
 
@@ -849,6 +860,7 @@ describe("Draft diagnostics and Official isolation", () => {
     const duplicate = schedule(duplicateOwner.id);
     const malformedOwner = project("malformed");
     const malformed = { ...withInvalidVersionNumber(malformedOwner.id, 0), workingDraft: {
+      ...draftIdentity,
       milestones: [draftMilestone("same"), draftMilestone("same", toMilestoneDefinitionId("missing"))],
     } };
     const current = state(
@@ -870,6 +882,7 @@ describe("Draft diagnostics and Official isolation", () => {
   it("keeps no-Published Official truth healthy beside a malformed Draft", () => {
     const owner = project("no-published");
     const malformed = { ...schedule(owner.id), workingDraft: {
+      ...draftIdentity,
       milestones: [draftMilestone("bad", toMilestoneDefinitionId("missing"))],
     } };
     expect(selectCurrentPublishedSchedule(state([owner], [malformed]), owner.id))

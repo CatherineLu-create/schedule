@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { startScheduleWorkingDraft } from "../application/commands/canonicalScheduleCommands";
+import { toCanonicalScheduleWorkingDraftId } from "../domain/shared/ids";
 import { selectDashboardAttention } from "../application/selectors/dashboardAttention";
 import { selectPortfolioDashboardRows } from "../application/selectors/portfolioDashboardRows";
 import { milestoneDefinitions } from "../config/v2/referenceData";
@@ -183,7 +184,7 @@ describe("createUserTrialDemoSeed", () => {
     for (const [scheduleIndex, schedule] of seed.schedules.entries()) {
       const originalPublished = schedule.publishedVersions;
       const originalMilestones = originalPublished[0]!.milestones;
-      const result = startScheduleWorkingDraft(schedule, { milestoneDefinitions });
+      const result = startScheduleWorkingDraft(schedule, { workingDraftId: toCanonicalScheduleWorkingDraftId("demo-draft") }, { milestoneDefinitions });
 
       expect(result.ok).toBe(true);
       if (!result.ok) throw new Error("Expected Demo Draft creation");

@@ -5,11 +5,11 @@ import {
   milestoneDefinitions,
   portfolioMilestoneDefinitions,
 } from "../../config/v2/referenceData";
-import type { CanonicalProjectSchedule, CanonicalPublishedScheduleMilestone } from "../../domain/schedule/officialSchedule";
+import { createEmptyCanonicalProjectSchedule, type CanonicalProjectSchedule, type CanonicalPublishedScheduleMilestone } from "../../domain/schedule/officialSchedule";
 import type { ProjectRoleAssignment } from "../../domain/team/team";
 import { toScheduleVersionNumber, type ScheduleVersionNumber } from "../../domain/schedule/schedule";
 import { parseDateOnly, type DateOnly } from "../../domain/shared/dateOnly";
-import { toCatalogItemId, toMilestoneDefinitionId, toMilestoneId, toPersonAssignmentId, toProjectId } from "../../domain/shared/ids";
+import { toCanonicalScheduleWorkingDraftId, toCatalogItemId, toMilestoneDefinitionId, toMilestoneId, toPersonAssignmentId, toProjectId } from "../../domain/shared/ids";
 import { canonicalProjectFixtures, devProject002, devProject003 } from "../../fixtures/v2/canonicalProjectFixtures";
 import { canonicalScheduleFixtures } from "../../fixtures/v2/canonicalScheduleFixtures";
 import { createInitialSelfServiceReferenceCatalogs } from "../reference-data/selfServiceCatalogs";
@@ -42,6 +42,7 @@ function publishedSchedule(
   milestones: readonly CanonicalPublishedScheduleMilestone[],
 ): CanonicalProjectSchedule {
   return {
+    ...createEmptyCanonicalProjectSchedule(projectId),
     projectId,
     publishedVersions: [{
       versionNumber: toScheduleVersionNumber(1),
@@ -229,6 +230,7 @@ describe("canonical Portfolio Dashboard read projection", () => {
       actual: null,
     };
     const outOfOrder: CanonicalProjectSchedule = {
+      ...createEmptyCanonicalProjectSchedule(devProject003.id),
       projectId: devProject003.id,
       publishedVersions: [
         { versionNumber: toScheduleVersionNumber(3), versionNote: null, publishedAt: "2026-09-10T00:00:00Z", milestones: [currentMilestone] },
@@ -247,11 +249,13 @@ describe("canonical Portfolio Dashboard read projection", () => {
 
   it("preserves no-Published, zero-milestone Published, and unavailable Schedule reads without hiding rows", () => {
     const noPublished: CanonicalProjectSchedule = {
+      ...createEmptyCanonicalProjectSchedule(devProject002.id),
       projectId: devProject002.id,
       publishedVersions: [],
       workingDraft: null,
     };
     const zeroMilestone: CanonicalProjectSchedule = {
+      ...createEmptyCanonicalProjectSchedule(devProject003.id),
       projectId: devProject003.id,
       publishedVersions: [{ versionNumber: toScheduleVersionNumber(1), versionNote: null, publishedAt: "2026-09-12T00:00:00Z", milestones: [] }],
       workingDraft: null,
@@ -338,6 +342,9 @@ describe("canonical Portfolio Dashboard read projection", () => {
     const withDraft: CanonicalProjectSchedule = {
       ...published,
       workingDraft: {
+        workingDraftId: toCanonicalScheduleWorkingDraftId("portfolio-draft"),
+        reviewSessionIds: [],
+        importCandidates: [],
         milestones: [{
           ...mdrr,
           plan: dateOnly("2099-01-01"),

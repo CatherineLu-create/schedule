@@ -73,6 +73,11 @@ describe("canonical Project command integration", () => {
       projectId: created.project.id,
       publishedVersions: [],
       workingDraft: null,
+      localDefinitions: [],
+      evidenceLedger: [],
+      reviewSessions: [],
+      reviewDecisions: [],
+      reviewClosures: [],
     });
     expect(
       selectOfficialProjectSources(next, created.project.id)?.master,

@@ -104,4 +104,19 @@ describe("ValidationIssue", () => {
     expect(countBlocking(filterIssuesByDomain(issues, "schedule"))).toBe(1);
     expect(countBlocking(filterIssuesByDomain(issues, "team"))).toBe(1);
   });
+
+  it("filters Blocking governance issues independently of Project, Schedule, and Team", () => {
+    const governanceIssue: ValidationIssue = {
+      code: "governance.definition.semantic-identity-changed",
+      domain: "governance",
+      source: "data",
+      severity: "blocking",
+      message: "A published definition cannot change meaning under the same ID.",
+      target: { section: "definitions", entityId: "milestone-a1-a-g-o", field: "milestoneTypeId" },
+    };
+
+    expect(filterIssuesByDomain([scheduleImportBlocking, governanceIssue], "governance"))
+      .toEqual([governanceIssue]);
+    expect(countBlocking([governanceIssue])).toBe(1);
+  });
 });

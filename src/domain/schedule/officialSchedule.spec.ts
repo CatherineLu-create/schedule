@@ -93,6 +93,7 @@ function schedule(
   publishedVersions: readonly CanonicalPublishedScheduleVersion[],
 ): CanonicalProjectSchedule {
   return {
+    ...createEmptyCanonicalProjectSchedule(toProjectId(projectId)),
     projectId: toProjectId(projectId),
     publishedVersions,
     workingDraft: null,
@@ -106,6 +107,19 @@ function issueCodes(value: CanonicalProjectSchedule): string[] {
 }
 
 describe("canonical official Schedule model", () => {
+  it("creates_empty_schedule_with_empty_governance_ledgers", () => {
+    const schedule = createEmptyCanonicalProjectSchedule(toProjectId("governance-empty"));
+    expect(schedule).toEqual({
+      projectId: toProjectId("governance-empty"),
+      publishedVersions: [],
+      workingDraft: null,
+      localDefinitions: [],
+      evidenceLedger: [],
+      reviewSessions: [],
+      reviewDecisions: [],
+      reviewClosures: [],
+    });
+  });
   it("contains only the approved ownership and Published snapshot fields", () => {
     const row = milestone("milestone-a");
     const published = version(1, [row]);
@@ -117,11 +131,21 @@ describe("canonical official Schedule model", () => {
       projectId: "project-empty",
       publishedVersions: [],
       workingDraft: null,
+      localDefinitions: [],
+      evidenceLedger: [],
+      reviewSessions: [],
+      reviewDecisions: [],
+      reviewClosures: [],
     });
     expect(Object.keys(empty)).toEqual([
       "projectId",
       "publishedVersions",
       "workingDraft",
+      "localDefinitions",
+      "evidenceLedger",
+      "reviewSessions",
+      "reviewDecisions",
+      "reviewClosures",
     ]);
     expect(Object.keys(published)).toEqual([
       "versionNumber",
@@ -147,7 +171,9 @@ describe("canonical official Schedule model", () => {
       | "actual"
     >();
     expectTypeOf<keyof CanonicalProjectSchedule>().toEqualTypeOf<
-      "projectId" | "publishedVersions" | "workingDraft"
+      "projectId" | "publishedVersions" | "workingDraft" |
+      "localDefinitions" | "evidenceLedger" | "reviewSessions" |
+      "reviewDecisions" | "reviewClosures"
     >();
     expectTypeOf<CanonicalProjectSchedule["workingDraft"]>()
       .toEqualTypeOf<CanonicalScheduleWorkingDraft | null>();
@@ -164,6 +190,11 @@ describe("canonical official Schedule model", () => {
       "projectId",
       "publishedVersions",
       "workingDraft",
+      "localDefinitions",
+      "evidenceLedger",
+      "reviewSessions",
+      "reviewDecisions",
+      "reviewClosures",
     ]);
     expect(Reflect.get(value, "workingDraft")).toBeNull();
   });

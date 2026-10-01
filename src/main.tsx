@@ -71,6 +71,7 @@ import {
 } from "./domain/schedule/officialSchedule";
 import { toLocalDateOnly, type DateOnly } from "./domain/shared/dateOnly";
 import {
+  toCanonicalScheduleWorkingDraftId,
   toCatalogItemId,
   toMilestoneId,
   toPersonAssignmentId,
@@ -323,6 +324,7 @@ export function App({
     }
     const result = startScheduleWorkingDraft(
       owner.schedule,
+      { workingDraftId: toCanonicalScheduleWorkingDraftId(globalThis.crypto.randomUUID()) },
       canonicalScheduleCommandContext,
     );
     if (!result.ok) {

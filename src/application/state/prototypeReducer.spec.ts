@@ -7,7 +7,7 @@ import {
   type CanonicalProjectSchedule,
 } from "../../domain/schedule/officialSchedule";
 import { toScheduleVersionNumber } from "../../domain/schedule/schedule";
-import { toProjectId, type ProjectId } from "../../domain/shared/ids";
+import { toCanonicalScheduleWorkingDraftId, toProjectId, type ProjectId } from "../../domain/shared/ids";
 import { prototypeReducer, type PrototypeAction } from "./prototypeReducer";
 import type { PrototypeState } from "./prototypeState";
 
@@ -31,6 +31,7 @@ function makeState(
 
 function nonEmptySchedule(projectId: ProjectId): CanonicalProjectSchedule {
   return {
+    ...createEmptyCanonicalProjectSchedule(projectId),
     projectId,
     publishedVersions: [
       {
@@ -43,6 +44,12 @@ function nonEmptySchedule(projectId: ProjectId): CanonicalProjectSchedule {
     workingDraft: null,
   };
 }
+
+const draftIdentity = {
+  workingDraftId: toCanonicalScheduleWorkingDraftId("reducer-draft"),
+  reviewSessionIds: [],
+  importCandidates: [],
+};
 
 function expectAtomicRejection(
   state: PrototypeState,
@@ -229,7 +236,7 @@ describe("prototypeReducer scheduleReplaced", () => {
 
   it("replaces exactly one same-ID Schedule and preserves Projects", () => {
     const first = schedule("project-first");
-    const replacement = { ...first, workingDraft: { milestones: [] } };
+    const replacement = { ...first, workingDraft: { ...draftIdentity, milestones: [] } };
     const second = schedule("project-second");
     const current = makeState(
       [project("project-first"), project("project-second")],
@@ -251,7 +258,7 @@ describe("prototypeReducer scheduleReplaced", () => {
 
   const owner = project("owner");
   const owned = schedule("owner");
-  const replacement = { ...owned, workingDraft: { milestones: [] } };
+  const replacement = { ...owned, workingDraft: { ...draftIdentity, milestones: [] } };
 
   it.each([
     {

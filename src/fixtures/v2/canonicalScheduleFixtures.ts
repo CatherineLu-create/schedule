@@ -36,6 +36,7 @@ function requireMilestoneDefinitionId(idValue: string): MilestoneDefinitionId {
 }
 
 export const devSchedule001: CanonicalProjectSchedule = {
+  ...createEmptyCanonicalProjectSchedule(toProjectId("dev-project-001")),
   projectId: toProjectId("dev-project-001"),
   publishedVersions: [
     {

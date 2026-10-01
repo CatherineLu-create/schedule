@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { startScheduleWorkingDraft } from "../../application/commands/canonicalScheduleCommands";
 import { milestoneDefinitions } from "../../config/v2/referenceData";
+import { toCanonicalScheduleWorkingDraftId } from "../../domain/shared/ids";
 import {
   validateCanonicalProjectSchedule,
 } from "../../domain/schedule/officialSchedule";
@@ -16,6 +17,24 @@ import {
 } from "./canonicalScheduleFixtures";
 
 describe("canonical Schedule fixtures", () => {
+  it("legacy_published_fixtures_keep_exact_occurrences_after_compatibility_initialization", () => {
+    const before = JSON.stringify(devSchedule001.publishedVersions);
+    const started = startScheduleWorkingDraft(
+      devSchedule001,
+      { workingDraftId: toCanonicalScheduleWorkingDraftId("fixture-review-draft") },
+      { milestoneDefinitions },
+    );
+    expect(started.ok).toBe(true);
+    if (!started.ok) throw new Error("Expected fixture Draft creation");
+    expect(JSON.stringify(devSchedule001.publishedVersions)).toBe(before);
+    expect(JSON.stringify(started.schedule.publishedVersions)).toBe(before);
+    expect(started.schedule.publishedVersions[0]?.milestones.map((row) => row.milestoneId)).toEqual([
+      "dev-project-001-milestone-design-kickoff",
+      "dev-project-001-milestone-design-id-fix",
+      "dev-project-001-milestone-me-drawing",
+      "dev-project-001-milestone-a-go",
+    ]);
+  });
   it("seeds no canonical Working Draft", () => {
     for (const value of canonicalScheduleFixtures) {
       expect(Object.hasOwn(value, "workingDraft")).toBe(true);
@@ -78,7 +97,7 @@ describe("canonical Schedule fixtures", () => {
   it("keeps sparse Published fixtures unchanged while first Draft clones only Published rows", () => {
     const originalPublished = devSchedule001.publishedVersions;
     const originalMilestones = originalPublished[0]!.milestones;
-    const result = startScheduleWorkingDraft(devSchedule001, { milestoneDefinitions });
+    const result = startScheduleWorkingDraft(devSchedule001, { workingDraftId: toCanonicalScheduleWorkingDraftId("fixture-clone") }, { milestoneDefinitions });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("Expected fixture Draft creation");

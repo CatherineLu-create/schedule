@@ -1,11 +1,14 @@
 import type { DateOnly } from "../shared/dateOnly";
 import type {
+  CanonicalScheduleWorkingDraftId,
   MilestoneDefinitionId,
   MilestoneId,
+  ScheduleReviewSessionId,
 } from "../shared/ids";
 import type { ValidationIssue } from "../validation/validationIssue";
 import type { MilestoneDefinition } from "./milestoneCatalog";
 import type { MilestoneApplicability } from "./schedule";
+import type { ScheduleImportCandidate } from "./scheduleReview";
 
 export interface CanonicalScheduleWorkingDraftMilestone {
   readonly milestoneId: MilestoneId;
@@ -16,7 +19,10 @@ export interface CanonicalScheduleWorkingDraftMilestone {
 }
 
 export interface CanonicalScheduleWorkingDraft {
+  readonly workingDraftId: CanonicalScheduleWorkingDraftId;
   readonly milestones: readonly CanonicalScheduleWorkingDraftMilestone[];
+  readonly reviewSessionIds: readonly ScheduleReviewSessionId[];
+  readonly importCandidates: readonly ScheduleImportCandidate[];
 }
 
 type ScheduleDraftIntegrityIssueCode =

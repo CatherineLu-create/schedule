@@ -13,7 +13,7 @@ import {
 import type { CanonicalPublishedScheduleVersion } from "./domain/schedule/officialSchedule";
 import { toScheduleVersionNumber } from "./domain/schedule/schedule";
 import { parseDateOnly, type DateOnly } from "./domain/shared/dateOnly";
-import { toMilestoneDefinitionId, toMilestoneId, toProjectId } from "./domain/shared/ids";
+import { toCanonicalScheduleWorkingDraftId, toMilestoneDefinitionId, toMilestoneId, toProjectId } from "./domain/shared/ids";
 import type { ValidationIssue } from "./domain/validation/validationIssue";
 import { ScheduleWorkspace, type ScheduleWorkspaceProps } from "./scheduleWorkspace";
 
@@ -38,6 +38,9 @@ const draftIssue: ValidationIssue = {
 };
 
 const draft = {
+  workingDraftId: toCanonicalScheduleWorkingDraftId("workspace-draft"),
+  reviewSessionIds: [],
+  importCandidates: [],
   milestones: [{
     milestoneId: toMilestoneId("draft-kickoff"),
     milestoneDefinitionId: toMilestoneDefinitionId("milestone-design-kickoff"),
@@ -285,7 +288,7 @@ describe("Schedule Workspace presentation", () => {
     if (actual === null) throw new Error("Invalid test date");
     render(<ScheduleWorkspace {...workingDraftProps} draftRead={{
       kind: "workingDraft",
-      draft: { milestones: [{ ...draft.milestones[0]!, plan: null, actual }] },
+      draft: { ...draft, milestones: [{ ...draft.milestones[0]!, plan: null, actual }] },
       milestoneRows: [{ ...workingDraftRow, plan: null, actual }],
     }} />);
     const planInput = screen.getByLabelText(/^Plan for Kickoff occurrence/);
@@ -371,7 +374,7 @@ describe("Schedule Workspace presentation", () => {
       ...workingDraftProps,
       draftRead: {
         kind: "workingDraft",
-        draft: { milestones: [{ ...draft.milestones[0]!, plan, actual }] },
+        draft: { ...draft, milestones: [{ ...draft.milestones[0]!, plan, actual }] },
         milestoneRows: [{ ...workingDraftRow, plan, actual }],
       },
     });
@@ -413,7 +416,7 @@ describe("Schedule Workspace presentation", () => {
     const secondId = toMilestoneId("draft-kickoff-two");
     render(<ScheduleWorkspace {...workingDraftProps} draftRead={{
       kind: "workingDraft",
-      draft: { milestones: [draft.milestones[0]!, { ...draft.milestones[0]!, milestoneId: secondId }] },
+      draft: { ...draft, milestones: [draft.milestones[0]!, { ...draft.milestones[0]!, milestoneId: secondId }] },
       milestoneRows: [workingDraftRow, { ...workingDraftRow, milestoneId: secondId }],
     }} />);
     for (const occurrence of ["draft-kickoff", "draft-kickoff-two"]) {
@@ -435,7 +438,7 @@ describe("Schedule Workspace presentation", () => {
     expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
     rerender(<ScheduleWorkspace {...workingDraftProps} draftRead={{
       kind: "workingDraft",
-      draft: { milestones: [] },
+      draft: { ...draft, milestones: [] },
       milestoneRows: [],
     }} />);
     expect(screen.getByRole("button", { name: "Publish" })).toBeEnabled();
@@ -453,7 +456,7 @@ describe("Schedule Workspace presentation", () => {
       ...workingDraftProps,
       draftRead: {
         kind: "workingDraft",
-        draft: { milestones: [draft.milestones[0]!, secondMilestone] },
+        draft: { ...draft, milestones: [draft.milestones[0]!, secondMilestone] },
         milestoneRows: [workingDraftRow, secondRow],
       },
     };
@@ -466,7 +469,7 @@ describe("Schedule Workspace presentation", () => {
     });
     rerender(<ScheduleWorkspace {...twoRows} draftRead={{
       kind: "workingDraft",
-      draft: { milestones: [secondMilestone] },
+      draft: { ...draft, milestones: [secondMilestone] },
       milestoneRows: [secondRow],
     }} />);
     expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
@@ -481,7 +484,7 @@ describe("Schedule Workspace presentation", () => {
       projectId: toProjectId(projectId),
       draftRead: {
         kind: "workingDraft",
-        draft: { milestones: [{ ...draft.milestones[0]!, milestoneId: typedMilestoneId,
+        draft: { ...draft, milestones: [{ ...draft.milestones[0]!, milestoneId: typedMilestoneId,
           plan: planValue }] },
         milestoneRows: [{ ...workingDraftRow, milestoneId: typedMilestoneId,
           plan: planValue }],
@@ -565,7 +568,7 @@ describe("Schedule Workspace presentation", () => {
 
   it("offers all 30 absent active definitions and excludes compatibility-only definitions", () => {
     render(<ScheduleWorkspace {...workingDraftProps}
-      draftRead={{ kind: "workingDraft", draft: { milestones: [] }, milestoneRows: [] }}
+      draftRead={{ kind: "workingDraft", draft: { ...draft, milestones: [] }, milestoneRows: [] }}
       milestoneDefinitions={activeMilestoneDefinitions}
     />);
 

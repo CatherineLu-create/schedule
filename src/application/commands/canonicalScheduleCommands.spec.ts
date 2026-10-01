@@ -15,6 +15,7 @@ import {
 } from "../../domain/schedule/schedule";
 import { parseDateOnly, type DateOnly } from "../../domain/shared/dateOnly";
 import {
+  toCanonicalScheduleWorkingDraftId,
   toMilestoneDefinitionId,
   toMilestoneId,
   toMilestoneTypeId,
@@ -111,6 +112,11 @@ function schedule(
   publishedVersions: readonly CanonicalPublishedScheduleVersion[] = [],
 ): CanonicalProjectSchedule {
   return {
+    localDefinitions: [],
+    evidenceLedger: [],
+    reviewSessions: [],
+    reviewDecisions: [],
+    reviewClosures: [],
     projectId: toProjectId("command-project"),
     publishedVersions,
     workingDraft: null,
@@ -121,7 +127,12 @@ function scheduleWithDraft(
   milestones: readonly CanonicalScheduleWorkingDraftMilestone[],
   publishedVersions: readonly CanonicalPublishedScheduleVersion[] = [],
 ): CanonicalProjectSchedule {
-  return { ...schedule(publishedVersions), workingDraft: { milestones } };
+  return { ...schedule(publishedVersions), workingDraft: {
+    workingDraftId: toCanonicalScheduleWorkingDraftId("command-test-draft"),
+    milestones,
+    reviewSessionIds: [],
+    importCandidates: [],
+  } };
 }
 
 function freezeScheduleGraph(
@@ -142,9 +153,59 @@ function freezeScheduleGraph(
 }
 
 describe("canonical Schedule Working Draft lifecycle commands", () => {
+  it("starts_empty_draft_without_published_schedule_and_uses_injected_working_draft_id", () => {
+    const id = toCanonicalScheduleWorkingDraftId("draft-empty-1");
+    const result = startScheduleWorkingDraft(schedule(), { workingDraftId: id }, context);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected created Draft");
+    expect(result.status).toBe("created");
+    expect(result.draft).toEqual({
+      workingDraftId: id,
+      milestones: [],
+      reviewSessionIds: [],
+      importCandidates: [],
+    });
+    expect(result.schedule.publishedVersions).toEqual([]);
+  });
+
+  it("clones_only_current_published_occurrences", () => {
+    const current = version(3, [publishedMilestone("current", definitionB.id)]);
+    const older = version(1, [publishedMilestone("older", definitionA.id)]);
+    const result = startScheduleWorkingDraft(
+      schedule([older, current]),
+      { workingDraftId: toCanonicalScheduleWorkingDraftId("draft-clone-1") },
+      context,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected created Draft");
+    expect(result.draft.milestones).toEqual(current.milestones);
+    expect(result.draft.milestones[0]).not.toBe(current.milestones[0]);
+    expect(result.draft.milestones).toHaveLength(1);
+  });
+
+  it("returns_existing_working_draft_unchanged", () => {
+    const first = startScheduleWorkingDraft(
+      schedule(),
+      { workingDraftId: toCanonicalScheduleWorkingDraftId("draft-original") },
+      context,
+    );
+    expect(first.ok).toBe(true);
+    if (!first.ok) throw new Error("Expected created Draft");
+    const second = startScheduleWorkingDraft(
+      first.schedule,
+      { workingDraftId: toCanonicalScheduleWorkingDraftId("draft-different") },
+      context,
+    );
+    expect(second.ok).toBe(true);
+    if (!second.ok) throw new Error("Expected existing Draft");
+    expect(second.status).toBe("existing");
+    expect(second.schedule).toBe(first.schedule);
+    expect(second.draft).toBe(first.draft);
+    expect(second.draft.workingDraftId).toBe(toCanonicalScheduleWorkingDraftId("draft-original"));
+  });
   it("starts an empty sparse Draft without Published history and reuses it", () => {
     const original = schedule([]);
-    const first = startScheduleWorkingDraft(original, context);
+    const first = startScheduleWorkingDraft(original, { workingDraftId: toCanonicalScheduleWorkingDraftId("first") }, context);
     expect(first.ok).toBe(true);
     if (!first.ok) throw new Error("Expected created Draft");
     expect(first.status).toBe("created");
@@ -152,7 +213,7 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
     expect(first.schedule.publishedVersions).toBe(original.publishedVersions);
     expect(original.workingDraft).toBeNull();
 
-    const second = startScheduleWorkingDraft(first.schedule, context);
+    const second = startScheduleWorkingDraft(first.schedule, { workingDraftId: toCanonicalScheduleWorkingDraftId("second") }, context);
     expect(second.ok).toBe(true);
     if (!second.ok) throw new Error("Expected existing Draft");
     expect(second.status).toBe("existing");
@@ -170,7 +231,7 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
     const v3 = Object.freeze(version(3, publishedRows));
     const v1 = Object.freeze(version(1, [publishedMilestone("old")]));
     const original = Object.freeze(schedule(Object.freeze([v3, v1])));
-    const result = startScheduleWorkingDraft(original, context);
+    const result = startScheduleWorkingDraft(original, { workingDraftId: toCanonicalScheduleWorkingDraftId("clone") }, context);
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("Expected created Draft");
     expect(result.status).toBe("created");
@@ -186,9 +247,14 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
   });
 
   it("returns an existing Draft before validating malformed Published history", () => {
-    const draft = Object.freeze({ milestones: Object.freeze([draftMilestone("edited")]) });
+    const draft = Object.freeze({
+      workingDraftId: toCanonicalScheduleWorkingDraftId("existing"),
+      milestones: Object.freeze([draftMilestone("edited")]),
+      reviewSessionIds: Object.freeze([]),
+      importCandidates: Object.freeze([]),
+    });
     const input = Object.freeze({ ...schedule([invalidVersion(0)]), workingDraft: draft });
-    const result = startScheduleWorkingDraft(input, context);
+    const result = startScheduleWorkingDraft(input, { workingDraftId: toCanonicalScheduleWorkingDraftId("ignored") }, context);
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("Expected existing Draft");
     expect(result.status).toBe("existing");
@@ -198,7 +264,7 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
 
   it("rejects malformed Published history before creating a new Draft", () => {
     const original = Object.freeze(schedule(Object.freeze([invalidVersion(0)])));
-    const result = startScheduleWorkingDraft(original, context);
+    const result = startScheduleWorkingDraft(original, { workingDraftId: toCanonicalScheduleWorkingDraftId("rejected") }, context);
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("Expected Start failure");
     expect(result.reason).toBe("validation-failed");

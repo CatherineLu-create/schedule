@@ -8,6 +8,13 @@ import type { ValidationIssue } from "../validation/validationIssue";
 import type { MilestoneDefinition } from "./milestoneCatalog";
 import type { CanonicalScheduleWorkingDraft } from "./canonicalScheduleWorkingDraft";
 import type {
+  ProjectLocalMilestoneDefinition,
+  ScheduleEvidenceRecord,
+  ScheduleReviewClosureEvent,
+  ScheduleReviewDecisionEvent,
+  ScheduleReviewSession,
+} from "./scheduleReview";
+import type {
   MilestoneApplicability,
   ScheduleVersionNumber,
 } from "./schedule";
@@ -31,6 +38,11 @@ export interface CanonicalProjectSchedule {
   readonly projectId: ProjectId;
   readonly publishedVersions: readonly CanonicalPublishedScheduleVersion[];
   readonly workingDraft: CanonicalScheduleWorkingDraft | null;
+  readonly localDefinitions: readonly ProjectLocalMilestoneDefinition[];
+  readonly evidenceLedger: readonly ScheduleEvidenceRecord[];
+  readonly reviewSessions: readonly ScheduleReviewSession[];
+  readonly reviewDecisions: readonly ScheduleReviewDecisionEvent[];
+  readonly reviewClosures: readonly ScheduleReviewClosureEvent[];
 }
 
 export function createEmptyCanonicalProjectSchedule(
@@ -40,6 +52,11 @@ export function createEmptyCanonicalProjectSchedule(
     projectId,
     publishedVersions: [],
     workingDraft: null,
+    localDefinitions: [],
+    evidenceLedger: [],
+    reviewSessions: [],
+    reviewDecisions: [],
+    reviewClosures: [],
   };
 }
 

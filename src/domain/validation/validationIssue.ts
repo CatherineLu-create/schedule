@@ -1,5 +1,5 @@
 export type ValidationIssueCode = string;
-export type ValidationDomain = "projectMaster" | "schedule" | "team";
+export type ValidationDomain = "projectMaster" | "schedule" | "team" | "governance";
 export type ValidationSource = "import" | "data";
 export type ValidationSeverity = "blocking" | "advisory";
 

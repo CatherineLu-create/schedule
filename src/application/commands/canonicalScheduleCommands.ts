@@ -17,6 +17,7 @@ import {
 import type { MilestoneDefinition } from "../../domain/schedule/milestoneCatalog";
 import type { DateOnly } from "../../domain/shared/dateOnly";
 import type {
+  CanonicalScheduleWorkingDraftId,
   MilestoneDefinitionId,
   MilestoneId,
 } from "../../domain/shared/ids";
@@ -136,6 +137,7 @@ export type PublishScheduleWorkingDraftResult =
 
 export function startScheduleWorkingDraft(
   schedule: CanonicalProjectSchedule,
+  input: { readonly workingDraftId: CanonicalScheduleWorkingDraftId },
   context: CanonicalScheduleCommandContext,
 ): StartScheduleWorkingDraftResult {
   if (schedule.workingDraft !== null) {
@@ -155,7 +157,10 @@ export function startScheduleWorkingDraft(
   }
   const current = getCurrentPublishedVersion(schedule);
   const draft: CanonicalScheduleWorkingDraft = {
+    workingDraftId: input.workingDraftId,
     milestones: current?.milestones.map((milestone) => ({ ...milestone })) ?? [],
+    reviewSessionIds: [],
+    importCandidates: [],
   };
   return {
     ok: true,
@@ -207,7 +212,7 @@ export function updateScheduleWorkingDraftMilestone(
       ? { ...milestone, plan: input.value }
       : { ...milestone, actual: input.value };
   });
-  const draft = { milestones };
+  const draft = { ...current.draft, milestones };
   return {
     ok: true,
     draft,
@@ -230,6 +235,7 @@ export function addScheduleWorkingDraftMilestone(
     actual: null,
   };
   const draft = {
+    ...current.draft,
     milestones: [...current.draft.milestones, milestone],
   };
   const issues = validateScheduleWorkingDraft(draft, context.milestoneDefinitions);
@@ -258,6 +264,7 @@ export function removeScheduleWorkingDraftMilestone(
     return { ok: false, reason: "milestone-not-found", issues: [] };
   }
   const draft = {
+    ...current.draft,
     milestones: current.draft.milestones.filter((_, candidateIndex) =>
       candidateIndex !== index),
   };

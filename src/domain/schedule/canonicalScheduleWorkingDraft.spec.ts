@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { parseDateOnly, type DateOnly } from "../shared/dateOnly";
 import {
+  toCanonicalScheduleWorkingDraftId,
   toMilestoneDefinitionId,
   toMilestoneId,
   toMilestoneTypeId,
@@ -62,9 +63,14 @@ function draftMilestone(
 }
 
 describe("canonical Schedule Working Draft", () => {
+  const identity = {
+    workingDraftId: toCanonicalScheduleWorkingDraftId("draft-test"),
+    reviewSessionIds: [],
+    importCandidates: [],
+  };
   it("has only the approved readonly Draft keys", () => {
     expectTypeOf<keyof CanonicalScheduleWorkingDraft>()
-      .toEqualTypeOf<"milestones">();
+      .toEqualTypeOf<"workingDraftId" | "milestones" | "reviewSessionIds" | "importCandidates">();
     expectTypeOf<keyof CanonicalScheduleWorkingDraftMilestone>()
       .toEqualTypeOf<
         | "milestoneId"
@@ -78,18 +84,20 @@ describe("canonical Schedule Working Draft", () => {
   });
 
   it("accepts an empty Draft", () => {
-    expect(validateScheduleWorkingDraft({ milestones: [] }, definitions))
+    expect(validateScheduleWorkingDraft({ ...identity, milestones: [] }, definitions))
       .toEqual([]);
   });
 
   it("accepts a normal Draft", () => {
     expect(validateScheduleWorkingDraft({
+      ...identity,
       milestones: [draftMilestone("normal", definitionB.id)],
     }, definitions)).toEqual([]);
   });
 
   it("reports only duplicate identity and unresolved classification", () => {
     const draft: CanonicalScheduleWorkingDraft = {
+      ...identity,
       milestones: [
         draftMilestone("same-id", definitionA.id),
         draftMilestone("same-id", toMilestoneDefinitionId("missing")),
@@ -122,6 +130,7 @@ describe("canonical Schedule Working Draft", () => {
       reviewStatus: "unreviewed",
     });
     const draft: CanonicalScheduleWorkingDraft = {
+      ...identity,
       milestones: [
         draftMilestone("first", inactiveUnreviewed.id, {
           applicability: "notApplicable",

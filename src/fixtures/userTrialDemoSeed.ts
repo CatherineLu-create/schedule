@@ -1,6 +1,6 @@
 import type { Project } from "../domain/project/project";
 import type { ProjectMaster } from "../domain/project/projectMaster";
-import type { CanonicalProjectSchedule } from "../domain/schedule/officialSchedule";
+import { createEmptyCanonicalProjectSchedule, type CanonicalProjectSchedule } from "../domain/schedule/officialSchedule";
 import { toScheduleVersionNumber } from "../domain/schedule/schedule";
 import { addDays, type DateOnly } from "../domain/shared/dateOnly";
 import {
@@ -163,6 +163,7 @@ function createDemoSchedule(
   referenceDate: DateOnly,
 ): CanonicalProjectSchedule {
   return {
+    ...createEmptyCanonicalProjectSchedule(scenario.projectId),
     projectId: scenario.projectId,
     publishedVersions: [
       {

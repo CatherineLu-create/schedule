@@ -1,6 +1,15 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
+  toCanonicalScheduleWorkingDraftId,
+  toGovernanceReleaseId,
+  toGovernanceDraftId,
+  toRequirementEnrollmentId,
+  toRequirementWithdrawalId,
+  toScheduleEvidenceId,
+  toScheduleImportCandidateId,
+  toScheduleReviewSessionId,
+  toScheduleReviewDecisionId,
   toCatalogItemId,
   toMilestoneDefinitionId,
   toMilestoneId,
@@ -14,6 +23,7 @@ import {
   toTeamFunctionId,
   toTeamTemplateId,
   type CatalogItemId,
+  type CanonicalScheduleWorkingDraftId,
   type MilestoneDefinitionId,
   type MilestoneId,
   type MilestoneRowId,
@@ -22,6 +32,22 @@ import {
 } from "./ids";
 
 describe("opaque domain IDs", () => {
+  it("constructs stable governance and review IDs with distinct opaque types", () => {
+    const draftId = toCanonicalScheduleWorkingDraftId("draft-001");
+    expectTypeOf(draftId).toEqualTypeOf<CanonicalScheduleWorkingDraftId>();
+    expectTypeOf(draftId).not.toEqualTypeOf<ProjectId>();
+    expect([
+      draftId,
+      toGovernanceReleaseId("release-001"),
+      toGovernanceDraftId("governance-draft-001"),
+      toRequirementEnrollmentId("enrollment-001"),
+      toRequirementWithdrawalId("withdrawal-001"),
+      toScheduleEvidenceId("evidence-001"),
+      toScheduleImportCandidateId("candidate-001"),
+      toScheduleReviewSessionId("session-001"),
+      toScheduleReviewDecisionId("decision-001"),
+    ]).toHaveLength(9);
+  });
   it("accepts explicit stable IDs without deriving them from display data", () => {
     const projectId = toProjectId("dev-project-002");
 

@@ -26,10 +26,11 @@ import type { PrototypeState } from "../../application/state/prototypeState";
 import { inspectTeamImport } from "../../application/teamImport/teamImport";
 import { milestoneDefinitions } from "../../config/v2/referenceData";
 import type { Project } from "../../domain/project/project";
-import type { CanonicalProjectSchedule } from "../../domain/schedule/officialSchedule";
+import { createEmptyCanonicalProjectSchedule, type CanonicalProjectSchedule } from "../../domain/schedule/officialSchedule";
 import type { ScheduleVersionNumber } from "../../domain/schedule/schedule";
 import { parseDateOnly, type DateOnly } from "../../domain/shared/dateOnly";
 import {
+  toCanonicalScheduleWorkingDraftId,
   toCatalogItemId,
   toMilestoneDefinitionId,
   toMilestoneId,
@@ -293,6 +294,7 @@ function LocalScheduleWorkspaceHarness({ schedule }: { schedule: CanonicalProjec
 }
 
 const zeroMilestoneSchedule: CanonicalProjectSchedule = {
+  ...createEmptyCanonicalProjectSchedule(devProject003.id),
   projectId: devProject003.id,
   publishedVersions: [{
     versionNumber: 1 as ScheduleVersionNumber,
@@ -312,6 +314,7 @@ const malformedSchedule: CanonicalProjectSchedule = {
 };
 
 const currentScheduleWithOutOfOrderHistory: CanonicalProjectSchedule = {
+  ...createEmptyCanonicalProjectSchedule(devProject003.id),
   projectId: devProject003.id,
   publishedVersions: [
     { ...zeroMilestoneSchedule.publishedVersions[0]!, versionNumber: 1 as ScheduleVersionNumber },
@@ -328,6 +331,9 @@ function MalformedDraftWorkspaceHarness(): React.ReactElement {
     schedules: [{
       ...devSchedule001,
       workingDraft: {
+        workingDraftId: toCanonicalScheduleWorkingDraftId("malformed-runtime-draft"),
+        reviewSessionIds: [],
+        importCandidates: [],
         milestones: [{
           ...source,
           milestoneDefinitionId: toMilestoneDefinitionId("missing-definition"),
@@ -348,7 +354,7 @@ function MalformedDraftWorkspaceHarness(): React.ReactElement {
   };
   const onStartDraft = (): void => {
     if (owner.kind === "unavailable") return;
-    const result = startScheduleWorkingDraft(owner.schedule, { milestoneDefinitions });
+    const result = startScheduleWorkingDraft(owner.schedule, { workingDraftId: toCanonicalScheduleWorkingDraftId("runtime-start-draft") }, { milestoneDefinitions });
     if (!result.ok || result.status === "existing") return;
     dispatch({ type: "scheduleReplaced", projectId: devProject001.id,
       schedule: result.schedule });
@@ -1020,7 +1026,12 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
         ...devSchedule001.publishedVersions[0]!,
         versionNumber: Number.MAX_SAFE_INTEGER as ScheduleVersionNumber,
       }],
-      workingDraft: { milestones: [{ ...devSchedule001.publishedVersions[0]!.milestones[0]! }] },
+      workingDraft: {
+        workingDraftId: toCanonicalScheduleWorkingDraftId("overflow-runtime-draft"),
+        reviewSessionIds: [],
+        importCandidates: [],
+        milestones: [{ ...devSchedule001.publishedVersions[0]!.milestones[0]! }],
+      },
     };
     render(<App initialState={{ projects: [devProject001], schedules: [overflowSchedule] }}
       initialSelectedProjectId={devProject001.id} />);
@@ -1051,7 +1062,12 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     const source = devSchedule001.publishedVersions[0]!.milestones[0]!;
     const staleSchedule = {
       ...devSchedule001,
-      workingDraft: { milestones: [{ ...source }] },
+      workingDraft: {
+        workingDraftId: toCanonicalScheduleWorkingDraftId("stale-runtime-draft"),
+        reviewSessionIds: [],
+        importCandidates: [],
+        milestones: [{ ...source }],
+      },
     };
     render(<App initialSelectedProjectId={devProject001.id}
       initialState={{ projects: [], schedules: [staleSchedule] }} />);

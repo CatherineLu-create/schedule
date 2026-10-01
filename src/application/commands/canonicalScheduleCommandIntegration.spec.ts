@@ -5,11 +5,16 @@ import {
   createEmptyCanonicalProjectSchedule,
   type CanonicalProjectSchedule,
 } from "../../domain/schedule/officialSchedule";
+import type { ScheduleImportCandidate } from "../../domain/schedule/scheduleReview";
 import { toScheduleVersionNumber } from "../../domain/schedule/schedule";
 import { parseDateOnly } from "../../domain/shared/dateOnly";
 import {
+  toCanonicalScheduleWorkingDraftId,
   toMilestoneDefinitionId,
   toMilestoneId,
+  toScheduleEvidenceId,
+  toScheduleImportCandidateId,
+  toScheduleReviewSessionId,
   type ProjectId,
 } from "../../domain/shared/ids";
 import {
@@ -30,6 +35,11 @@ import {
 } from "./canonicalScheduleCommands";
 
 const context: CanonicalScheduleCommandContext = { milestoneDefinitions };
+const draftIdentity = {
+  workingDraftId: toCanonicalScheduleWorkingDraftId("integration-draft"),
+  reviewSessionIds: [],
+  importCandidates: [],
+};
 const integrationPlan = parseDateOnly("2026-10-05");
 if (integrationPlan === null) throw new Error("Invalid integration DateOnly");
 
@@ -42,6 +52,7 @@ const integrationMilestone = Object.freeze({
 });
 
 const publishedScheduleForIntegration: CanonicalProjectSchedule = Object.freeze({
+  ...createEmptyCanonicalProjectSchedule(devProject003.id),
   projectId: devProject003.id,
   publishedVersions: Object.freeze([
     Object.freeze({
@@ -80,6 +91,7 @@ it("applies Start, Update, Add, and Remove through exact replacement", () => {
   };
   const started = startScheduleWorkingDraft(
     publishedScheduleForIntegration,
+    { workingDraftId: draftIdentity.workingDraftId },
     context,
   );
   expect(started.ok).toBe(true);
@@ -144,6 +156,87 @@ it("applies Start, Update, Add, and Remove through exact replacement", () => {
   expect(afterRemove.schedules[1]).toBe(unrelated);
 });
 
+it("preserves Draft review identity and import candidates through ordinary occurrence edits", () => {
+  const started = startScheduleWorkingDraft(
+    publishedScheduleForIntegration,
+    { workingDraftId: toCanonicalScheduleWorkingDraftId("reviewed-draft") },
+    context,
+  );
+  expect(started.ok).toBe(true);
+  if (!started.ok) throw new Error("Expected Start success");
+
+  const reviewSessionIds = [toScheduleReviewSessionId("review-session-1")];
+  const candidate: ScheduleImportCandidate = {
+    id: toScheduleImportCandidateId("candidate-design-kickoff"),
+    evidenceId: toScheduleEvidenceId("evidence-design-kickoff"),
+    parsedPlan: { kind: "parsed", raw: "2026-10-05", value: integrationPlan },
+    parsedActual: { kind: "missing" },
+    parsedApplicability: { kind: "explicitApplicable", raw: "Yes" },
+    proposedDefinitionMatches: [toMilestoneDefinitionId("milestone-design-kickoff")],
+    rawFindings: [],
+    status: "pending",
+  };
+  const importCandidates = [candidate];
+  const expectedReviewSessionIds = [...reviewSessionIds];
+  const expectedImportCandidates = structuredClone(importCandidates);
+  const reviewedSchedule: CanonicalProjectSchedule = {
+    ...started.schedule,
+    workingDraft: { ...started.draft, reviewSessionIds, importCandidates },
+  };
+  const expectReviewStatePreserved = (schedule: CanonicalProjectSchedule) => {
+    expect(schedule.workingDraft?.workingDraftId).toBe(started.draft.workingDraftId);
+    expect(schedule.workingDraft?.reviewSessionIds).toHaveLength(1);
+    expect(schedule.workingDraft?.reviewSessionIds).toEqual(expectedReviewSessionIds);
+    expect(schedule.workingDraft?.importCandidates).toHaveLength(1);
+    expect(schedule.workingDraft?.importCandidates).toEqual(expectedImportCandidates);
+    expect(schedule.publishedVersions).toBe(publishedScheduleForIntegration.publishedVersions);
+  };
+
+  const updatedPlan = parseDateOnly("2030-01-15");
+  if (updatedPlan === null) throw new Error("Invalid updated DateOnly");
+  const updated = updateScheduleWorkingDraftMilestone(
+    reviewedSchedule,
+    { milestoneId: integrationMilestone.milestoneId, field: "plan", value: updatedPlan },
+    context,
+  );
+  expect(updated.ok).toBe(true);
+  if (!updated.ok) throw new Error("Expected Update success");
+  expect(updated.draft.milestones[0]?.plan).toBe(updatedPlan);
+  expectReviewStatePreserved(updated.schedule);
+
+  const addedMilestoneId = toMilestoneId("reviewed-draft-added");
+  const added = addScheduleWorkingDraftMilestone(
+    updated.schedule,
+    {
+      milestoneId: addedMilestoneId,
+      milestoneDefinitionId: toMilestoneDefinitionId("milestone-design-kickoff"),
+    },
+    context,
+  );
+  expect(added.ok).toBe(true);
+  if (!added.ok) throw new Error("Expected Add success");
+  expect(added.draft.milestones).toHaveLength(2);
+  expect(added.draft.milestones[1]?.milestoneId).toBe(addedMilestoneId);
+  expectReviewStatePreserved(added.schedule);
+
+  const removed = removeScheduleWorkingDraftMilestone(
+    added.schedule,
+    { milestoneId: addedMilestoneId },
+    context,
+  );
+  expect(removed.ok).toBe(true);
+  if (!removed.ok) throw new Error("Expected Remove success");
+  expect(removed.draft.milestones).toHaveLength(1);
+  expect(removed.draft.milestones[0]?.milestoneId).toBe(integrationMilestone.milestoneId);
+  expect(removed.draft.milestones[0]?.plan).toBe(updatedPlan);
+  expectReviewStatePreserved(removed.schedule);
+
+  expect(reviewedSchedule.workingDraft?.milestones[0]?.plan).toBe(integrationPlan);
+  expect(started.draft.reviewSessionIds).toEqual([]);
+  expect(started.draft.importCandidates).toEqual([]);
+  expect(publishedScheduleForIntegration.workingDraft).toBeNull();
+});
+
 it("applies Publish as one appended-version-plus-null-Draft state", () => {
   const initial: PrototypeState = {
     projects: [devProject003],
@@ -151,6 +244,7 @@ it("applies Publish as one appended-version-plus-null-Draft state", () => {
   };
   const started = startScheduleWorkingDraft(
     publishedScheduleForIntegration,
+    { workingDraftId: draftIdentity.workingDraftId },
     context,
   );
   expect(started.ok).toBe(true);
@@ -187,6 +281,7 @@ it("applies Publish as one appended-version-plus-null-Draft state", () => {
 it("applies Cancel once and leaves Published history untouched", () => {
   const started = startScheduleWorkingDraft(
     publishedScheduleForIntegration,
+    { workingDraftId: draftIdentity.workingDraftId },
     context,
   );
   expect(started.ok).toBe(true);
@@ -215,7 +310,7 @@ it("publishes an empty no-Published Draft as v1 through one replacement", () => 
     projects: [devProject003],
     schedules: [empty],
   };
-  const started = startScheduleWorkingDraft(empty, context);
+  const started = startScheduleWorkingDraft(empty, { workingDraftId: draftIdentity.workingDraftId }, context);
   expect(started.ok).toBe(true);
   if (!started.ok) throw new Error("Expected Start success");
   expect(started.draft.milestones).toEqual([]);
@@ -241,7 +336,7 @@ it("publishes an empty no-Published Draft as v1 through one replacement", () => 
 it("omits reducer work for existing Start and failed commands", () => {
   const withDraft = {
     ...publishedScheduleForIntegration,
-    workingDraft: { milestones: [] },
+    workingDraft: { ...draftIdentity, milestones: [] },
   };
   const current: PrototypeState = {
     projects: [devProject003],
@@ -249,6 +344,7 @@ it("omits reducer work for existing Start and failed commands", () => {
   };
   const existing = startScheduleWorkingDraft(
     withDraft,
+    { workingDraftId: toCanonicalScheduleWorkingDraftId("ignored") },
     context,
   );
   expect(existing.ok).toBe(true);
@@ -274,6 +370,7 @@ it("keeps invalid Publish results out of state and still discards malformed Draf
   const malformed: CanonicalProjectSchedule = {
     ...createEmptyCanonicalProjectSchedule(devProject003.id),
     workingDraft: {
+      ...draftIdentity,
       milestones: [{
         milestoneId: toMilestoneId("malformed"),
         milestoneDefinitionId: toMilestoneDefinitionId("missing-definition"),
@@ -305,6 +402,7 @@ it("keeps invalid Publish results out of state and still discards malformed Draf
 
 it("keeps overflow Publish failure out of state", () => {
   const overflow: CanonicalProjectSchedule = {
+    ...createEmptyCanonicalProjectSchedule(devProject003.id),
     projectId: devProject003.id,
     publishedVersions: [{
       versionNumber: toScheduleVersionNumber(Number.MAX_SAFE_INTEGER),
@@ -312,7 +410,7 @@ it("keeps overflow Publish failure out of state", () => {
       publishedAt: "maximum",
       milestones: [],
     }],
-    workingDraft: { milestones: [] },
+    workingDraft: { ...draftIdentity, milestones: [] },
   };
   const current: PrototypeState = {
     projects: [devProject003],
@@ -333,6 +431,7 @@ it("keeps same raw milestone IDs isolated by ProjectId across rename", () => {
   const draftFor = (schedule: CanonicalProjectSchedule): CanonicalProjectSchedule => ({
     ...schedule,
     workingDraft: {
+      ...draftIdentity,
       milestones: [{
         milestoneId: sameRawId,
         milestoneDefinitionId: definitionId,

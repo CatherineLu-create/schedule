@@ -7,14 +7,16 @@ import {
 import type { Project } from "../../domain/project/project";
 import type { ProjectMaster } from "../../domain/project/projectMaster";
 import type { CanonicalScheduleWorkingDraftMilestone } from "../../domain/schedule/canonicalScheduleWorkingDraft";
-import type {
-  CanonicalProjectSchedule,
-  CanonicalPublishedScheduleMilestone,
-  CanonicalPublishedScheduleVersion,
+import {
+  createEmptyCanonicalProjectSchedule,
+  type CanonicalProjectSchedule,
+  type CanonicalPublishedScheduleMilestone,
+  type CanonicalPublishedScheduleVersion,
 } from "../../domain/schedule/officialSchedule";
 import { toScheduleVersionNumber } from "../../domain/schedule/schedule";
 import { parseDateOnly, type DateOnly } from "../../domain/shared/dateOnly";
 import {
+  toCanonicalScheduleWorkingDraftId,
   toMilestoneDefinitionId,
   toMilestoneId,
   toProjectId,
@@ -28,6 +30,11 @@ import {
 } from "./dashboardAttention";
 
 const REFERENCE_DATE = dateOnly("2026-09-23");
+const draftIdentity = {
+  workingDraftId: toCanonicalScheduleWorkingDraftId("attention-draft"),
+  reviewSessionIds: [],
+  importCandidates: [],
+};
 
 function dateOnly(value: string): DateOnly {
   const parsed = parseDateOnly(value);
@@ -96,6 +103,7 @@ function schedule(
   workingDraft: CanonicalProjectSchedule["workingDraft"] = null,
 ): CanonicalProjectSchedule {
   return {
+    ...createEmptyCanonicalProjectSchedule(projectId),
     projectId,
     publishedVersions: [version(1, milestones)],
     workingDraft,
@@ -235,6 +243,7 @@ describe("selectDashboardAttention", () => {
   it("uses maximum Published version number rather than array position", () => {
     const owner = project("attention-current-published");
     const ownerSchedule: CanonicalProjectSchedule = {
+      ...createEmptyCanonicalProjectSchedule(owner.id),
       projectId: owner.id,
       publishedVersions: [
         version(3, [milestone("current", "milestone-a1-a-g-o", "2026-09-28")]),
@@ -260,12 +269,12 @@ describe("selectDashboardAttention", () => {
         schedule(
           draftWouldQualify.id,
           [milestone("published-outside", "milestone-a1-a-g-o", "2026-10-08")],
-          { milestones: [draftMilestone("published-outside", "milestone-a1-a-g-o", "2026-09-28")] },
+          { ...draftIdentity, milestones: [draftMilestone("published-outside", "milestone-a1-a-g-o", "2026-09-28")] },
         ),
         schedule(
           draftWouldHide.id,
           [milestone("published-due", "milestone-a1-a-smt", "2026-09-28")],
-          { milestones: [draftMilestone("published-due", "milestone-a1-a-smt", "2026-10-08")] },
+          { ...draftIdentity, milestones: [draftMilestone("published-due", "milestone-a1-a-smt", "2026-10-08")] },
         ),
       ],
     ), REFERENCE_DATE));
@@ -281,7 +290,7 @@ describe("selectDashboardAttention", () => {
     const before = schedule(
       owner.id,
       [milestone("publish-target", "milestone-a1-a-g-o", "2026-10-08")],
-      { milestones: [draftMilestone("publish-target", "milestone-a1-a-g-o", "2026-09-28")] },
+      { ...draftIdentity, milestones: [draftMilestone("publish-target", "milestone-a1-a-g-o", "2026-09-28")] },
     );
     expect(expectAvailable(selectDashboardAttention(
       state([owner], [before]),
@@ -310,7 +319,7 @@ describe("selectDashboardAttention", () => {
     const read = expectAvailable(selectDashboardAttention(state(
       [noPublished, emptyPublished],
       [
-        { projectId: noPublished.id, publishedVersions: [], workingDraft: null },
+        createEmptyCanonicalProjectSchedule(noPublished.id),
         schedule(emptyPublished.id),
       ],
     ), REFERENCE_DATE));
