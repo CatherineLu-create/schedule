@@ -5,6 +5,7 @@ import { PortfolioDashboardView } from "./portfolioDashboardView";
 import { selectDashboardAttention } from "./application/selectors/dashboardAttention";
 import { selectPortfolioDashboardRows } from "./application/selectors/portfolioDashboardRows";
 import { createInitialMilestoneGovernanceRuntimeState } from "./application/governance/milestoneGovernanceInitializer";
+import { prepareProjectCreationCommit } from "./application/governance/projectCreationGovernance";
 import { selectEffectiveMilestoneGovernanceContext, selectEffectiveRetiredDraftOccurrenceGrants } from "./application/governance/effectiveMilestoneGovernanceContext";
 import { createPortfolioVisibleSchema } from "./portfolioDashboardColumns";
 import {
@@ -77,6 +78,7 @@ import {
   toMilestoneId,
   toPersonAssignmentId,
   toProjectId,
+  toRequirementEnrollmentId,
   toTeamFunctionId,
   type CatalogItemId,
   type MilestoneDefinitionId,
@@ -210,7 +212,7 @@ export function App({
     initialSelectedProjectId === null ? "dashboard" : "workspace",
   );
   const [state, dispatch] = React.useReducer(prototypeReducer, initialState);
-  const [governanceState] = React.useState(createInitialMilestoneGovernanceRuntimeState);
+  const [governanceState, setGovernanceState] = React.useState(createInitialMilestoneGovernanceRuntimeState);
   const { governance, retiredDraftOccurrenceGrants } = React.useMemo(() => {
     const result = selectEffectiveMilestoneGovernanceContext(governanceState);
     if (!result.ok) throw new Error(`Governance unavailable: ${result.code}`);
@@ -522,11 +524,18 @@ export function App({
     setIsCreateProjectOpen(true);
   };
   const completeCreate = (project: Project, issues: readonly ValidationIssue[]) => {
-    dispatch({
-      type: "projectAdded",
+    const prepared = prepareProjectCreationCommit(state, governanceState, {
       project,
       schedule: createEmptyCanonicalProjectSchedule(project.id),
-    });
+    }, () => toRequirementEnrollmentId(globalThis.crypto.randomUUID()));
+    if (!prepared.ok) {
+      setPendingDuplicateCreate(null);
+      setCreateIssues(prepared.issues);
+      setCreateFeedback(null);
+      return;
+    }
+    dispatch(prepared.value.prototypeAction);
+    setGovernanceState(prepared.value.governanceState);
     setSelectedProjectId(project.id);
     setEditFeedback(issues);
     setScheduleFeedback([]);
