@@ -1,4 +1,5 @@
-import type { DateOnly } from "../shared/dateOnly";
+import { parseDateOnly, type DateOnly } from "../shared/dateOnly";
+import type { CanonicalScheduleWorkingDraftMilestone } from "./canonicalScheduleWorkingDraft";
 import type {
   CanonicalScheduleWorkingDraftId,
   MilestoneDefinitionId,
@@ -101,6 +102,8 @@ export interface ScheduleImportCandidate {
   readonly proposedDefinitionMatches: readonly MilestoneDefinitionId[];
   readonly rawFindings: readonly ValidationIssue[];
   readonly status: "pending" | "confirmed";
+  /** Exact identity supplied by a typed fixture, never inferred from its labels or fingerprint. */
+  readonly sourceDefinitionId?: MilestoneDefinitionId;
 }
 
 export interface ScheduleReviewSession {
@@ -108,6 +111,8 @@ export interface ScheduleReviewSession {
   readonly workingDraftId: CanonicalScheduleWorkingDraftId;
   readonly source: "built-in-simulation" | "future-external-adapter" | "manual-local-mapping";
   readonly evidenceIds: readonly ScheduleEvidenceId[];
+  /** New loaders retain candidate identity reservations even after a pending Draft is discarded. */
+  readonly candidateIds?: readonly ScheduleImportCandidateId[];
 }
 
 export interface ImportDecisionEvent {
@@ -137,3 +142,99 @@ export type ScheduleReviewDecisionEvent =
 export type ScheduleReviewClosureEvent =
   | { readonly sessionId: ScheduleReviewSessionId; readonly kind: "published"; readonly versionNumber: ScheduleVersionNumber }
   | { readonly sessionId: ScheduleReviewSessionId; readonly kind: "discarded" };
+
+export type ReviewTarget =
+  | { readonly kind: "createPublicOccurrence"; readonly definitionId: MilestoneDefinitionId; readonly milestoneId: MilestoneId }
+  | { readonly kind: "createLocalOccurrence"; readonly localDefinitionId: MilestoneDefinitionId; readonly milestoneId: MilestoneId }
+  | { readonly kind: "updateExistingOccurrence"; readonly milestoneId: MilestoneId;
+      /** Optional stale-preview guard; the occurrence still resolves by its exact MilestoneId. */
+      readonly expectedDefinitionId?: MilestoneDefinitionId };
+
+export interface ConfirmScheduleImportDecisionInput {
+  readonly candidateId: ScheduleImportCandidateId;
+  readonly target: ReviewTarget;
+  readonly applicability: ApplicabilityApplyAction;
+  readonly plan: DateApplyAction;
+  readonly actual: DateApplyAction;
+}
+
+export interface ScheduleImportDecisionPreview {
+  readonly beforeOccurrence: CanonicalScheduleWorkingDraftMilestone | null;
+  readonly afterOccurrence: CanonicalScheduleWorkingDraftMilestone | null;
+  readonly operationBlockingFindings: readonly ValidationIssue[];
+  readonly remainingPublishBlockingFindings: readonly ValidationIssue[];
+}
+
+export type GovernanceSimulationPack = "basic-success" | "fixable-validation" | "retired-existing-update" | "retired-no-reference-negative";
+
+export interface ScheduleReviewIdBundle {
+  readonly sessionId: ScheduleReviewSessionId;
+  readonly evidenceIds: readonly ScheduleEvidenceId[];
+  readonly candidateIds: readonly ScheduleImportCandidateId[];
+}
+
+/** Parses only an already typed raw cell. No external format or adapter is implied. */
+export function parseScheduleImportDate(cell: RawImportCell): ParsedDateValue {
+  if (cell.presence === "missing") return { kind: "missing" };
+  const raw = cell.raw;
+  if (!raw.trim()) return { kind: "blank", raw };
+  const value = parseDateOnly(raw);
+  if (value !== null) return { kind: "parsed", raw, value };
+  // An unqualified slash date has no agreed day/month convention.
+  return { kind: /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(raw) ? "ambiguous" : "invalid", raw };
+}
+
+export function parseScheduleImportApplicability(cell: RawImportCell): ParsedApplicabilityValue {
+  if (cell.presence === "missing") return { kind: "missing" };
+  const raw = cell.raw;
+  if (!raw.trim()) return { kind: "blank", raw };
+  if (raw === "Applicable") return { kind: "explicitApplicable", raw };
+  if (raw === "N/A") return { kind: "explicitNotApplicable", raw };
+  return { kind: "unrecognized", raw };
+}
+
+export function createScheduleImportCandidate(
+  evidence: ScheduleEvidenceRecord,
+  id: ScheduleImportCandidateId,
+  sourceDefinitionId?: MilestoneDefinitionId,
+): ScheduleImportCandidate {
+  const parsedPlan = parseScheduleImportDate(evidence.rawValues.plan);
+  const parsedActual = parseScheduleImportDate(evidence.rawValues.actual);
+  const parsedApplicability = parseScheduleImportApplicability(evidence.rawValues.applicability);
+  const rawFindings: ValidationIssue[] = [];
+  for (const [field, parsed] of [["plan", parsedPlan], ["actual", parsedActual], ["applicability", parsedApplicability]] as const) {
+    if (parsed.kind !== "invalid" && parsed.kind !== "ambiguous" && parsed.kind !== "unrecognized") continue;
+    const suffix = parsed.raw === "-" || parsed.raw === "*" ? "legacy-sentinel"
+      : parsed.kind === "unrecognized" ? "unrecognized-applicability" : `${parsed.kind}-date`;
+    rawFindings.push({ code: `schedule.import.${suffix}`, domain: "schedule", source: "import", severity: "blocking",
+      message: "Raw evidence requires an explicit date or applicability decision.", target: { section: "schedule.importCandidates", entityId: id, field } });
+  }
+  return { id, evidenceId: evidence.id, parsedPlan, parsedActual, parsedApplicability,
+    proposedDefinitionMatches: sourceDefinitionId === undefined ? [] : [sourceDefinitionId], rawFindings, status: "pending",
+    ...(sourceDefinitionId === undefined ? {} : { sourceDefinitionId }) };
+}
+
+export interface ScheduleImportActionSuggestions {
+  readonly plan: DateApplyAction | null;
+  readonly actual: DateApplyAction | null;
+  readonly applicability: ApplicabilityApplyAction | null;
+}
+
+/** Null means PM action is still required; suggestions are never applied by loading or previewing. */
+export function suggestScheduleImportActions(
+  candidate: ScheduleImportCandidate,
+  before: CanonicalScheduleWorkingDraftMilestone | null,
+): ScheduleImportActionSuggestions {
+  if (candidate.parsedApplicability.kind === "explicitNotApplicable") {
+    return { plan: { kind: "clear" }, actual: { kind: "clear" }, applicability: { kind: "set", value: "notApplicable" } };
+  }
+  const date = (parsed: ParsedDateValue): DateApplyAction | null => {
+    if (parsed.kind === "parsed") return { kind: "set", value: parsed.value };
+    if (parsed.kind === "missing" || parsed.kind === "blank") return { kind: before === null ? "clear" : "keepExisting" };
+    return null;
+  };
+  const parsed = candidate.parsedApplicability;
+  const applicability: ApplicabilityApplyAction | null = parsed.kind === "explicitApplicable" ? { kind: "set", value: "applicable" }
+    : (parsed.kind === "missing" || parsed.kind === "blank") && before !== null ? { kind: "keepExisting" } : null;
+  return { plan: date(candidate.parsedPlan), actual: date(candidate.parsedActual), applicability };
+}

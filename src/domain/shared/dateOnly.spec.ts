@@ -20,6 +20,9 @@ function dateOnly(value: string): DateOnly {
 }
 
 describe("DateOnly", () => {
+  it.each(["", "-", "*", "10/11/2026", "October 11 2026", "2026-10-11Z"])("import boundary does not coerce raw %j into DateOnly", raw => {
+    expect(parseDateOnly(raw)).toBeNull();
+  });
   it("accepts canonical real calendar dates and leap days", () => {
     expect(parseDateOnly("2026-09-02")).toBe("2026-09-02");
     expect(parseDateOnly("2024-02-29")).toBe("2024-02-29");

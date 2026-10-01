@@ -13,6 +13,7 @@ import {
   toStageGroupId,
 } from "../shared/ids";
 import { toScheduleVersionNumber } from "./schedule";
+import { parseScheduleImportDate, parseScheduleImportApplicability, createScheduleImportCandidate, suggestScheduleImportActions } from "./scheduleReview";
 import type {
   ApplicabilityApplyAction,
   ConfirmProjectLocalMilestoneDefinitionInput,
@@ -138,5 +139,61 @@ describe("Schedule review compatibility contract", () => {
     expect(session.workingDraftId).toBe("draft-1");
     expect(decisions.map((event) => event.id)).toEqual(["decision-import-1", "decision-map-1"]);
     expect([published.kind, discarded.kind]).toEqual(["published", "discarded"]);
+  });
+});
+
+describe("immutable built-in import parsing and action suggestions", () => {
+  const present = (raw: string): RawImportCell => ({ presence: "present", raw });
+  const evidence = (plan: RawImportCell, applicability = present("Applicable")): ScheduleEvidenceRecord => ({
+    id: toScheduleEvidenceId("raw-matrix"), sourceKind: "built-in-simulation", sourceDescriptor: "typed fixture",
+    candidateFingerprint: "raw-matrix:1", rawValues: {
+      milestoneName: present("Known fixture"), stage: { presence: "missing" }, milestoneType: { presence: "missing" },
+      plan, actual: { presence: "missing" }, applicability,
+    },
+  });
+  it.each([
+    [{ presence: "missing" }, "missing"], [present(""), "blank"], [present("  "), "blank"],
+    [present("-"), "invalid"], [present("*"), "invalid"], [present("2024-02-29"), "parsed"],
+    [present("10/11/2026"), "ambiguous"], [present("2026-02-30"), "invalid"], [present("nonsense"), "invalid"],
+  ] as const)("preserves raw cell %j while classifying %s", (cell, kind) => {
+    const raw = evidence(cell);
+    const before = structuredClone(raw);
+    expect(parseScheduleImportDate(cell).kind).toBe(kind);
+    const candidate = createScheduleImportCandidate(raw, toScheduleImportCandidateId("raw-candidate"));
+    expect(candidate.parsedPlan.kind).toBe(kind);
+    expect(raw).toEqual(before);
+    if (kind === "parsed") expect(candidate.parsedPlan).toMatchObject({ value: "2024-02-29", raw: "2024-02-29" });
+  });
+  it.each([
+    [{ presence: "missing" }, "missing"], [present(""), "blank"], [present("Applicable"), "explicitApplicable"],
+    [present("N/A"), "explicitNotApplicable"], [present("-"), "unrecognized"], [present("*"), "unrecognized"],
+    [present("unknown"), "unrecognized"],
+  ] as const)("applicability distinguishes %j from N/A", (cell, kind) => {
+    expect(parseScheduleImportApplicability(cell).kind).toBe(kind);
+  });
+  it.each(["-", "*"])("legacy sentinel %s never means N/A", raw => {
+    const candidate = createScheduleImportCandidate(evidence(present(raw), present(raw)), toScheduleImportCandidateId("sentinel"));
+    expect(candidate.rawFindings.filter(issue => issue.code === "schedule.import.legacy-sentinel")).toHaveLength(2);
+    expect(suggestScheduleImportActions(candidate, null).applicability).toBeNull();
+  });
+  it("existing missing/blank recommend keep; new missing/blank recommend clear; valid source date is reusable", () => {
+    const candidate = createScheduleImportCandidate(evidence(present("")), toScheduleImportCandidateId("defaults"));
+    const existing = { milestoneId: toMilestoneId("existing"), milestoneDefinitionId: toMilestoneDefinitionId("definition"),
+      applicability: "applicable" as const, plan: parseDateOnly("2026-10-01"), actual: parseDateOnly("2026-10-02") };
+    expect(suggestScheduleImportActions(candidate, existing)).toMatchObject({ plan: { kind: "keepExisting" }, actual: { kind: "keepExisting" } });
+    expect(suggestScheduleImportActions(candidate, null)).toMatchObject({ plan: { kind: "clear" }, actual: { kind: "clear" } });
+    const valid = createScheduleImportCandidate(evidence(present("2026-10-15")), candidate.id);
+    expect(suggestScheduleImportActions(valid, existing).plan).toEqual({ kind: "set", value: "2026-10-15" });
+    const bad = createScheduleImportCandidate(evidence(present("10/11/2026")), candidate.id);
+    expect(suggestScheduleImportActions(bad, null).plan).toBeNull();
+    expect(suggestScheduleImportActions(bad, existing).plan).toBeNull();
+  });
+  it("explicit N/A recommends date clears but does not mutate the raw conflict", () => {
+    const raw = evidence(present("2026-10-15"), present("N/A"));
+    const candidate = createScheduleImportCandidate(raw, toScheduleImportCandidateId("na"));
+    expect(suggestScheduleImportActions(candidate, null)).toEqual({
+      applicability: { kind: "set", value: "notApplicable" }, plan: { kind: "clear" }, actual: { kind: "clear" },
+    });
+    expect(raw.rawValues.plan).toEqual(present("2026-10-15"));
   });
 });
