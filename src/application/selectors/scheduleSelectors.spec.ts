@@ -1,3 +1,4 @@
+import { initialGovernanceContext } from "../../test/governanceTestUtils";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import type { Project } from "../../domain/project/project";
@@ -173,14 +174,14 @@ describe("canonical Schedule state validation", () => {
     expect(
       validateCanonicalScheduleState(
         state(canonicalProjectFixtures, canonicalScheduleFixtures),
-      ),
+       initialGovernanceContext()),
     ).toEqual([]);
   });
 
   it("reports a Project with no Schedule", () => {
     const owner = project("project-missing-schedule");
 
-    expect(validateCanonicalScheduleState(state([owner], []))).toEqual([
+    expect(validateCanonicalScheduleState(state([owner], []), initialGovernanceContext())).toEqual([
       expect.objectContaining({
         code: "schedule.integrity.missing-schedule",
         domain: "schedule",
@@ -198,7 +199,7 @@ describe("canonical Schedule state validation", () => {
     expect(
       validateCanonicalScheduleState(
         state([owner], [ownedSchedule, { ...ownedSchedule }]),
-      ).map((issue) => issue.code),
+       initialGovernanceContext()).map((issue) => issue.code),
     ).toEqual(["schedule.integrity.duplicate-schedule"]);
   });
 
@@ -206,7 +207,7 @@ describe("canonical Schedule state validation", () => {
     const orphan = schedule(toProjectId("project-orphan"));
 
     expect(
-      validateCanonicalScheduleState(state([], [orphan])).map(
+      validateCanonicalScheduleState(state([], [orphan]), initialGovernanceContext()).map(
         (issue) => issue.code,
       ),
     ).toEqual(["schedule.integrity.orphan-schedule"]);
@@ -218,7 +219,7 @@ describe("canonical Schedule state validation", () => {
     expect(
       validateCanonicalScheduleState(
         state([owner], [withInvalidVersionNumber(owner.id, 0)]),
-      ).map((issue) => issue.code),
+       initialGovernanceContext()).map((issue) => issue.code),
     ).toEqual(["schedule.integrity.invalid-version-number"]);
   });
 
@@ -234,7 +235,7 @@ describe("canonical Schedule state validation", () => {
         [duplicateOwner, missingOwner],
         [duplicate, { ...duplicate }, invalidOrphan],
       ),
-    );
+     initialGovernanceContext());
 
     expect(issues.map((issue) => issue.code)).toEqual(
       expect.arrayContaining([
@@ -309,6 +310,7 @@ describe("selected canonical Schedule ownership", () => {
       selectCurrentPublishedSchedule(
         state([], [schedule(absentId)]),
         absentId,
+        initialGovernanceContext(),
       ),
       "schedule.integrity.project-not-found",
     );
@@ -318,7 +320,7 @@ describe("selected canonical Schedule ownership", () => {
     const owner = project("project-selected-missing");
 
     expectUnavailableCode(
-      selectCurrentPublishedSchedule(state([owner], []), owner.id),
+      selectCurrentPublishedSchedule(state([owner], []), owner.id, initialGovernanceContext()),
       "schedule.integrity.missing-schedule",
     );
   });
@@ -331,7 +333,7 @@ describe("selected canonical Schedule ownership", () => {
       selectCurrentPublishedSchedule(
         state([owner], [first, { ...first }]),
         owner.id,
-      ),
+       initialGovernanceContext()),
       "schedule.integrity.duplicate-schedule",
     );
   });
@@ -352,7 +354,7 @@ describe("selected canonical Schedule ownership", () => {
       selectCurrentPublishedSchedule(
         state([renamedProject], [canonicalScheduleFixtures[1]!]),
         renamedProject.id,
-      ),
+       initialGovernanceContext()),
     ).toEqual({ kind: "noPublishedSchedule" });
   });
 });
@@ -365,10 +367,10 @@ describe("selected Schedule isolation from unrelated defects", () => {
     const currentState = state([selectedProject], [selectedSchedule, orphan]);
 
     expect(
-      validateCanonicalScheduleState(currentState).map((issue) => issue.code),
+      validateCanonicalScheduleState(currentState, initialGovernanceContext()).map((issue) => issue.code),
     ).toContain("schedule.integrity.orphan-schedule");
     expect(
-      selectCurrentPublishedSchedule(currentState, selectedProject.id),
+      selectCurrentPublishedSchedule(currentState, selectedProject.id, initialGovernanceContext()),
     ).toEqual({ kind: "noPublishedSchedule" });
   });
 
@@ -384,10 +386,10 @@ describe("selected Schedule isolation from unrelated defects", () => {
     );
 
     expect(
-      validateCanonicalScheduleState(currentState).map((issue) => issue.code),
+      validateCanonicalScheduleState(currentState, initialGovernanceContext()).map((issue) => issue.code),
     ).toContain("schedule.integrity.invalid-version-number");
     expect(
-      selectCurrentPublishedSchedule(currentState, selectedProject.id),
+      selectCurrentPublishedSchedule(currentState, selectedProject.id, initialGovernanceContext()),
     ).toEqual({ kind: "noPublishedSchedule" });
   });
 
@@ -402,7 +404,7 @@ describe("selected Schedule isolation from unrelated defects", () => {
     );
 
     expect(
-      validateCanonicalScheduleState(currentState).map((issue) => issue.code),
+      validateCanonicalScheduleState(currentState, initialGovernanceContext()).map((issue) => issue.code),
     ).toEqual(
       expect.arrayContaining([
         "schedule.integrity.missing-schedule",
@@ -410,7 +412,7 @@ describe("selected Schedule isolation from unrelated defects", () => {
       ]),
     );
     expect(
-      selectCurrentPublishedSchedule(currentState, selectedProject.id),
+      selectCurrentPublishedSchedule(currentState, selectedProject.id, initialGovernanceContext()),
     ).toEqual({ kind: "noPublishedSchedule" });
   });
 });
@@ -425,7 +427,7 @@ describe("Current Published selection", () => {
       const baseline = selectCurrentPublishedSchedule(
         state([owner], [base]),
         owner.id,
-      );
+       initialGovernanceContext());
       expect(baseline.kind).toBe("published");
       if (baseline.kind !== "published") throw new Error("Expected baseline");
 
@@ -444,7 +446,7 @@ describe("Current Published selection", () => {
       const read = selectCurrentPublishedSchedule(
         state([owner], [scheduleWithDraft]),
         owner.id,
-      );
+       initialGovernanceContext());
 
       expect(read.kind).toBe("published");
       if (read.kind !== "published") throw new Error("Expected Published read");
@@ -460,7 +462,7 @@ describe("Current Published selection", () => {
       selectCurrentPublishedSchedule(
         state([owner], [schedule(owner.id)]),
         owner.id,
-      ),
+       initialGovernanceContext()),
     ).toEqual({ kind: "noPublishedSchedule" });
   });
 
@@ -470,7 +472,7 @@ describe("Current Published selection", () => {
     const read = selectCurrentPublishedSchedule(
       state([owner], [schedule(owner.id, [publishedV1])]),
       owner.id,
-    );
+     initialGovernanceContext());
 
     expect(read.kind).toBe("published");
     if (read.kind === "published") {
@@ -488,7 +490,7 @@ describe("Current Published selection", () => {
     const read = selectCurrentPublishedSchedule(
       state([owner], [ownedSchedule]),
       owner.id,
-    );
+     initialGovernanceContext());
 
     expect(read.kind).toBe("published");
     if (read.kind === "published") {
@@ -506,7 +508,7 @@ describe("Current Published selection", () => {
     const read = selectCurrentPublishedSchedule(
       state([owner], [schedule(owner.id, [publishedV1])]),
       owner.id,
-    );
+     initialGovernanceContext());
 
     expect(read).toEqual({
       kind: "published",
@@ -530,7 +532,7 @@ describe("selected Schedule local integrity", () => {
             [withInvalidVersionNumber(owner.id, invalidVersionNumber)],
           ),
           owner.id,
-        ),
+         initialGovernanceContext()),
         "schedule.integrity.invalid-version-number",
       );
     },
@@ -543,7 +545,7 @@ describe("selected Schedule local integrity", () => {
       selectCurrentPublishedSchedule(
         state([owner], [schedule(owner.id, [version(2), version(2)])]),
         owner.id,
-      ),
+       initialGovernanceContext()),
       "schedule.integrity.duplicate-version-number",
     );
   });
@@ -563,7 +565,7 @@ describe("selected Schedule local integrity", () => {
           [schedule(owner.id, [version(1, [first, duplicate])])],
         ),
         owner.id,
-      ),
+       initialGovernanceContext()),
       "schedule.integrity.duplicate-milestone-id",
     );
   });
@@ -582,7 +584,7 @@ describe("selected Schedule local integrity", () => {
           [schedule(owner.id, [version(1, [unresolved])])],
         ),
         owner.id,
-      ),
+       initialGovernanceContext()),
       "schedule.integrity.unresolved-milestone-definition",
     );
   });
@@ -601,7 +603,7 @@ describe("selected Schedule local integrity", () => {
         ],
       ),
       owner.id,
-    );
+     initialGovernanceContext());
 
     expect(read.kind).toBe("published");
     if (read.kind === "published") {
@@ -646,6 +648,7 @@ describe("Current Published milestone projection", () => {
     const read = selectCurrentPublishedSchedule(
       state([owner], [schedule(owner.id, [publishedV3])]),
       owner.id,
+      initialGovernanceContext(),
     );
 
     expect(read).toEqual({
@@ -680,6 +683,7 @@ describe("Current Published milestone projection", () => {
     const read = selectCurrentPublishedSchedule(
       state([canonicalProjectFixtures[0]!], [devSchedule001]),
       devSchedule001.projectId,
+      initialGovernanceContext(),
     );
 
     expect(read.kind).toBe("published");
@@ -715,12 +719,12 @@ describe("canonical Working Draft read", () => {
       code: "schedule.integrity.duplicate-schedule",
     },
   ] as const)("reports $name as owner unavailable", ({ stateValue, projectId, code }) => {
-    expectDraftUnavailable(selectScheduleWorkingDraft(stateValue, projectId), code, false);
+    expectDraftUnavailable(selectScheduleWorkingDraft(stateValue, projectId, initialGovernanceContext()), code, false);
   });
 
   it("distinguishes no Draft, malformed Draft, and a valid Draft", () => {
     const owner = project("draft-owner");
-    expect(selectScheduleWorkingDraft(state([owner], [schedule(owner.id)]), owner.id))
+    expect(selectScheduleWorkingDraft(state([owner], [schedule(owner.id)]), owner.id, initialGovernanceContext()))
       .toEqual({ kind: "noWorkingDraft" });
 
     const malformed = {
@@ -731,7 +735,7 @@ describe("canonical Working Draft read", () => {
       },
     };
     expectDraftUnavailable(
-      selectScheduleWorkingDraft(state([owner], [malformed]), owner.id),
+      selectScheduleWorkingDraft(state([owner], [malformed]), owner.id, initialGovernanceContext()),
       "schedule.draft.integrity.unresolved-milestone-definition",
       true,
     );
@@ -740,7 +744,7 @@ describe("canonical Working Draft read", () => {
     const draft = Object.freeze({ ...draftIdentity, milestones: Object.freeze([draftMilestone("valid")]) });
     const read = selectScheduleWorkingDraft(
       state([owner], [{ ...schedule(owner.id), workingDraft: draft }]), owner.id,
-    );
+     initialGovernanceContext());
     expect(read.kind).toBe("workingDraft");
     if (read.kind !== "workingDraft") throw new Error("Expected Draft");
     expect(read.draft).toBe(draft);
@@ -756,6 +760,7 @@ describe("canonical Working Draft read", () => {
     ]) });
     const read = selectScheduleWorkingDraft(
       state([owner], [{ ...schedule(owner.id), workingDraft: draft }]), owner.id,
+      initialGovernanceContext(),
     );
     expectDraftUnavailable(read, "schedule.draft.integrity.duplicate-milestone-id", true);
     expect(draft.milestones).toHaveLength(2);
@@ -777,7 +782,7 @@ describe("canonical Working Draft read", () => {
         } },
         duplicate, { ...duplicate }, schedule(toProjectId("orphan")),
       ],
-    ), selected.id);
+    ), selected.id, initialGovernanceContext());
     expect(read.kind).toBe("workingDraft");
     if (read.kind !== "workingDraft") throw new Error("Expected Draft");
     expect(read.draft).toBe(selectedDraft);
@@ -794,8 +799,8 @@ describe("canonical Working Draft read", () => {
         draftMilestone("same-raw-id", undefined, { plan: dateOnly("2040-02-02") }),
       ] } },
     ]);
-    const firstRead = selectScheduleWorkingDraft(value, first.id);
-    const secondRead = selectScheduleWorkingDraft(value, second.id);
+    const firstRead = selectScheduleWorkingDraft(value, first.id, initialGovernanceContext());
+    const secondRead = selectScheduleWorkingDraft(value, second.id, initialGovernanceContext());
     expect(firstRead.kind).toBe("workingDraft");
     expect(secondRead.kind).toBe("workingDraft");
     if (firstRead.kind !== "workingDraft" || secondRead.kind !== "workingDraft") {
@@ -820,7 +825,7 @@ describe("canonical Working Draft read", () => {
     const draft = Object.freeze({ ...draftIdentity, milestones: Object.freeze([later, earlier]) });
     const read = selectScheduleWorkingDraft(
       state([owner], [{ ...schedule(owner.id), workingDraft: draft }]), owner.id,
-    );
+     initialGovernanceContext());
     expect(read.kind).toBe("workingDraft");
     if (read.kind !== "workingDraft") throw new Error("Expected Draft");
     expect(read.draft).toBe(draft);
@@ -837,11 +842,11 @@ describe("canonical Working Draft read", () => {
     const owner = project("bad-published");
     const draft = { ...draftIdentity, milestones: [draftMilestone("valid-draft-row")] };
     const current = state([owner], [{ ...withInvalidVersionNumber(owner.id, 0), workingDraft: draft }]);
-    const read = selectScheduleWorkingDraft(current, owner.id);
+    const read = selectScheduleWorkingDraft(current, owner.id, initialGovernanceContext());
     expect(read.kind).toBe("workingDraft");
     if (read.kind !== "workingDraft") throw new Error("Expected Draft");
     expect(read.draft).toBe(draft);
-    expectUnavailableCode(selectCurrentPublishedSchedule(current, owner.id),
+    expectUnavailableCode(selectCurrentPublishedSchedule(current, owner.id, initialGovernanceContext()),
       "schedule.integrity.invalid-version-number");
   });
 });
@@ -851,7 +856,7 @@ describe("Draft diagnostics and Official isolation", () => {
     const owner = project("healthy-draft");
     expect(validateCanonicalScheduleState(state([owner], [
       { ...schedule(owner.id), workingDraft: { ...draftIdentity, milestones: [draftMilestone("valid")] } },
-    ]))).toEqual([]);
+    ]), initialGovernanceContext())).toEqual([]);
   });
 
   it("accumulates ownership, Published, and Draft defects globally", () => {
@@ -867,7 +872,7 @@ describe("Draft diagnostics and Official isolation", () => {
       [missing, duplicateOwner, malformedOwner],
       [duplicate, { ...duplicate }, malformed, schedule(toProjectId("orphan"))],
     );
-    expect(validateCanonicalScheduleState(current).map(({ code }) => code))
+    expect(validateCanonicalScheduleState(current, initialGovernanceContext()).map(({ code }) => code))
       .toEqual(expect.arrayContaining([
         "schedule.integrity.missing-schedule",
         "schedule.integrity.duplicate-schedule",
@@ -885,7 +890,7 @@ describe("Draft diagnostics and Official isolation", () => {
       ...draftIdentity,
       milestones: [draftMilestone("bad", toMilestoneDefinitionId("missing"))],
     } };
-    expect(selectCurrentPublishedSchedule(state([owner], [malformed]), owner.id))
+    expect(selectCurrentPublishedSchedule(state([owner], [malformed]), owner.id, initialGovernanceContext()))
       .toEqual({ kind: "noPublishedSchedule" });
   });
 });

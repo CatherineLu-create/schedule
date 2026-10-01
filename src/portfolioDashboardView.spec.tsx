@@ -1,3 +1,6 @@
+import { initialGovernanceContext } from "./test/governanceTestUtils";
+import { createInitialSelfServiceReferenceCatalogs } from "./application/reference-data/selfServiceCatalogs";
+import { createPortfolioVisibleSchema } from "./portfolioDashboardColumns";
 import React from "react";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -10,7 +13,7 @@ import { toMilestoneDefinitionId, toMilestoneId } from "./domain/shared/ids";
 import { PortfolioDashboardView } from "./portfolioDashboardView";
 
 afterEach(cleanup);
-const rows = selectPortfolioDashboardRows({ projects: canonicalProjectFixtures, schedules: canonicalScheduleFixtures });
+const rows = selectPortfolioDashboardRows({ projects: canonicalProjectFixtures, schedules: canonicalScheduleFixtures }, createInitialSelfServiceReferenceCatalogs(), initialGovernanceContext());
 function dateOnly(value: string): DateOnly {
   const parsed = parseDateOnly(value);
   if (parsed === null) throw new Error(`Invalid test DateOnly: ${value}`);
@@ -34,24 +37,28 @@ const detailedAttention: DashboardAttentionRead = {
         projectId: rows[0]!.projectId,
         milestoneId: toMilestoneId("view-manta-go"),
         milestoneDefinitionId: toMilestoneDefinitionId("milestone-a1-a-g-o"),
+        milestoneName: "A1 G/O",
         plan: dateOnly("2026-09-28"),
       },
       {
         projectId: rows[0]!.projectId,
         milestoneId: toMilestoneId("view-manta-mdrr"),
         milestoneDefinitionId: toMilestoneDefinitionId("milestone-mdrr"),
+        milestoneName: "MDRR",
         plan: dateOnly("2026-10-03"),
       },
       {
         projectId: rows[0]!.projectId,
         milestoneId: toMilestoneId("view-manta-c1-go"),
         milestoneDefinitionId: toMilestoneDefinitionId("milestone-c1-c-g-o"),
+        milestoneName: "C1 G/O",
         plan: dateOnly("2026-10-04"),
       },
       {
         projectId: rows[1]!.projectId,
         milestoneId: toMilestoneId("view-nautilus-close"),
         milestoneDefinitionId: toMilestoneDefinitionId("milestone-c1-close"),
+        milestoneName: "C1 Close",
         plan: dateOnly("2026-09-30"),
       },
     ],
@@ -63,13 +70,14 @@ const detailedAttention: DashboardAttentionRead = {
       projectId: rows[0]!.projectId,
       milestoneId: toMilestoneId("view-manta-smt"),
       milestoneDefinitionId: toMilestoneDefinitionId("milestone-a1-a-smt"),
+      milestoneName: "A1 SMT",
       plan: dateOnly("2026-09-16"),
     }],
   },
 };
 function setup(attention: DashboardAttentionRead = zeroAttention) {
   const callbacks = { onCreateProject: vi.fn(), onExport: vi.fn(), onOpenProject: vi.fn() };
-  render(<PortfolioDashboardView attention={attention} rows={rows} {...callbacks} />);
+  render(<PortfolioDashboardView schema={createPortfolioVisibleSchema(initialGovernanceContext())} attention={attention} rows={rows} {...callbacks} />);
   return callbacks;
 }
 function visibleIds() {
@@ -80,6 +88,13 @@ function select(label: string, value: string) {
 }
 
 describe("Portfolio Dashboard shell", () => {
+  it("presents the exact resolved local Attention name without a global catalog lookup", () => {
+    setup({ ...zeroAttention, kind: "available", due: {
+      projectIds: [rows[0].projectId], projectCount: 1,
+      matches: [{ projectId: rows[0].projectId, milestoneId: toMilestoneId("local-occurrence"), milestoneDefinitionId: toMilestoneDefinitionId("local-definition"), milestoneName: "Project-specific close", plan: referenceDate }],
+    } });
+    expect(within(screen.getByRole("group", { name: "Upcoming Milestones" })).getByText("Project-specific close · 2026/09/23")).toBeInTheDocument();
+  });
   it("contains desktop-only sticky table layers in the Dashboard stacking context below sibling dialogs", () => {
     setup();
     const dashboard = screen.getByRole("region", { name: "Portfolio Dashboard" });
@@ -264,7 +279,7 @@ describe("Portfolio Dashboard shell", () => {
 
   it("keeps the fixed active-baseline columns while filtering changes visible Projects", () => {
     render(
-      <PortfolioDashboardView
+      <PortfolioDashboardView schema={createPortfolioVisibleSchema(initialGovernanceContext())}
         attention={zeroAttention}
         rows={[rows[0]!, rows[1]!]}
         onCreateProject={() => {}}

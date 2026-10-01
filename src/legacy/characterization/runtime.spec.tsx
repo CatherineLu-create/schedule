@@ -1,3 +1,5 @@
+import { initialGovernanceContext } from "../../test/governanceTestUtils";
+import { initialScheduleCommandContext } from "../../test/governanceTestUtils";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import React from "react";
 import * as XLSX from "xlsx";
@@ -276,11 +278,11 @@ function LocalScheduleWorkspaceHarness({ schedule }: { schedule: CanonicalProjec
       project={devProject003}
       row={row}
       scheduleWorkspaceProps={{
-        draftRead: selectScheduleWorkingDraft(localState, devProject003.id),
+        draftRead: selectScheduleWorkingDraft(localState, devProject003.id, initialGovernanceContext()),
         feedback: [],
         milestoneDefinitions,
         nextVersionLabel: null,
-        officialRead: selectCurrentPublishedSchedule(localState, devProject003.id),
+        officialRead: selectCurrentPublishedSchedule(localState, devProject003.id, initialGovernanceContext()),
         onAddMilestone: () => undefined,
         onCancelDraft: () => undefined,
         onPublishDraft: () => undefined,
@@ -354,17 +356,17 @@ function MalformedDraftWorkspaceHarness(): React.ReactElement {
   };
   const onStartDraft = (): void => {
     if (owner.kind === "unavailable") return;
-    const result = startScheduleWorkingDraft(owner.schedule, { workingDraftId: toCanonicalScheduleWorkingDraftId("runtime-start-draft") }, { milestoneDefinitions });
+    const result = startScheduleWorkingDraft(owner.schedule, { workingDraftId: toCanonicalScheduleWorkingDraftId("runtime-start-draft") }, initialScheduleCommandContext());
     if (!result.ok || result.status === "existing") return;
     dispatch({ type: "scheduleReplaced", projectId: devProject001.id,
       schedule: result.schedule });
   };
   const scheduleWorkspaceProps: ScheduleWorkspaceProps = {
-    draftRead: selectScheduleWorkingDraft(state, devProject001.id),
+    draftRead: selectScheduleWorkingDraft(state, devProject001.id, initialGovernanceContext()),
     feedback: [],
     milestoneDefinitions,
     nextVersionLabel: null,
-    officialRead: selectCurrentPublishedSchedule(state, devProject001.id),
+    officialRead: selectCurrentPublishedSchedule(state, devProject001.id, initialGovernanceContext()),
     onAddMilestone: () => undefined,
     onCancelDraft,
     onPublishDraft: () => undefined,
@@ -1086,6 +1088,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     const attentionRead = selectDashboardAttention(
       runtimeState,
       dashboardReferenceDate,
+      initialGovernanceContext(),
     );
     expect(attentionRead.kind).toBe("available");
     if (attentionRead.kind !== "available") {

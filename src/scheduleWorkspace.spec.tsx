@@ -16,6 +16,7 @@ import { parseDateOnly, type DateOnly } from "./domain/shared/dateOnly";
 import { toCanonicalScheduleWorkingDraftId, toMilestoneDefinitionId, toMilestoneId, toProjectId } from "./domain/shared/ids";
 import type { ValidationIssue } from "./domain/validation/validationIssue";
 import { ScheduleWorkspace, type ScheduleWorkspaceProps } from "./scheduleWorkspace";
+import { initialGovernanceContext } from "./test/governanceTestUtils";
 
 const onAddMilestone = vi.fn<ScheduleWorkspaceProps["onAddMilestone"]>();
 const onCancelDraft = vi.fn<ScheduleWorkspaceProps["onCancelDraft"]>();
@@ -569,7 +570,7 @@ describe("Schedule Workspace presentation", () => {
   it("offers all 30 absent active definitions and excludes compatibility-only definitions", () => {
     render(<ScheduleWorkspace {...workingDraftProps}
       draftRead={{ kind: "workingDraft", draft: { ...draft, milestones: [] }, milestoneRows: [] }}
-      milestoneDefinitions={activeMilestoneDefinitions}
+      milestoneDefinitions={initialGovernanceContext().addablePublicDefinitions}
     />);
 
     const catalog = screen.getByLabelText("Milestone definition");

@@ -1,7 +1,5 @@
-import {
-  dashboardAttentionMilestoneTypeIds,
-  milestoneDefinitions,
-} from "../../config/v2/referenceData";
+import type { EffectiveMilestoneGovernanceContext } from "../governance/effectiveMilestoneGovernanceContext";
+import { resolveScheduleDefinitions } from "../governance/scheduleDefinitionResolution";
 import {
   addDays,
   compareDateOnly,
@@ -20,6 +18,7 @@ export interface DashboardAttentionMatch {
   readonly projectId: ProjectId;
   readonly milestoneId: MilestoneId;
   readonly milestoneDefinitionId: MilestoneDefinitionId;
+  readonly milestoneName: string;
   readonly plan: DateOnly;
 }
 
@@ -42,14 +41,10 @@ export type DashboardAttentionRead =
       readonly issues: readonly ValidationIssue[];
     };
 
-const definitionById = new Map(
-  milestoneDefinitions.map((definition) => [definition.id, definition]),
-);
-const participatingTypeIds = new Set(dashboardAttentionMilestoneTypeIds);
-
 export function selectDashboardAttention(
   state: PrototypeState,
   referenceDate: DateOnly,
+  context: EffectiveMilestoneGovernanceContext,
 ): DashboardAttentionRead {
   const dueThrough = addDays(referenceDate, 14);
   const dueProjectIds: ProjectId[] = [];
@@ -59,13 +54,15 @@ export function selectDashboardAttention(
   const issues: ValidationIssue[] = [];
 
   for (const project of state.projects) {
-    const publishedRead = selectCurrentPublishedSchedule(state, project.id);
+    const publishedRead = selectCurrentPublishedSchedule(state, project.id, context);
 
     if (publishedRead.kind === "unavailable") {
       issues.push(...publishedRead.issues);
       continue;
     }
     if (publishedRead.kind === "noPublishedSchedule") continue;
+    const schedule = state.schedules.find(candidate => candidate.projectId === project.id)!;
+    const definitionById = new Map(resolveScheduleDefinitions(context, schedule.localDefinitions).map(definition => [definition.id, definition]));
 
     let projectHasDue = false;
     let projectHasOverdue = false;
@@ -81,7 +78,8 @@ export function selectDashboardAttention(
         milestone.applicability !== "applicable"
         || milestone.plan === null
         || milestone.actual !== null
-        || !participatingTypeIds.has(definition.milestoneTypeId)
+        || (!context.automaticAttentionTypeIds.has(definition.milestoneTypeId)
+          && !context.additionalAttentionDefinitionIds.has(definition.id))
       ) {
         continue;
       }
@@ -90,6 +88,7 @@ export function selectDashboardAttention(
         projectId: project.id,
         milestoneId: milestone.milestoneId,
         milestoneDefinitionId: milestone.milestoneDefinitionId,
+        milestoneName: definition.name,
         plan: milestone.plan,
       };
       const relativeToReference = compareDateOnly(milestone.plan, referenceDate);

@@ -1,3 +1,4 @@
+import { initialScheduleCommandContext } from "../../test/governanceTestUtils";
 import { describe, expect, it } from "vitest";
 
 import { startScheduleWorkingDraft } from "../../application/commands/canonicalScheduleCommands";
@@ -22,7 +23,7 @@ describe("canonical Schedule fixtures", () => {
     const started = startScheduleWorkingDraft(
       devSchedule001,
       { workingDraftId: toCanonicalScheduleWorkingDraftId("fixture-review-draft") },
-      { milestoneDefinitions },
+      initialScheduleCommandContext(),
     );
     expect(started.ok).toBe(true);
     if (!started.ok) throw new Error("Expected fixture Draft creation");
@@ -97,7 +98,7 @@ describe("canonical Schedule fixtures", () => {
   it("keeps sparse Published fixtures unchanged while first Draft clones only Published rows", () => {
     const originalPublished = devSchedule001.publishedVersions;
     const originalMilestones = originalPublished[0]!.milestones;
-    const result = startScheduleWorkingDraft(devSchedule001, { workingDraftId: toCanonicalScheduleWorkingDraftId("fixture-clone") }, { milestoneDefinitions });
+    const result = startScheduleWorkingDraft(devSchedule001, { workingDraftId: toCanonicalScheduleWorkingDraftId("fixture-clone") }, initialScheduleCommandContext());
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("Expected fixture Draft creation");

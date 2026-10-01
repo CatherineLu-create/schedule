@@ -1,5 +1,4 @@
 import {
-  milestoneDefinitions,
   stageGroupCatalog,
 } from "../../config/v2/referenceData";
 import {
@@ -19,6 +18,8 @@ import { formatDateOnly, type DateOnly } from "../../domain/shared/dateOnly";
 import type { MilestoneId, ProjectId } from "../../domain/shared/ids";
 import type { ValidationIssue } from "../../domain/validation/validationIssue";
 import type { PrototypeState } from "../state/prototypeState";
+import type { EffectiveMilestoneGovernanceContext } from "../governance/effectiveMilestoneGovernanceContext";
+import { resolveScheduleDefinitions } from "../governance/scheduleDefinitionResolution";
 
 export interface PublishedScheduleMilestoneRow {
   readonly milestoneId: MilestoneId;
@@ -154,6 +155,7 @@ export function resolveCanonicalScheduleOwner(
 
 export function validateCanonicalScheduleState(
   state: PrototypeState,
+  context: EffectiveMilestoneGovernanceContext,
 ): readonly ValidationIssue[] {
   const projectIds = new Set(state.projects.map((project) => project.id));
   const scheduleCountByProjectId = new Map<ProjectId, number>();
@@ -201,6 +203,7 @@ export function validateCanonicalScheduleState(
       );
     }
 
+    const milestoneDefinitions = resolveScheduleDefinitions(context, schedule.localDefinitions);
     issues.push(
       ...validateCanonicalProjectSchedule(schedule, milestoneDefinitions),
     );
@@ -217,10 +220,12 @@ export function validateCanonicalScheduleState(
 export function selectCurrentPublishedSchedule(
   state: PrototypeState,
   projectId: ProjectId,
+  context: EffectiveMilestoneGovernanceContext,
 ): CurrentPublishedScheduleRead {
   const owner = resolveCanonicalScheduleOwner(state, projectId);
   if (owner.kind === "unavailable") return owner;
   const selectedSchedule = owner.schedule;
+  const milestoneDefinitions = resolveScheduleDefinitions(context, selectedSchedule.localDefinitions);
   const localIssues = validateCanonicalProjectSchedule(
     selectedSchedule,
     milestoneDefinitions,
@@ -284,6 +289,7 @@ export function selectCurrentPublishedSchedule(
 export function selectScheduleWorkingDraft(
   state: PrototypeState,
   projectId: ProjectId,
+  context: EffectiveMilestoneGovernanceContext,
 ): ScheduleWorkingDraftRead {
   const owner = resolveCanonicalScheduleOwner(state, projectId);
   if (owner.kind === "unavailable") {
@@ -292,6 +298,7 @@ export function selectScheduleWorkingDraft(
 
   const draft = owner.schedule.workingDraft;
   if (draft === null) return { kind: "noWorkingDraft" };
+  const milestoneDefinitions = resolveScheduleDefinitions(context, owner.schedule.localDefinitions);
 
   const issues = validateScheduleWorkingDraft(draft, milestoneDefinitions);
   if (issues.length > 0) {

@@ -1,3 +1,5 @@
+import { initialGovernanceContext } from "./test/governanceTestUtils";
+import { createInitialSelfServiceReferenceCatalogs } from "./application/reference-data/selfServiceCatalogs";
 import { describe, expect, it } from "vitest";
 
 import { canonicalProjectFixtures, devProject003 } from "./fixtures/v2/canonicalProjectFixtures";
@@ -16,7 +18,7 @@ import { selectPortfolioDashboardRows, type PortfolioDashboardRow } from "./appl
 const rows = selectPortfolioDashboardRows({
 	projects: canonicalProjectFixtures,
 	schedules: canonicalScheduleFixtures,
-});
+}, createInitialSelfServiceReferenceCatalogs(), initialGovernanceContext());
 
 const valueByKey = {
 	year: (row) => row.project.year,
@@ -260,11 +262,11 @@ describe("canonical Portfolio Dashboard filters", () => {
 	});
 
 	it("keeps filtering outcomes independent of canonical Team-only state", () => {
-		const originalRows = selectPortfolioDashboardRows({ projects: canonicalProjectFixtures, schedules: canonicalScheduleFixtures });
+		const originalRows = selectPortfolioDashboardRows({ projects: canonicalProjectFixtures, schedules: canonicalScheduleFixtures }, createInitialSelfServiceReferenceCatalogs(), initialGovernanceContext());
 		const withoutTeamRows = selectPortfolioDashboardRows({
 			projects: canonicalProjectFixtures.map((project) => project.id === devProject003.id ? { ...project, team: null } : project),
 			schedules: canonicalScheduleFixtures,
-		});
+		}, createInitialSelfServiceReferenceCatalogs(), initialGovernanceContext());
 		const filters = filtersWith({ status: "Pending", gpu: "GN22-X7/X9" });
 
 		expect(rowIds(filterPortfolioDashboardRows(withoutTeamRows, "", filters))).toEqual(rowIds(filterPortfolioDashboardRows(originalRows, "", filters)));

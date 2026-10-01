@@ -4,6 +4,9 @@ import * as XLSX from "xlsx";
 import { PortfolioDashboardView } from "./portfolioDashboardView";
 import { selectDashboardAttention } from "./application/selectors/dashboardAttention";
 import { selectPortfolioDashboardRows } from "./application/selectors/portfolioDashboardRows";
+import { createInitialMilestoneGovernanceRuntimeState } from "./application/governance/milestoneGovernanceInitializer";
+import { selectEffectiveMilestoneGovernanceContext, selectEffectiveRetiredDraftOccurrenceGrants } from "./application/governance/effectiveMilestoneGovernanceContext";
+import { createPortfolioVisibleSchema } from "./portfolioDashboardColumns";
 import {
   createProject,
   updateProjectMaster,
@@ -59,8 +62,6 @@ import {
   type DuplicateProjectDecisionRequest,
 } from "./application/workflow/workflowInterpretation";
 import {
-  activeMilestoneDefinitions,
-  milestoneDefinitions,
   statusCatalog,
   teamFunctionCatalog,
 } from "./config/v2/referenceData";
@@ -146,10 +147,6 @@ const createDefaults: CreateProjectDefaults = {
   teamTemplate: devTeamTemplateV2,
 };
 
-const canonicalScheduleCommandContext: CanonicalScheduleCommandContext = {
-  milestoneDefinitions,
-};
-
 function scheduleFailureMessages(
   failure: CanonicalScheduleCommandFailure<CanonicalScheduleLifecycleFailureReason>,
 ): readonly string[] {
@@ -213,6 +210,19 @@ export function App({
     initialSelectedProjectId === null ? "dashboard" : "workspace",
   );
   const [state, dispatch] = React.useReducer(prototypeReducer, initialState);
+  const [governanceState] = React.useState(createInitialMilestoneGovernanceRuntimeState);
+  const { governance, retiredDraftOccurrenceGrants } = React.useMemo(() => {
+    const result = selectEffectiveMilestoneGovernanceContext(governanceState);
+    if (!result.ok) throw new Error(`Governance unavailable: ${result.code}`);
+    const grants = selectEffectiveRetiredDraftOccurrenceGrants(governanceState);
+    if (!grants.ok) throw new Error(`Governance unavailable: ${grants.code}`);
+    return { governance: result.value, retiredDraftOccurrenceGrants: grants.value };
+  }, [governanceState]);
+  const portfolioSchema = React.useMemo(() => createPortfolioVisibleSchema(governance), [governance]);
+  const scheduleCommandContext = (schedule: CanonicalProjectSchedule): CanonicalScheduleCommandContext => ({
+    governance, localDefinitions: schedule.localDefinitions,
+    retiredDraftOccurrenceGrants,
+  });
   const [selfServiceCatalogs, setSelfServiceCatalogs] =
     React.useState<SelfServiceReferenceCatalogs>(createInitialSelfServiceReferenceCatalogs);
   const [dashboardReferenceDate] = React.useState<DateOnly>(
@@ -240,10 +250,11 @@ export function App({
   const selectedCanonicalProject =
     selectedProjectId === null ? null : getProjectById(state, selectedProjectId);
   const dashboardRows = selectDashboardProjectRows(state, selfServiceCatalogs);
-  const portfolioDashboardRows = selectPortfolioDashboardRows(state, selfServiceCatalogs);
+  const portfolioDashboardRows = selectPortfolioDashboardRows(state, selfServiceCatalogs, governance);
   const dashboardAttention = selectDashboardAttention(
     state,
     dashboardReferenceDate,
+    governance,
   );
   const selectedDashboardRow =
     selectedProjectId === null
@@ -252,10 +263,10 @@ export function App({
   const selectedScheduleRead =
     selectedProjectId === null
       ? null
-      : selectCurrentPublishedSchedule(state, selectedProjectId);
+      : selectCurrentPublishedSchedule(state, selectedProjectId, governance);
   const selectedDraftRead = selectedProjectId === null
     ? null
-    : selectScheduleWorkingDraft(state, selectedProjectId);
+    : selectScheduleWorkingDraft(state, selectedProjectId, governance);
   const selectedScheduleOwner = selectedProjectId === null
     ? null
     : resolveCanonicalScheduleOwner(state, selectedProjectId);
@@ -325,7 +336,7 @@ export function App({
     const result = startScheduleWorkingDraft(
       owner.schedule,
       { workingDraftId: toCanonicalScheduleWorkingDraftId(globalThis.crypto.randomUUID()) },
-      canonicalScheduleCommandContext,
+      scheduleCommandContext(owner.schedule),
     );
     if (!result.ok) {
       setScheduleFeedback(scheduleFailureMessages(result));
@@ -346,7 +357,7 @@ export function App({
       return;
     }
     const result = updateScheduleWorkingDraftMilestone(
-      owner.schedule, input, canonicalScheduleCommandContext,
+      owner.schedule, input, scheduleCommandContext(owner.schedule),
     );
     if (!result.ok) {
       setScheduleFeedback(scheduleFailureMessages(result));
@@ -368,7 +379,7 @@ export function App({
     const result = addScheduleWorkingDraftMilestone(
       owner.schedule,
       { milestoneId, milestoneDefinitionId },
-      canonicalScheduleCommandContext,
+      scheduleCommandContext(owner.schedule),
     );
     if (!result.ok) {
       setScheduleFeedback(scheduleFailureMessages(result));
@@ -387,7 +398,7 @@ export function App({
       return;
     }
     const result = removeScheduleWorkingDraftMilestone(
-      owner.schedule, { milestoneId }, canonicalScheduleCommandContext,
+      owner.schedule, { milestoneId }, scheduleCommandContext(owner.schedule),
     );
     if (!result.ok) {
       setScheduleFeedback(scheduleFailureMessages(result));
@@ -424,7 +435,7 @@ export function App({
     }
     const publishedAt = new Date().toISOString();
     const result = publishScheduleWorkingDraft(
-      owner.schedule, { publishedAt }, canonicalScheduleCommandContext,
+      owner.schedule, { publishedAt }, scheduleCommandContext(owner.schedule),
     );
     if (!result.ok) {
       setScheduleFeedback(scheduleFailureMessages(result));
@@ -449,7 +460,7 @@ export function App({
       : {
           draftRead: selectedDraftRead,
           feedback: scheduleFeedback,
-          milestoneDefinitions: activeMilestoneDefinitions,
+          milestoneDefinitions: governance.addablePublicDefinitions,
           nextVersionLabel,
           officialRead: selectedScheduleRead,
           onAddMilestone: addScheduleDraftMilestone,
@@ -647,6 +658,7 @@ export function App({
           onExport={() => exportDashboardProjectListToExcel(dashboardRows)}
           onOpenProject={openProject}
           rows={portfolioDashboardRows}
+          schema={portfolioSchema}
         />
       )}
       {renderWorkspace && (

@@ -1,12 +1,42 @@
 import { describe, expect, it } from "vitest";
 import { mdrrMilestoneDefinition, milestoneDefinitions, portfolioMilestoneDefinitions } from "./config/v2/referenceData";
 import {
-  defaultPortfolioColumnWidths, portfolioColumns, portfolioDomainGroups,
-  portfolioProjectInfoColumns, portfolioScheduleColumnGroups, portfolioScheduleColumnMappings,
-  portfolioStickyColumnKeys, portfolioSubgroups, portfolioTeamColumnGroups, resizePortfolioColumnWidth,
+  createPortfolioVisibleSchema,
+  portfolioProjectInfoColumns,
+  portfolioStickyColumnKeys, portfolioTeamColumnGroups, resizePortfolioColumnWidth,
 } from "./portfolioDashboardColumns";
+import { initialGovernanceContext, publishPortfolioDefinitionsForTest } from "./test/governanceTestUtils";
+import { toMilestoneDefinitionId } from "./domain/shared/ids";
+
+const { columns: portfolioColumns, domainGroups: portfolioDomainGroups, subgroups: portfolioSubgroups, scheduleMappings: portfolioScheduleColumnMappings } = createPortfolioVisibleSchema(initialGovernanceContext());
+const portfolioScheduleColumnGroups = portfolioSubgroups.filter(group => group.domain === "schedule").map(group => ({ ...group, columns: portfolioColumns.filter(column => column.subgroup === group.key) }));
 
 describe("Portfolio visual schema", () => {
+  it("escapes published ID collisions against the full legacy registry and keeps prefix-shaped IDs distinct", () => {
+    const legacy = initialGovernanceContext().definitionsForHistoricalResolution.find(definition => definition.id === "milestone-design-kickoff")!;
+    const additions = ["design:kickoff", "definition:design:kickoff", "definition:definition:design:kickoff", "ordinary-extra"].map((id, index) => ({ ...legacy, id: toMilestoneDefinitionId(id), name: `Separate kickoff ${index + 1}` }));
+    const context = publishPortfolioDefinitionsForTest(additions, [legacy.id, ...additions.map(definition => definition.id)]);
+    const schema = createPortfolioVisibleSchema(context);
+    expect(schema.scheduleMappings.map(mapping => [mapping.milestoneDefinitionId, mapping.key])).toEqual([
+      ["milestone-design-kickoff", "schedule:design:kickoff"],
+      ["design:kickoff", "schedule:definition:design:kickoff"],
+      ["definition:design:kickoff", "schedule:definition:definition:design:kickoff"],
+      ["definition:definition:design:kickoff", "schedule:definition:definition:definition:design:kickoff"],
+      ["ordinary-extra", "schedule:ordinary-extra"],
+    ]);
+    expect(new Set(schema.scheduleMappings.map(mapping => mapping.key)).size).toBe(5);
+    for (const membership of [
+      additions.map(definition => definition.id),
+      [...additions].reverse().map(definition => definition.id).concat(legacy.id),
+    ]) {
+      const changed = createPortfolioVisibleSchema(publishPortfolioDefinitionsForTest(additions, membership));
+      for (const mapping of changed.scheduleMappings) {
+        expect(mapping.key).toBe(schema.scheduleMappings.find(original => original.milestoneDefinitionId === mapping.milestoneDefinitionId)!.key);
+      }
+    }
+    const renamed = createPortfolioVisibleSchema({ ...context, portfolioColumnDefinitions: context.portfolioColumnDefinitions.map(definition => ({ ...definition, name: "Same display name" })) });
+    expect(renamed.scheduleMappings.map(mapping => mapping.key)).toEqual(schema.scheduleMappings.map(mapping => mapping.key));
+  });
   // Mutation: dropping/reordering a stage or using same-name definition matching.
   it("maps the 30 ordered visual leaves to 29 Portfolio definitions and the active MDRR projection", () => {
     expect(portfolioScheduleColumnMappings.map(({ key, label, milestoneDefinitionId }) => [key, label, milestoneDefinitionId])).toEqual([
@@ -93,9 +123,10 @@ describe("Portfolio visual schema", () => {
       [100, 92], [76, 68], [215, 190], [170, 150], [118, 105], [125, 110], [145, 130], [90, 82], [200, 175], [135, 120], [92, 82],
     ]);
     for (const column of portfolioColumns) {
-      expect(defaultPortfolioColumnWidths[column.key]).toBe(column.defaultWidth);
       expect(column.defaultWidth).toBeGreaterThanOrEqual(column.minWidth);
     }
+    expect(portfolioColumns.filter(column => column.domain === "schedule").map(column => [column.defaultWidth, column.minWidth])).toEqual(Array.from({ length: 30 }, () => [118, 105]));
+    expect(portfolioColumns.filter(column => column.domain === "team").map(column => [column.defaultWidth, column.minWidth])).toEqual(Array.from({ length: 7 }, () => [135, 120]));
     expect(resizePortfolioColumnWidth(118, 20, 105)).toBe(138);
     expect(resizePortfolioColumnWidth(118, -10, 105)).toBe(108);
     expect(resizePortfolioColumnWidth(118, -100, 105)).toBe(105);

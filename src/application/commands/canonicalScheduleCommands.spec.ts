@@ -1,4 +1,8 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import { initialGovernanceContext, publishedRetirementFixture } from "../../test/governanceTestUtils";
+import { selectEffectiveMilestoneGovernanceContext, selectEffectiveRetiredDraftOccurrenceGrants } from "../governance/effectiveMilestoneGovernanceContext";
+import type { MilestoneGovernanceRuntimeState } from "../../domain/governance/milestoneGovernance";
+import type { ProjectLocalMilestoneDefinition } from "../../domain/schedule/scheduleReview";
 
 import type { MilestoneDefinition } from "../../domain/schedule/milestoneCatalog";
 import type {
@@ -105,7 +109,9 @@ function invalidVersion(versionNumber: number): CanonicalPublishedScheduleVersio
 }
 
 const context: CanonicalScheduleCommandContext = {
-  milestoneDefinitions: definitions,
+  governance: { ...initialGovernanceContext(), definitionsForHistoricalResolution: definitions, addablePublicDefinitions: [definitionA, definitionB, definitionC] },
+  localDefinitions: [],
+  retiredDraftOccurrenceGrants: [],
 };
 
 function schedule(
@@ -152,7 +158,113 @@ function freezeScheduleGraph(
   return Object.freeze(value);
 }
 
+function releaseBackedCommandContext(state: MilestoneGovernanceRuntimeState): CanonicalScheduleCommandContext {
+  const governance = selectEffectiveMilestoneGovernanceContext(state);
+  const grants = selectEffectiveRetiredDraftOccurrenceGrants(state);
+  if (!governance.ok || !grants.ok) throw new Error("Expected valid released command authority");
+  return { governance: governance.value, localDefinitions: [], retiredDraftOccurrenceGrants: grants.value };
+}
+
 describe("canonical Schedule Working Draft lifecycle commands", () => {
+  it("normal Add rejects compatibility and retired definitions even when resolved", () => {
+    const empty = scheduleWithDraft([]);
+    for (const rejectedId of [legacyDefinition.id, definitionA.id]) {
+      const restricted = { ...context, governance: { ...context.governance, addablePublicDefinitions: [definitionB] } };
+      const before = structuredClone(empty);
+      expect(addScheduleWorkingDraftMilestone(empty, { milestoneId: toMilestoneId("new"), milestoneDefinitionId: rejectedId }, restricted)).toMatchObject({ ok: false, reason: "validation-failed" });
+      expect(empty).toEqual(before);
+    }
+  });
+  it("a local registry entry cannot authorize a nonaddable public identity", () => {
+    const local: ProjectLocalMilestoneDefinition = { id: legacyDefinition.id, name: "Unrelated local", stageGroupId: toStageGroupId("stage-a1"), milestoneTypeId: toMilestoneTypeId("type-g-o"), displayOrder: 1, source: "manual", confirmation: "confirmed", evidenceIds: [] };
+    const malformed = { ...scheduleWithDraft([draftMilestone("unretained", legacyDefinition.id)]), localDefinitions: [local] };
+    const malformedContext = { ...context, localDefinitions: [local] };
+    expect(updateScheduleWorkingDraftMilestone(malformed, { milestoneId: toMilestoneId("unretained"), field: "plan", value: null }, malformedContext).ok).toBe(false);
+    expect(publishScheduleWorkingDraft(malformed, { publishedAt: "now" }, malformedContext).ok).toBe(false);
+  });
+  it("resolves only legal same-Project local IDs for edit and Publish", () => {
+    const local: ProjectLocalMilestoneDefinition = { id: toMilestoneDefinitionId("confirmed-local"), name: "Confirmed local", stageGroupId: toStageGroupId("stage-a1"), milestoneTypeId: toMilestoneTypeId("type-smt"), displayOrder: 1, source: "manual", confirmation: "confirmed", evidenceIds: [] };
+    const item = { ...scheduleWithDraft([draftMilestone("local-row", local.id)]), localDefinitions: [local] };
+    const localContext = { ...context, localDefinitions: [local] };
+    const input = { milestoneId: toMilestoneId("local-row"), field: "plan", value: dateOnly("2026-10-02") } as const;
+    const updated = updateScheduleWorkingDraftMilestone(item, input, localContext);
+    expect(updated.ok).toBe(true);
+    if (!updated.ok) throw new Error("Expected local edit");
+    const published = publishScheduleWorkingDraft(updated.schedule, { publishedAt: "now" }, localContext);
+    expect(published.ok).toBe(true);
+    if (!published.ok) throw new Error("Expected local Publish");
+    expect(published.version.milestones[0]).toMatchObject({ milestoneId: "local-row", milestoneDefinitionId: "confirmed-local", plan: "2026-10-02" });
+    expect(updateScheduleWorkingDraftMilestone({ ...item, localDefinitions: [] }, input, localContext).ok).toBe(false);
+    expect(updateScheduleWorkingDraftMilestone(item, input, context).ok).toBe(false);
+    const invalid = { ...local, milestoneTypeId: toMilestoneTypeId("unknown-type") };
+    expect(publishScheduleWorkingDraft({ ...item, localDefinitions: [invalid] }, { publishedAt: "now" }, { ...context, localDefinitions: [invalid] }).ok).toBe(false);
+  });
+  it("D1 permits exact same-Draft edits and Publish but does not permit Add or leak identities", () => {
+    const fixture = publishedRetirementFixture();
+    const item = fixture.schedule;
+    const grant = fixture.grant;
+    const granted = releaseBackedCommandContext(fixture.state);
+    expect(granted.retiredDraftOccurrenceGrants).toEqual([grant]);
+    const input = { milestoneId: grant.milestoneId, field: "plan", value: dateOnly("2026-10-02") } as const;
+    const updated = updateScheduleWorkingDraftMilestone(item, input, granted);
+    expect(updated.ok).toBe(true);
+    if (!updated.ok) throw new Error("Expected D1 edit");
+    const published = publishScheduleWorkingDraft(updated.schedule, { publishedAt: "now" }, granted);
+    expect(published.ok).toBe(true);
+    if (!published.ok) throw new Error("Expected D1 Publish");
+    const withoutGrant = { ...granted, retiredDraftOccurrenceGrants: [] };
+    const cloned = startScheduleWorkingDraft(published.schedule, { workingDraftId: toCanonicalScheduleWorkingDraftId("after-publish") }, withoutGrant);
+    if (!cloned.ok) throw new Error("Expected retained clone");
+    expect(updateScheduleWorkingDraftMilestone(cloned.schedule, input, withoutGrant).ok).toBe(true);
+    expect(publishScheduleWorkingDraft(cloned.schedule, { publishedAt: "later" }, withoutGrant).ok).toBe(true);
+    for (const invalidGrant of [
+      { ...grant, projectId: toProjectId("other") },
+      { ...grant, workingDraftId: toCanonicalScheduleWorkingDraftId("other") },
+      { ...grant, milestoneId: toMilestoneId("other") },
+      { ...grant, milestoneDefinitionId: definitionB.id },
+    ]) {
+      const invalidContext = { ...granted, retiredDraftOccurrenceGrants: [invalidGrant] };
+      expect(updateScheduleWorkingDraftMilestone(item, input, invalidContext).ok).toBe(false);
+      expect(publishScheduleWorkingDraft(item, { publishedAt: "now" }, invalidContext).ok).toBe(false);
+    }
+    const removed = removeScheduleWorkingDraftMilestone(item, { milestoneId: grant.milestoneId }, granted);
+    if (!removed.ok) throw new Error("Expected remove");
+    expect(addScheduleWorkingDraftMilestone(removed.schedule, { milestoneId: grant.milestoneId, milestoneDefinitionId: grant.milestoneDefinitionId }, granted).ok).toBe(false);
+    const discarded = cancelScheduleWorkingDraft(item);
+    if (!discarded.ok) throw new Error("Expected discard");
+    const restarted = startScheduleWorkingDraft(discarded.schedule, { workingDraftId: toCanonicalScheduleWorkingDraftId("restart") }, granted);
+    if (!restarted.ok) throw new Error("Expected restart");
+    expect(addScheduleWorkingDraftMilestone(restarted.schedule, { milestoneId: grant.milestoneId, milestoneDefinitionId: grant.milestoneDefinitionId }, granted).ok).toBe(false);
+  });
+  // Mutation: accepting a raw matching tuple whose issuing release has no current authority.
+  it.each(["unknown", "bundled", "future", "nonRetiring"] as const)("rejects Edit and Publish atomically with a %s issuing-release reference", kind => {
+    const fixture = publishedRetirementFixture();
+    const state = { ...fixture.state, retiredDraftOccurrenceGrants: [{ ...fixture.grant, retiredByReleaseId: fixture.invalidIssuingReleaseIds[kind] }] };
+    const item = freezeScheduleGraph(fixture.schedule);
+    const before = structuredClone({ state, item });
+    const derived = releaseBackedCommandContext(state);
+    expect(derived.retiredDraftOccurrenceGrants).toEqual([]);
+    for (const result of [
+      updateScheduleWorkingDraftMilestone(item, { milestoneId: fixture.grant.milestoneId, field: "plan", value: dateOnly("2026-10-02") }, derived),
+      publishScheduleWorkingDraft(item, { publishedAt: "2026-10-01T03:00:00Z" }, derived),
+    ]) {
+      expect(result).toMatchObject({ ok: false, reason: "validation-failed", issues: [expect.objectContaining({ code: "schedule.draft.definition-not-addable-or-retained" })] });
+      expect(result).not.toHaveProperty("schedule");
+      expect(result).not.toHaveProperty("version");
+    }
+    expect({ state, item }).toEqual(before);
+  });
+  it("only exact Current Published lineage retains nonaddable rows, preserving repeats", () => {
+    const first = publishedMilestone("retained-1", legacyDefinition.id);
+    const second = publishedMilestone("retained-2", legacyDefinition.id);
+    const retained = scheduleWithDraft([first, second], [version(1, [first, second])]);
+    expect(publishScheduleWorkingDraft(retained, { publishedAt: "now" }, context).ok).toBe(true);
+    const olderOnly = scheduleWithDraft([first], [version(1, [first]), version(2, [])]);
+    expect(publishScheduleWorkingDraft(olderOnly, { publishedAt: "now" }, context).ok).toBe(false);
+    const wrongOccurrence = scheduleWithDraft([{ ...first, milestoneId: toMilestoneId("recreated") }], retained.publishedVersions);
+    expect(publishScheduleWorkingDraft(wrongOccurrence, { publishedAt: "now" }, context).ok).toBe(false);
+    expect(addScheduleWorkingDraftMilestone(scheduleWithDraft([draftMilestone("present")]), { milestoneId: toMilestoneId("duplicate-definition"), milestoneDefinitionId: definitionA.id }, context).ok).toBe(false);
+  });
   it("starts_empty_draft_without_published_schedule_and_uses_injected_working_draft_id", () => {
     const id = toCanonicalScheduleWorkingDraftId("draft-empty-1");
     const result = startScheduleWorkingDraft(schedule(), { workingDraftId: id }, context);
@@ -382,13 +494,13 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
     const originalDraft = original.workingDraft!;
     const originalMilestones = originalDraft.milestones;
     const result = addScheduleWorkingDraftMilestone(original, {
-      milestoneId: toMilestoneId("added"), milestoneDefinitionId: definitionA.id,
+      milestoneId: toMilestoneId("added"), milestoneDefinitionId: definitionB.id,
     }, context);
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("Expected Add success");
     expect(result.milestone).toEqual({
       milestoneId: toMilestoneId("added"),
-      milestoneDefinitionId: definitionA.id,
+      milestoneDefinitionId: definitionB.id,
       applicability: "applicable",
       plan: null,
       actual: null,
@@ -430,24 +542,24 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
     expect("schedule" in result).toBe(false);
   });
 
-  it("allows a duplicate definition but remove/re-add uses a new identity", () => {
+  it("remove/re-add of an addable definition uses a new identity", () => {
     const first = addScheduleWorkingDraftMilestone(
       freezeScheduleGraph(scheduleWithDraft([
         draftMilestone("original", definitionA.id),
       ])),
-      { milestoneId: toMilestoneId("same-definition-second-id"), milestoneDefinitionId: definitionA.id },
+      { milestoneId: toMilestoneId("second-definition-id"), milestoneDefinitionId: definitionB.id },
       context,
     );
     expect(first.ok).toBe(true);
-    if (!first.ok) throw new Error("Expected duplicate-definition Add success");
+    if (!first.ok) throw new Error("Expected Add success");
     const removed = removeScheduleWorkingDraftMilestone(
-      first.schedule, { milestoneId: toMilestoneId("same-definition-second-id") }, context,
+      first.schedule, { milestoneId: toMilestoneId("second-definition-id") }, context,
     );
     expect(removed.ok).toBe(true);
     if (!removed.ok) throw new Error("Expected Remove success");
     const readded = addScheduleWorkingDraftMilestone(
       removed.schedule,
-      { milestoneId: toMilestoneId("recreated-new-id"), milestoneDefinitionId: definitionA.id },
+      { milestoneId: toMilestoneId("recreated-new-id"), milestoneDefinitionId: definitionB.id },
       context,
     );
     expect(readded.ok).toBe(true);

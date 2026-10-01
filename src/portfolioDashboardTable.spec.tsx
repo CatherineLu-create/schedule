@@ -1,8 +1,15 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { PortfolioCurrentPublishedRead, PortfolioDashboardRow } from "./application/selectors/portfolioDashboardRows";
+import { selectPortfolioDashboardRows, type PortfolioCurrentPublishedRead, type PortfolioDashboardRow } from "./application/selectors/portfolioDashboardRows";
 import { toMilestoneDefinitionId, toMilestoneId, toProjectId } from "./domain/shared/ids";
 import { PortfolioDashboardTable } from "./portfolioDashboardTable";
+import { createPortfolioVisibleSchema } from "./portfolioDashboardColumns";
+import { initialGovernanceContext, publishPortfolioDefinitionsForTest } from "./test/governanceTestUtils";
+import { createInitialSelfServiceReferenceCatalogs } from "./application/reference-data/selfServiceCatalogs";
+import { createEmptyCanonicalProjectSchedule } from "./domain/schedule/officialSchedule";
+import { toScheduleVersionNumber } from "./domain/schedule/schedule";
+import { parseDateOnly } from "./domain/shared/dateOnly";
+import { devProject001 } from "./fixtures/v2/canonicalProjectFixtures";
 
 afterEach(cleanup);
 const baseRow: PortfolioDashboardRow = {
@@ -31,9 +38,81 @@ function scheduleCells() { return [...renderedRow().querySelectorAll<HTMLTableCe
 function leaf(key: string) { return renderedRow().querySelector<HTMLTableCellElement>(`td[data-column-key="${key}"]`)!; }
 
 describe("PortfolioDashboardTable", () => {
+  it("renders separately published legacy/prefix-collision dates and resizes each definition independently", () => {
+    const legacy = initialGovernanceContext().definitionsForHistoricalResolution.find(definition => definition.id === "milestone-design-kickoff")!;
+    const additions = ["design:kickoff", "definition:design:kickoff", "definition:definition:design:kickoff"].map((id, index) => ({ ...legacy, id: toMilestoneDefinitionId(id), name: `Separate kickoff ${index + 1}` }));
+    const definitions = [legacy, ...additions];
+    const context = publishPortfolioDefinitionsForTest(additions, definitions.map(definition => definition.id));
+    const schema = createPortfolioVisibleSchema(context);
+    const state = { projects: [devProject001], schedules: [{
+      ...createEmptyCanonicalProjectSchedule(devProject001.id),
+      publishedVersions: [{ versionNumber: toScheduleVersionNumber(1), versionNote: null, publishedAt: "2026-10-01T00:00:00Z",
+        milestones: definitions.map((definition, index) => ({ milestoneId: toMilestoneId(`identity-row-${index}`), milestoneDefinitionId: definition.id, applicability: "applicable" as const,
+          plan: parseDateOnly(`2026-10-0${index + 1}`), actual: parseDateOnly(`2026-11-0${index + 1}`) })),
+      }],
+    }] };
+    const catalogs = createInitialSelfServiceReferenceCatalogs();
+    const rows = selectPortfolioDashboardRows(state, catalogs, context);
+    const { rerender } = render(<PortfolioDashboardTable rows={rows} schema={schema} onOpenProject={() => {}} />);
+    const cells = scheduleCells();
+    expect(cells).toHaveLength(4);
+    for (const [index, cell] of cells.entries()) {
+      expect(cell).toHaveTextContent(`P: 2026/10/0${index + 1}`);
+      expect(cell).toHaveTextContent(`A: 2026/11/0${index + 1}`);
+      expect(cell.querySelector('[data-milestone-id]')).toHaveAttribute("data-milestone-id", `identity-row-${index}`);
+    }
+    expect(cells.map(cell => cell.dataset.columnKey)).toEqual([
+      "schedule:design:kickoff", "schedule:definition:design:kickoff",
+      "schedule:definition:definition:design:kickoff", "schedule:definition:definition:definition:design:kickoff",
+    ]);
+    const widthFor = (label: string) => {
+      const table = screen.getByRole("table", { name: "Projects" });
+      const headers = [...table.querySelectorAll("thead tr:last-child th")];
+      const index = headers.indexOf(screen.getByRole("button", { name: `Resize ${label} column` }).closest("th")!);
+      return table.querySelectorAll("col")[index];
+    };
+    for (const [index, definition] of definitions.entries()) {
+      for (let step = 0; step <= index; step++) fireEvent.keyDown(screen.getByRole("button", { name: `Resize ${definition.name} column` }), { key: "ArrowRight" });
+      for (const [checkIndex, candidate] of definitions.entries()) {
+        expect(widthFor(candidate.name)).toHaveStyle({ width: `${118 + (checkIndex <= index ? (checkIndex + 1) * 10 : 0)}px` });
+      }
+    }
+    for (const membership of [additions.map(definition => definition.id), [...definitions].reverse().map(definition => definition.id)]) {
+      const changedContext = publishPortfolioDefinitionsForTest(additions, membership);
+      rerender(<PortfolioDashboardTable rows={selectPortfolioDashboardRows(state, catalogs, changedContext)} schema={createPortfolioVisibleSchema(changedContext)} onOpenProject={() => {}} />);
+      for (const [index, definition] of definitions.entries()) {
+        if (membership.includes(definition.id)) expect(widthFor(definition.name)).toHaveStyle({ width: `${128 + index * 10}px` });
+      }
+    }
+  });
+  it("uses the supplied changing schema with readable widths, sticky headers, and bidirectional proxy", () => {
+    const context = initialGovernanceContext();
+    const baseline = createPortfolioVisibleSchema(context);
+    const dynamic = createPortfolioVisibleSchema({ ...context, portfolioColumnDefinitions: [
+      ...context.portfolioColumnDefinitions,
+      { ...context.addablePublicDefinitions[0], id: toMilestoneDefinitionId("dynamic-id"), name: "Dynamic readiness" },
+    ] });
+    const { rerender } = render(<PortfolioDashboardTable rows={[baseRow]} schema={baseline} onOpenProject={() => {}} />);
+    rerender(<PortfolioDashboardTable rows={[baseRow]} schema={dynamic} onOpenProject={() => {}} />);
+    expect(screen.getByRole("columnheader", { name: /Dynamic readiness/ })).toBeInTheDocument();
+    const table = screen.getByRole("table", { name: "Projects" });
+    expect(table.querySelectorAll("thead tr")).toHaveLength(3);
+    expect(table.querySelector("thead")).toHaveClass("sticky", "top-0");
+    expect(table.querySelectorAll("col")[41]).toHaveStyle({ width: "118px" });
+    expect(table.querySelectorAll("thead tr")[0].children[1]).toHaveAttribute("colspan", "31");
+    fireEvent.keyDown(screen.getByRole("button", { name: "Resize Dynamic readiness column" }), { key: "ArrowRight" });
+    expect(table.querySelectorAll("col")[41]).toHaveStyle({ width: "128px" });
+    const viewport = screen.getByTestId("portfolio-table-scroll");
+    const proxy = screen.getByTestId("portfolio-bottom-scroll");
+    expect(viewport).toHaveClass("max-h-[70vh]", "overflow-auto", "max-w-full");
+    fireEvent.scroll(viewport, { target: { scrollLeft: 120 } });
+    expect(proxy.scrollLeft).toBe(120);
+    fireEvent.scroll(proxy, { target: { scrollLeft: 230 } });
+    expect(viewport.scrollLeft).toBe(230);
+  });
   // Mutation: rendering the rejected flat Project-only table or a diagnostic column.
   it("renders the fixed active-baseline grouped schema without compatibility-only milestones or legacy Team terminology", () => {
-    render(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
+    render(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[baseRow]} onOpenProject={() => {}} />);
     const table = screen.getByRole("table", { name: "Projects" });
     const headerRows = table.querySelectorAll("thead tr");
     expect(headerRows).toHaveLength(3);
@@ -69,7 +148,7 @@ describe("PortfolioDashboardTable", () => {
     const originalInnerHeight = window.innerHeight;
     Object.defineProperty(window, "innerHeight", { configurable: true, value: 700 });
     const { rerender } = render(
-      <PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />,
+      <PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[baseRow]} onOpenProject={() => {}} />,
     );
     const viewport = screen.getByTestId("portfolio-table-scroll");
     const bottomScroller = screen.getByTestId("portfolio-bottom-scroll");
@@ -105,21 +184,21 @@ describe("PortfolioDashboardTable", () => {
     expect(viewport.scrollLeft).toBe(1280);
 
     rectBottom = 650;
-    rerender(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
+    rerender(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[baseRow]} onOpenProject={() => {}} />);
     expect(bottomScroller).toHaveAttribute("hidden");
 
     rectBottom = 900;
-    rerender(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
+    rerender(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[baseRow]} onOpenProject={() => {}} />);
     expect(bottomScroller).toBeVisible();
 
     rectLeft = -40;
-    rerender(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
+    rerender(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[baseRow]} onOpenProject={() => {}} />);
     expect(bottomScroller).toHaveStyle({ left: "0px", width: "777px" });
     expect(bottomScroller.firstElementChild).toHaveStyle({ width: "4177px" });
 
     rectLeft = 40;
     rectTop = 750;
-    rerender(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
+    rerender(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[baseRow]} onOpenProject={() => {}} />);
     expect(bottomScroller).toHaveAttribute("hidden");
 
     rectTop = 100;
@@ -152,20 +231,20 @@ describe("PortfolioDashboardTable", () => {
         }],
       }],
     };
-    const { rerender } = render(<PortfolioDashboardTable rows={[rowWith(compatibilityOnly)]} onOpenProject={() => {}} />);
+    const { rerender } = render(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[rowWith(compatibilityOnly)]} onOpenProject={() => {}} />);
 
     expect(scheduleCells()).toHaveLength(30);
     expect(screen.queryByRole("columnheader", { name: "A2" })).not.toBeInTheDocument();
     expect(leaf("schedule:a1-stage:a-close")).toHaveTextContent(/^—$/);
 
-    rerender(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
+    rerender(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[baseRow]} onOpenProject={() => {}} />);
     expect(scheduleCells()).toHaveLength(30);
     expect(screen.getByRole("columnheader", { name: "A1 Close" })).toBeInTheDocument();
   });
 
   // Mutation: restoring unconditional inline sticky positioning or dropping the approved 1024px CSS breakpoint.
   it("keeps all four Project context columns sticky only from the desktop breakpoint", () => {
-    render(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
+    render(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[baseRow]} onOpenProject={() => {}} />);
     const stickyKeys = ["projectStatus", "year", "name", "qciProjectName"];
 
     for (const key of stickyKeys) {
@@ -186,7 +265,7 @@ describe("PortfolioDashboardTable", () => {
   it("leaves the native scroll path unobstructed below 1024px", () => {
     const previousWidth = window.innerWidth;
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
-    render(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
+    render(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[baseRow]} onOpenProject={() => {}} />);
     const scrollOwner = screen.getByTestId("portfolio-table-scroll");
     fireEvent.scroll(scrollOwner, { target: { scrollLeft: 1490 } });
 
@@ -201,7 +280,7 @@ describe("PortfolioDashboardTable", () => {
 
   // Mutation: forcing long leaf labels onto one overflowing line or removing the full-label tooltip/accessibility text.
   it("contains long Schedule labels within two lines while preserving the full label", () => {
-    render(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
+    render(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[baseRow]} onOpenProject={() => {}} />);
     const header = screen.getByRole("columnheader", { name: "C1 System Build" });
     const label = within(header).getByText("C1 System Build");
 
@@ -218,7 +297,7 @@ describe("PortfolioDashboardTable", () => {
     [{ kind: "noPublishedSchedule" }, "No published schedule", "noPublishedSchedule"],
     [{ kind: "published", versionLabel: "Published v03", milestoneCount: 0, cells: [] }, "Published v03 · No milestones", "publishedEmpty"],
   ] as const)("preserves existing-cell accessibility for %s", (schedule, description, state) => {
-    render(<PortfolioDashboardTable rows={[rowWith(schedule)]} onOpenProject={() => {}} />);
+    render(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[rowWith(schedule)]} onOpenProject={() => {}} />);
     expect(scheduleCells()).toHaveLength(30);
     for (const cell of scheduleCells()) {
       expect(cell).toHaveTextContent(/^—$/);
@@ -235,9 +314,9 @@ describe("PortfolioDashboardTable", () => {
       { kind: "noPublishedSchedule" },
       { kind: "published", versionLabel: "Published v03", milestoneCount: 0, cells: [] },
     ];
-    const { rerender } = render(<PortfolioDashboardTable rows={[rowWith(reads[0])]} onOpenProject={() => {}} />);
+    const { rerender } = render(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[rowWith(reads[0])]} onOpenProject={() => {}} />);
     const appearances = reads.map((read) => {
-      rerender(<PortfolioDashboardTable rows={[rowWith(read)]} onOpenProject={() => {}} />);
+      rerender(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[rowWith(read)]} onOpenProject={() => {}} />);
       // Compare only the applied color treatment, without prescribing a particular palette or all layout classes.
       const cellTones = scheduleCells().map((cell) => [...cell.classList].filter((token) => /^(bg|text)-/.test(token)).sort().join(" "));
       expect(cellTones).toHaveLength(30);
@@ -264,7 +343,7 @@ describe("PortfolioDashboardTable", () => {
     };
     const row = rowWith(schedule);
     const before = structuredClone(row);
-    render(<PortfolioDashboardTable rows={[row]} onOpenProject={() => {}} />);
+    render(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[row]} onOpenProject={() => {}} />);
     const cell = leaf("schedule:c2-stage:c-g-o");
     expect(cell).toHaveAccessibleDescription("Published v03 · C2 G/O");
     expect([...cell.querySelectorAll('[data-milestone-id]')].map((element) => element.getAttribute("data-milestone-id"))).toEqual(["later-id", "earlier-id"]);
@@ -320,7 +399,7 @@ describe("PortfolioDashboardTable", () => {
       }],
     };
 
-    render(<PortfolioDashboardTable
+    render(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())}
       rows={[rowWith(schedule)]}
       onOpenProject={() => {}}
     />);
@@ -341,7 +420,7 @@ describe("PortfolioDashboardTable", () => {
       }],
     };
     const before = structuredClone(schedule);
-    render(<PortfolioDashboardTable rows={[rowWith(schedule)]} onOpenProject={() => {}} />);
+    render(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[rowWith(schedule)]} onOpenProject={() => {}} />);
     const cell = leaf("schedule:c2-stage:c-g-o");
     expect(cell.querySelector('[data-milestone-id="dated-applicable"]')).toHaveTextContent("P: 2027/01/03");
     expect(cell.querySelector('[data-milestone-id="dated-applicable"]')).toHaveTextContent("A: 2027/01/04");
@@ -352,7 +431,7 @@ describe("PortfolioDashboardTable", () => {
   // Mutation: wiring any of the eleven Project columns to a different field or a fixture value.
   it("maps each Project cell from its supplied canonical projection and leaves the row unchanged", () => {
     const before = structuredClone(baseRow);
-    render(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
+    render(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[baseRow]} onOpenProject={() => {}} />);
     const expectedCells = [
       ["projectStatus", "Canonical status"], ["year", "2029"], ["name", "Canonical STN name"],
       ["qciProjectName", "Canonical QCI model"], ["customer", "Canonical customer"], ["category", "Canonical category"],
@@ -367,7 +446,7 @@ describe("PortfolioDashboardTable", () => {
   it("formats a Project null sentinel without mutating the supplied row", () => {
     const row = { ...baseRow, project: { ...baseRow.project, gpu: "-" } };
     const before = structuredClone(row);
-    render(<PortfolioDashboardTable rows={[row]} onOpenProject={() => {}} />);
+    render(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[row]} onOpenProject={() => {}} />);
     expect(leaf("gpu")).toHaveTextContent(/^—$/);
     expect(row.project.gpu).toBe("-");
     expect(row).toEqual(before);
@@ -375,7 +454,7 @@ describe("PortfolioDashboardTable", () => {
 
   // Mutation: hiding the saved QCI PM behind the old Team placeholder or fabricating another Team owner.
   it("renders saved QCI PM and keeps the other six Team columns pending", () => {
-    render(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
+    render(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[baseRow]} onOpenProject={() => {}} />);
     const teamCells = [...renderedRow().querySelectorAll('td[data-domain="team"]')];
     expect(teamCells).toHaveLength(7);
     expect(leaf("team:qciPm")).toHaveTextContent("Canonical QCI PM");
@@ -390,7 +469,7 @@ describe("PortfolioDashboardTable", () => {
   });
 
   it("renders an em dash when no saved QCI PM is available", () => {
-    render(<PortfolioDashboardTable rows={[{ ...baseRow, qciPm: null }]} onOpenProject={() => {}} />);
+    render(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[{ ...baseRow, qciPm: null }]} onOpenProject={() => {}} />);
     expect(leaf("team:qciPm")).toHaveTextContent(/^—$/);
     expect(leaf("team:qciPm")).not.toHaveAttribute("title", "Migration pending");
   });
@@ -399,7 +478,7 @@ describe("PortfolioDashboardTable", () => {
   it("opens the exact ProjectId once for pointer and keyboard-operable button activation", () => {
     const onOpenProject = vi.fn();
     const row = rowWith({ kind: "noPublishedSchedule" });
-    render(<PortfolioDashboardTable rows={[row]} onOpenProject={onOpenProject} />);
+    render(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[row]} onOpenProject={onOpenProject} />);
     fireEvent.click(leaf("year"));
     expect(onOpenProject).toHaveBeenLastCalledWith(toProjectId("exact-id-not-the-name"));
     expect(onOpenProject).toHaveBeenCalledTimes(1);
@@ -415,7 +494,7 @@ describe("PortfolioDashboardTable", () => {
 
   // Mutation: using initial widths for sticky offsets or leaking resize listeners after mouseup/unmount.
   it("resizes with live sticky offsets, minimums, keyboard support and cleanup", () => {
-    const { unmount } = render(<PortfolioDashboardTable rows={[baseRow]} onOpenProject={() => {}} />);
+    const { unmount } = render(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[baseRow]} onOpenProject={() => {}} />);
     expect(leaf("projectStatus").style.getPropertyValue("--portfolio-sticky-left")).toBe("0px");
     expect(leaf("year").style.getPropertyValue("--portfolio-sticky-left")).toBe("100px");
     expect(leaf("name").style.getPropertyValue("--portfolio-sticky-left")).toBe("176px");
@@ -441,7 +520,7 @@ describe("PortfolioDashboardTable", () => {
 
   // Mutation: removing the table schema or showing a misleading blank when filters return no rows.
   it("renders an explicit empty result across the fixed 48 columns", () => {
-    render(<PortfolioDashboardTable rows={[]} onOpenProject={() => {}} />);
+    render(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[]} onOpenProject={() => {}} />);
     expect(screen.getByText("No projects match the current search and filters")).toHaveAttribute("colspan", "48");
   });
 });

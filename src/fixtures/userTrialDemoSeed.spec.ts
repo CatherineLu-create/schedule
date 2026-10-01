@@ -1,3 +1,6 @@
+import { initialGovernanceContext } from "../test/governanceTestUtils";
+import { initialScheduleCommandContext } from "../test/governanceTestUtils";
+import { createInitialSelfServiceReferenceCatalogs } from "../application/reference-data/selfServiceCatalogs";
 import { describe, expect, it } from "vitest";
 
 import { startScheduleWorkingDraft } from "../application/commands/canonicalScheduleCommands";
@@ -53,7 +56,7 @@ describe("createUserTrialDemoSeed", () => {
     expect(seed.projects.every(({ identityAliases }) => identityAliases.length === 0)).toBe(true);
     expect(seed.projects.every(({ team }) => team === null)).toBe(true);
 
-    const rows = selectPortfolioDashboardRows(seed);
+    const rows = selectPortfolioDashboardRows(seed, createInitialSelfServiceReferenceCatalogs(), initialGovernanceContext());
     expect(rows.map(({ project }) => project.customer)).toEqual([
       "DEMO",
       "DEMO",
@@ -139,7 +142,7 @@ describe("createUserTrialDemoSeed", () => {
       expect(validateCanonicalProjectSchedule(schedule, milestoneDefinitions)).toEqual([]);
     }
 
-    const attention = selectDashboardAttention(seed, REFERENCE_DATE);
+    const attention = selectDashboardAttention(seed, REFERENCE_DATE, initialGovernanceContext());
     expect(attention.kind).toBe("available");
     if (attention.kind !== "available") {
       throw new Error("Expected available demo attention");
@@ -164,6 +167,7 @@ describe("createUserTrialDemoSeed", () => {
   it("remains searchable through the normal Portfolio filter path", () => {
     const rows = selectPortfolioDashboardRows(
       createUserTrialDemoSeed(REFERENCE_DATE),
+      createInitialSelfServiceReferenceCatalogs(), initialGovernanceContext(),
     );
 
     expect(filterPortfolioDashboardRows(
@@ -184,7 +188,7 @@ describe("createUserTrialDemoSeed", () => {
     for (const [scheduleIndex, schedule] of seed.schedules.entries()) {
       const originalPublished = schedule.publishedVersions;
       const originalMilestones = originalPublished[0]!.milestones;
-      const result = startScheduleWorkingDraft(schedule, { workingDraftId: toCanonicalScheduleWorkingDraftId("demo-draft") }, { milestoneDefinitions });
+      const result = startScheduleWorkingDraft(schedule, { workingDraftId: toCanonicalScheduleWorkingDraftId("demo-draft") }, initialScheduleCommandContext());
 
       expect(result.ok).toBe(true);
       if (!result.ok) throw new Error("Expected Demo Draft creation");

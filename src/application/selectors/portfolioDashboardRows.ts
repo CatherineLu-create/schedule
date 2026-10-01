@@ -1,7 +1,4 @@
-import {
-  mdrrMilestoneDefinition,
-  portfolioMilestoneDefinitions,
-} from "../../config/v2/referenceData";
+import type { EffectiveMilestoneGovernanceContext } from "../governance/effectiveMilestoneGovernanceContext";
 import type { CatalogItem } from "../../domain/reference-data/catalog";
 import type { MilestoneApplicability } from "../../domain/schedule/schedule";
 import { formatDateOnly, type DateOnly } from "../../domain/shared/dateOnly";
@@ -46,10 +43,6 @@ export interface PortfolioDashboardRow {
 }
 
 const EMPTY_DISPLAY = "-";
-const portfolioProjectedMilestoneDefinitions = [
-  ...portfolioMilestoneDefinitions,
-  mdrrMilestoneDefinition,
-] as const;
 
 function displayText(value: string | null): string {
   return value === null || value.trim().length === 0 ? EMPTY_DISPLAY : value;
@@ -82,7 +75,8 @@ function resolveQciPm(
 
 export function selectPortfolioDashboardRows(
   state: PrototypeState,
-  selfServiceCatalogs?: SelfServiceReferenceCatalogs,
+  selfServiceCatalogs: SelfServiceReferenceCatalogs,
+  context: EffectiveMilestoneGovernanceContext,
 ): readonly PortfolioDashboardRow[] {
   return selectDashboardProjectRows(state, selfServiceCatalogs).map((projectRow) => {
     const project = getProjectById(state, projectRow.projectId);
@@ -90,7 +84,7 @@ export function selectPortfolioDashboardRows(
       throw new Error(`Dashboard row Project is absent: ${projectRow.projectId}`);
     }
 
-    const currentPublished = selectCurrentPublishedSchedule(state, projectRow.projectId);
+    const currentPublished = selectCurrentPublishedSchedule(state, projectRow.projectId, context);
     const schedule: PortfolioCurrentPublishedRead = currentPublished.kind === "unavailable"
       ? { kind: "unavailable", issues: currentPublished.issues }
       : currentPublished.kind === "noPublishedSchedule"
@@ -99,7 +93,7 @@ export function selectPortfolioDashboardRows(
             kind: "published",
             versionLabel: currentPublished.versionLabel,
             milestoneCount: currentPublished.version.milestones.length,
-            cells: portfolioProjectedMilestoneDefinitions.map((definition) => ({
+            cells: context.portfolioColumnDefinitions.map((definition) => ({
               milestoneDefinitionId: definition.id,
               occurrences: currentPublished.version.milestones
                 .filter((milestone) => milestone.milestoneDefinitionId === definition.id)

@@ -1,6 +1,6 @@
+import { initialScheduleCommandContext } from "../../test/governanceTestUtils";
 import { expect, it } from "vitest";
 
-import { milestoneDefinitions } from "../../config/v2/referenceData";
 import {
   createEmptyCanonicalProjectSchedule,
   type CanonicalProjectSchedule,
@@ -34,7 +34,7 @@ import {
   type CanonicalScheduleCommandContext,
 } from "./canonicalScheduleCommands";
 
-const context: CanonicalScheduleCommandContext = { milestoneDefinitions };
+const context: CanonicalScheduleCommandContext = initialScheduleCommandContext();
 const draftIdentity = {
   workingDraftId: toCanonicalScheduleWorkingDraftId("integration-draft"),
   reviewSessionIds: [],
@@ -124,7 +124,7 @@ it("applies Start, Update, Add, and Remove through exact replacement", () => {
     afterUpdate.schedules[0]!,
     {
       milestoneId: toMilestoneId("integration-added"),
-      milestoneDefinitionId: toMilestoneDefinitionId("milestone-design-kickoff"),
+      milestoneDefinitionId: toMilestoneDefinitionId("milestone-design-id-fix"),
     },
     context,
   );
@@ -209,7 +209,7 @@ it("preserves Draft review identity and import candidates through ordinary occur
     updated.schedule,
     {
       milestoneId: addedMilestoneId,
-      milestoneDefinitionId: toMilestoneDefinitionId("milestone-design-kickoff"),
+      milestoneDefinitionId: toMilestoneDefinitionId("milestone-design-id-fix"),
     },
     context,
   );

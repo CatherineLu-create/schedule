@@ -1,3 +1,4 @@
+import { initialGovernanceContext } from "../../test/governanceTestUtils";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -30,7 +31,7 @@ function fixtureState(
 }
 
 function selectedRow(state: PrototypeState, projectId: string) {
-  const row = selectPortfolioDashboardRows(state).find(
+  const row = selectPortfolioDashboardRows(state, createInitialSelfServiceReferenceCatalogs(), initialGovernanceContext()).find(
     (candidate) => candidate.projectId === projectId,
   );
   if (row === undefined) throw new Error(`Missing projected row ${projectId}`);
@@ -82,7 +83,7 @@ describe("canonical Portfolio Dashboard read projection", () => {
     expect(selectPortfolioDashboardRows(
       fixtureState([runtimeProject], [canonicalScheduleFixtures[1]!]),
       runtimeCatalogs,
-    )[0]?.project.productLine).toBe("Portfolio Runtime Line");
+     initialGovernanceContext())[0]?.project.productLine).toBe("Portfolio Runtime Line");
   });
 
   it("keeps Current Published Portfolio cells unchanged beside a malformed Draft", () => {
@@ -120,7 +121,7 @@ describe("canonical Portfolio Dashboard read projection", () => {
   });
 
   it("projects every Published result through the 29 active Portfolio definitions and MDRR", () => {
-    const rows = selectPortfolioDashboardRows(fixtureState());
+    const rows = selectPortfolioDashboardRows(fixtureState(), createInitialSelfServiceReferenceCatalogs(), initialGovernanceContext());
     const expectedIds = [
       ...portfolioMilestoneDefinitions.map((definition) => definition.id),
       mdrrMilestoneDefinition.id,
@@ -140,7 +141,7 @@ describe("canonical Portfolio Dashboard read projection", () => {
   });
 
   it("keeps all five canonical Projects in fixture ProjectId order and resolves their Master category and PCB number", () => {
-    const rows = selectPortfolioDashboardRows(fixtureState());
+    const rows = selectPortfolioDashboardRows(fixtureState(), createInitialSelfServiceReferenceCatalogs(), initialGovernanceContext());
 
     expect(rows).toHaveLength(5);
     expect(rows.map((row) => row.projectId)).toEqual(canonicalProjectFixtures.map((project) => project.id));
@@ -209,7 +210,7 @@ describe("canonical Portfolio Dashboard read projection", () => {
       { ...devProject002, id: toProjectId("no-team"), team: null },
     ];
 
-    expect(selectPortfolioDashboardRows(fixtureState(projects, [])).map(({ qciPm }) => qciPm)).toEqual([
+    expect(selectPortfolioDashboardRows(fixtureState(projects, []), createInitialSelfServiceReferenceCatalogs(), initialGovernanceContext()).map(({ qciPm }) => qciPm)).toEqual([
       { value: "shared.pm@example.test", label: "Shared PM" },
       { value: "shared.pm@example.test", label: "Shared PM Renamed" },
       { value: "other.pm@example.test", label: "Shared PM" },
@@ -276,7 +277,7 @@ describe("canonical Portfolio Dashboard read projection", () => {
       }],
     };
     const state = fixtureState([devProject002, devProject003], [invalid, zeroMilestone]);
-    const rows = selectPortfolioDashboardRows(state);
+    const rows = selectPortfolioDashboardRows(state, createInitialSelfServiceReferenceCatalogs(), initialGovernanceContext());
     expect(rows).toHaveLength(2);
     expect(selectedRow(state, devProject002.id).schedule.kind).toBe("unavailable");
     expect(selectedRow(state, devProject003.id).schedule.kind).toBe("published");
@@ -386,7 +387,7 @@ describe("canonical Portfolio Dashboard read projection", () => {
     const state = fixtureState();
     const before = structuredClone(state);
 
-    selectPortfolioDashboardRows(state);
+    selectPortfolioDashboardRows(state, createInitialSelfServiceReferenceCatalogs(), initialGovernanceContext());
 
     expect(state).toEqual(before);
   });

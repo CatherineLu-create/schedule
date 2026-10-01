@@ -1,5 +1,6 @@
 import { toMilestoneDefinitionId, type MilestoneDefinitionId } from "./domain/shared/ids";
-import type { PortfolioDashboardRow } from "./application/selectors/portfolioDashboardRows";
+import type { EffectiveMilestoneGovernanceContext } from "./application/governance/effectiveMilestoneGovernanceContext";
+import { stageGroupCatalog } from "./config/v2/referenceData";
 
 export type PortfolioColumnDomain = "project" | "schedule" | "team";
 export interface PortfolioScheduleColumnMapping {
@@ -83,7 +84,7 @@ export const portfolioScheduleColumnMappings = [
     },
   ),
 ] as const satisfies readonly PortfolioScheduleColumnMapping[];
-export type PortfolioScheduleColumnKey = (typeof portfolioScheduleColumnMappings)[number]["key"];
+export type PortfolioScheduleColumnKey = `schedule:${string}`;
 export type PortfolioProjectInfoColumnKey = "projectStatus" | "year" | "name" | "qciProjectName" | "customer" | "category" | "productLine" | "size" | "cpu" | "gpu" | "pcbNumber";
 export type PortfolioTeamColumnKey = "team:qciPm" | "team:qciPjm" | "team:acerPm" | "team:meOwner" | "team:eeOwner" | "team:thermalOwner" | "team:biosOwner";
 export type PortfolioColumnKey = PortfolioProjectInfoColumnKey | PortfolioScheduleColumnKey | PortfolioTeamColumnKey;
@@ -109,12 +110,18 @@ export const portfolioProjectInfoColumns: readonly PortfolioColumn[] = [
 }));
 
 function scheduleColumnGroups(mappings: readonly PortfolioScheduleColumnMapping[]): readonly PortfolioColumnGroup[] {
-  return [...new Set(mappings.map((entry) => entry.groupKey))].map((groupKey) => {
-    const groupedMappings = mappings.filter((entry) => entry.groupKey === groupKey);
-    return { key: groupKey, label: groupedMappings[0].groupLabel, columns: groupedMappings.map((entry) => ({ key: entry.key as PortfolioScheduleColumnKey, label: entry.label, defaultWidth: 118, minWidth: 105, domain: "schedule", subgroup: groupKey })) };
-  });
+  const groups: { key: string; label: string; columns: PortfolioColumn[] }[] = [];
+  for (const entry of mappings) {
+    const previous = groups.at(-1);
+    const group = previous?.columns[0]?.subgroup === entry.groupKey ? previous : {
+      key: groups.some(candidate => candidate.key === entry.groupKey) ? `${entry.groupKey}:${groups.length}` : entry.groupKey,
+      label: entry.groupLabel, columns: [],
+    };
+    if (group !== previous) groups.push(group);
+    group.columns.push({ key: entry.key, label: entry.label, defaultWidth: 118, minWidth: 105, domain: "schedule", subgroup: entry.groupKey });
+  }
+  return groups;
 }
-export const portfolioScheduleColumnGroups: readonly PortfolioColumnGroup[] = scheduleColumnGroups(portfolioScheduleColumnMappings);
 
 const teamGroups = [
   { key: "project-roles", label: "Project Roles", columns: [["team:qciPm", "QCI PM"], ["team:qciPjm", "QCI PjM"], ["team:acerPm", "Acer PM"]] },
@@ -123,20 +130,8 @@ const teamGroups = [
 export const portfolioTeamColumnGroups: readonly PortfolioColumnGroup[] = teamGroups.map((group) => ({
   key: group.key, label: group.label, columns: group.columns.map(([key, label]) => ({ key, label, defaultWidth: 135, minWidth: 120, domain: "team", subgroup: group.key })),
 }));
-export const portfolioColumns: readonly PortfolioColumn[] = [...portfolioProjectInfoColumns, ...portfolioScheduleColumnGroups.flatMap((group) => group.columns), ...portfolioTeamColumnGroups.flatMap((group) => group.columns)];
-export const portfolioDomainGroups: readonly { key: PortfolioColumnDomain; label: string; colSpan: number }[] = [
-  { key: "project", label: "PROJECT INFORMATION", colSpan: portfolioProjectInfoColumns.length },
-  { key: "schedule", label: "SCHEDULE", colSpan: portfolioScheduleColumnMappings.length },
-  { key: "team", label: "TEAM MEMBER", colSpan: portfolioTeamColumnGroups.reduce((count, group) => count + group.columns.length, 0) },
-];
-export const portfolioSubgroups: readonly { key: string; label: string; domain: PortfolioColumnDomain; colSpan: number }[] = [
-  { key: "core-fields", label: "Core fields", domain: "project", colSpan: portfolioProjectInfoColumns.length },
-  ...portfolioScheduleColumnGroups.map((group) => ({ key: group.key, label: group.label, domain: "schedule" as const, colSpan: group.columns.length })),
-  ...portfolioTeamColumnGroups.map((group) => ({ key: group.key, label: group.label, domain: "team" as const, colSpan: group.columns.length })),
-];
 export const portfolioStickyColumnKeys: readonly PortfolioProjectInfoColumnKey[] = ["projectStatus", "year", "name", "qciProjectName"];
-export type PortfolioColumnWidths = Record<PortfolioColumnKey, number>;
-export const defaultPortfolioColumnWidths = Object.fromEntries(portfolioColumns.map((column) => [column.key, column.defaultWidth])) as PortfolioColumnWidths;
+export type PortfolioColumnWidths = Partial<Record<PortfolioColumnKey, number>>;
 
 export interface PortfolioVisibleSchema {
   readonly columns: readonly PortfolioColumn[];
@@ -145,14 +140,39 @@ export interface PortfolioVisibleSchema {
   readonly subgroups: readonly { key: string; label: string; domain: PortfolioColumnDomain; colSpan: number }[];
 }
 
-export function getPortfolioVisibleSchema(
-  _rows: readonly PortfolioDashboardRow[],
+function newDefinitionColumnKey(definitionId: MilestoneDefinitionId): PortfolioScheduleColumnKey {
+  const rawKey: PortfolioScheduleColumnKey = `schedule:${definitionId}`;
+  // Reserve the escape namespace and every bundled key, even when its column is absent.
+  return rawKey.startsWith("schedule:definition:")
+    || portfolioScheduleColumnMappings.some(mapping => mapping.key === rawKey)
+    ? `schedule:definition:${definitionId}`
+    : rawKey;
+}
+
+export function createPortfolioVisibleSchema(
+  context: EffectiveMilestoneGovernanceContext,
 ): PortfolioVisibleSchema {
+  const scheduleMappings = context.portfolioColumnDefinitions.map((definition): PortfolioScheduleColumnMapping => {
+    const presentation = portfolioScheduleColumnMappings.find(entry => entry.milestoneDefinitionId === definition.id);
+    if (presentation) return { ...presentation, label: definition.name };
+    const stage = stageGroupCatalog.find(candidate => candidate.id === definition.stageGroupId)!;
+    return { key: newDefinitionColumnKey(definition.id), groupKey: stage.id, groupLabel: stage.displayName,
+      label: definition.name, milestoneDefinitionId: definition.id, portfolioVisible: true, valueMode: "planActual" };
+  });
+  const scheduleGroups = scheduleColumnGroups(scheduleMappings);
   return {
-    columns: portfolioColumns,
-    domainGroups: portfolioDomainGroups,
-    scheduleMappings: portfolioScheduleColumnMappings,
-    subgroups: portfolioSubgroups,
+    columns: [...portfolioProjectInfoColumns, ...scheduleGroups.flatMap(group => group.columns), ...portfolioTeamColumnGroups.flatMap(group => group.columns)],
+    domainGroups: [
+      { key: "project", label: "PROJECT INFORMATION", colSpan: portfolioProjectInfoColumns.length },
+      ...(scheduleMappings.length ? [{ key: "schedule" as const, label: "SCHEDULE", colSpan: scheduleMappings.length }] : []),
+      { key: "team", label: "TEAM MEMBER", colSpan: portfolioTeamColumnGroups.reduce((count, group) => count + group.columns.length, 0) },
+    ],
+    scheduleMappings,
+    subgroups: [
+      { key: "core-fields", label: "Core fields", domain: "project", colSpan: portfolioProjectInfoColumns.length },
+      ...scheduleGroups.map(group => ({ key: group.key, label: group.label, domain: "schedule" as const, colSpan: group.columns.length })),
+      ...portfolioTeamColumnGroups.map(group => ({ key: group.key, label: group.label, domain: "team" as const, colSpan: group.columns.length })),
+    ],
   };
 }
 export function resizePortfolioColumnWidth(currentWidth: number, deltaX: number, minWidth: number): number {

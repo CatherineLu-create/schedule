@@ -4,9 +4,7 @@ import type {
   DashboardAttentionRead,
 } from "./application/selectors/dashboardAttention";
 import type { PortfolioDashboardRow } from "./application/selectors/portfolioDashboardRows";
-import {
-  milestoneDefinitions,
-} from "./config/v2/referenceData";
+import type { PortfolioVisibleSchema } from "./portfolioDashboardColumns";
 import { formatDateOnly } from "./domain/shared/dateOnly";
 import type { MilestoneId, ProjectId } from "./domain/shared/ids";
 import {
@@ -19,6 +17,7 @@ import {
 import { PortfolioDashboardTable } from "./portfolioDashboardTable";
 
 export interface PortfolioDashboardViewProps {
+  readonly schema: PortfolioVisibleSchema;
   readonly attention: DashboardAttentionRead;
   readonly rows: readonly PortfolioDashboardRow[];
   readonly onCreateProject: () => void;
@@ -49,9 +48,6 @@ interface AttentionProjectPresentation {
   }[];
 }
 
-const milestoneDefinitionById = new Map(
-  milestoneDefinitions.map((definition) => [definition.id, definition]),
-);
 function attentionProjectPresentations(
   group: DashboardAttentionGroup,
   rows: readonly PortfolioDashboardRow[],
@@ -67,17 +63,9 @@ function attentionProjectPresentations(
     const milestones = group.matches
       .filter((match) => match.projectId === projectId)
       .map((match) => {
-        const definition = milestoneDefinitionById.get(
-          match.milestoneDefinitionId,
-        );
-        if (definition === undefined) {
-          throw new Error(
-            `Attention milestone definition is unavailable: ${match.milestoneDefinitionId}`,
-          );
-        }
         return {
           milestoneId: match.milestoneId,
-          definitionLabel: definition.name,
+          definitionLabel: match.milestoneName,
           planLabel: formatDateOnly(match.plan),
         };
       });
@@ -90,7 +78,7 @@ function attentionProjectPresentations(
   });
 }
 
-export function PortfolioDashboardView({ attention, rows, onCreateProject, onExport, onOpenProject }: PortfolioDashboardViewProps): React.ReactElement {
+export function PortfolioDashboardView({ attention, rows, schema, onCreateProject, onExport, onOpenProject }: PortfolioDashboardViewProps): React.ReactElement {
   const [searchTerm, setSearchTerm] = React.useState("");
   const [filters, setFilters] = React.useState(emptyPortfolioDashboardFilters);
   const id = React.useId();
@@ -186,7 +174,7 @@ export function PortfolioDashboardView({ attention, rows, onCreateProject, onExp
         </div>
         <p className="text-xs text-slate-500">Scroll horizontally to view Schedule and Team Member</p>
       </div>
-      <PortfolioDashboardTable rows={filteredRows} schemaRows={rows} onOpenProject={onOpenProject} />
+      <PortfolioDashboardTable rows={filteredRows} schema={schema} onOpenProject={onOpenProject} />
     </section>
   </section>;
 }

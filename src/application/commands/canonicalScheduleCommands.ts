@@ -14,7 +14,10 @@ import {
   type MilestoneApplicability,
   type ScheduleVersionNumber,
 } from "../../domain/schedule/schedule";
-import type { MilestoneDefinition } from "../../domain/schedule/milestoneCatalog";
+import type { ProjectLocalMilestoneDefinition } from "../../domain/schedule/scheduleReview";
+import type { RetiredDraftOccurrenceGrant } from "../../domain/governance/milestoneGovernance";
+import type { EffectiveMilestoneGovernanceContext } from "../governance/effectiveMilestoneGovernanceContext";
+import { resolveScheduleDefinitions } from "../governance/scheduleDefinitionResolution";
 import type { DateOnly } from "../../domain/shared/dateOnly";
 import type {
   CanonicalScheduleWorkingDraftId,
@@ -24,7 +27,35 @@ import type {
 import type { ValidationIssue } from "../../domain/validation/validationIssue";
 
 export interface CanonicalScheduleCommandContext {
-  readonly milestoneDefinitions: readonly MilestoneDefinition[];
+  readonly governance: EffectiveMilestoneGovernanceContext;
+  readonly localDefinitions: readonly ProjectLocalMilestoneDefinition[];
+  readonly retiredDraftOccurrenceGrants: readonly RetiredDraftOccurrenceGrant[];
+}
+
+function definitionsFor(schedule: CanonicalProjectSchedule, context: CanonicalScheduleCommandContext) {
+  // A caller cannot supply another Project's registry to authorize a foreign local ID.
+  return resolveScheduleDefinitions(context.governance, schedule.localDefinitions.filter(definition =>
+    context.localDefinitions.some(candidate => candidate.id === definition.id
+      && candidate.name === definition.name && candidate.stageGroupId === definition.stageGroupId
+      && candidate.milestoneTypeId === definition.milestoneTypeId)));
+}
+
+function membershipIssue(milestoneId: MilestoneId, message: string): ValidationIssue {
+  return { code: "schedule.draft.definition-not-addable-or-retained", domain: "schedule", source: "data", severity: "blocking", message, target: { section: "schedule.workingDraft", entityId: milestoneId, field: "milestoneDefinitionId" } };
+}
+
+function retainedDraftIssues(schedule: CanonicalProjectSchedule, context: CanonicalScheduleCommandContext): readonly ValidationIssue[] {
+  const draft = schedule.workingDraft;
+  if (draft === null) return [];
+  const addable = new Set(context.governance.addablePublicDefinitions.map(definition => definition.id));
+  const publicIds = new Set(context.governance.definitionsForHistoricalResolution.map(definition => definition.id));
+  const current = getCurrentPublishedVersion(schedule);
+  return draft.milestones.filter(milestone => publicIds.has(milestone.milestoneDefinitionId) && !addable.has(milestone.milestoneDefinitionId)
+    && !current?.milestones.some(retained => retained.milestoneId === milestone.milestoneId && retained.milestoneDefinitionId === milestone.milestoneDefinitionId)
+    && !context.retiredDraftOccurrenceGrants.some(grant => grant.projectId === schedule.projectId
+      && grant.workingDraftId === draft.workingDraftId && grant.milestoneId === milestone.milestoneId
+      && grant.milestoneDefinitionId === milestone.milestoneDefinitionId))
+    .map(milestone => membershipIssue(milestone.milestoneId, "Nonaddable public definitions require exact Current Published lineage or a same-Draft retirement grant."));
 }
 
 export type CanonicalScheduleLifecycleFailureReason =
@@ -150,7 +181,7 @@ export function startScheduleWorkingDraft(
   }
   const issues = validateCanonicalProjectSchedule(
     schedule,
-    context.milestoneDefinitions,
+    definitionsFor(schedule, context),
   );
   if (issues.length > 0) {
     return { ok: false, reason: "validation-failed", issues };
@@ -181,10 +212,10 @@ function resolveEditableDraft(
   if (schedule.workingDraft === null) {
     return { ok: false, reason: "no-working-draft", issues: [] };
   }
-  const issues = validateScheduleWorkingDraft(
+  const issues = [...validateScheduleWorkingDraft(
     schedule.workingDraft,
-    context.milestoneDefinitions,
-  );
+    definitionsFor(schedule, context),
+  ), ...retainedDraftIssues(schedule, context)];
   return issues.length > 0
     ? { ok: false, reason: "validation-failed", issues }
     : { ok: true, draft: schedule.workingDraft };
@@ -238,7 +269,11 @@ export function addScheduleWorkingDraftMilestone(
     ...current.draft,
     milestones: [...current.draft.milestones, milestone],
   };
-  const issues = validateScheduleWorkingDraft(draft, context.milestoneDefinitions);
+  const issues = validateScheduleWorkingDraft(draft, definitionsFor(schedule, context));
+  if (!context.governance.addablePublicDefinitions.some(definition => definition.id === input.milestoneDefinitionId)
+    || current.draft.milestones.some(milestone => milestone.milestoneDefinitionId === input.milestoneDefinitionId)) {
+    return { ok: false, reason: "validation-failed", issues: [...issues, membershipIssue(input.milestoneId, "Normal Add requires a current addable public definition not already present in the Draft.")] };
+  }
   if (issues.length > 0) {
     return { ok: false, reason: "validation-failed", issues };
   }
@@ -316,8 +351,9 @@ export function publishScheduleWorkingDraft(
   }
   const draft = schedule.workingDraft;
   const issues = [
-    ...validateCanonicalProjectSchedule(schedule, context.milestoneDefinitions),
-    ...validateScheduleWorkingDraft(draft, context.milestoneDefinitions),
+    ...validateCanonicalProjectSchedule(schedule, definitionsFor(schedule, context)),
+    ...validateScheduleWorkingDraft(draft, definitionsFor(schedule, context)),
+    ...retainedDraftIssues(schedule, context),
   ];
   if (issues.length > 0) {
     return { ok: false, reason: "validation-failed", issues };

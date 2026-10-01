@@ -1,4 +1,11 @@
+import { initialScheduleCommandContext } from "../../test/governanceTestUtils";
 import { describe, expect, it } from "vitest";
+import { initialGovernanceContext } from "../../test/governanceTestUtils";
+import type { ProjectLocalMilestoneDefinition } from "../../domain/schedule/scheduleReview";
+import { toMilestoneTypeId, toStageGroupId } from "../../domain/shared/ids";
+import { selectPortfolioDashboardRows } from "./portfolioDashboardRows";
+import { createInitialSelfServiceReferenceCatalogs } from "../reference-data/selfServiceCatalogs";
+import { devProject001 } from "../../fixtures/v2/canonicalProjectFixtures";
 
 import {
   dashboardAttentionMilestoneTypeIds,
@@ -128,6 +135,27 @@ function expectAvailable(
 }
 
 describe("selectDashboardAttention", () => {
+  it.each(["type-g-o", "type-smt", "type-close", "type-mdrr"])("resolves Published same-Project local %s by exact identity", (type) => {
+    const owner = project("local-owner");
+    const local: ProjectLocalMilestoneDefinition = { id: toMilestoneDefinitionId("local-exact"), name: "Local concrete name", stageGroupId: toStageGroupId("stage-a1"), milestoneTypeId: toMilestoneTypeId(type), displayOrder: 1, source: "manual", confirmation: "confirmed", evidenceIds: [] };
+    const item = { ...schedule(owner.id, [milestone("local-row", local.id, "2026-09-23")]), localDefinitions: [local] };
+    const read = selectDashboardAttention(state([owner], [item]), REFERENCE_DATE, initialGovernanceContext());
+    expect(read).toMatchObject({ kind: "available", due: { projectCount: 1, matches: [{ milestoneId: "local-row", milestoneDefinitionId: "local-exact", milestoneName: "Local concrete name" }] } });
+    expect(selectDashboardAttention(state([owner], [{ ...item, publishedVersions: [], workingDraft: { ...draftIdentity, milestones: item.publishedVersions[0].milestones } }]), REFERENCE_DATE, initialGovernanceContext())).toMatchObject({ kind: "available", due: { projectCount: 0 } });
+    expect(selectDashboardAttention(state([owner], [{ ...item, localDefinitions: [{ ...local, milestoneTypeId: toMilestoneTypeId("type-test") }] }]), REFERENCE_DATE, initialGovernanceContext())).toMatchObject({ kind: "available", due: { projectCount: 0 } });
+    const portfolio = selectPortfolioDashboardRows(state([{ ...devProject001, id: owner.id }], [{ ...item, localDefinitions: [{ ...local, milestoneTypeId: toMilestoneTypeId("type-test") }] }]), createInitialSelfServiceReferenceCatalogs(), initialGovernanceContext());
+    expect(portfolio[0].schedule.kind).toBe("published");
+    if (portfolio[0].schedule.kind !== "published") throw new Error("Expected local Published projection");
+    expect(portfolio[0].schedule.cells).toHaveLength(30);
+    expect(portfolio[0].schedule.cells.some(cell => cell.milestoneDefinitionId === local.id)).toBe(false);
+    for (const invalid of [
+      { ...local, id: toMilestoneDefinitionId("same-name-wrong-id") },
+      { ...local, stageGroupId: toStageGroupId("unknown-stage") },
+      { ...local, milestoneTypeId: toMilestoneTypeId("unknown-type") },
+    ]) expect(selectDashboardAttention(state([owner], [{ ...item, localDefinitions: [invalid] }]), REFERENCE_DATE, initialGovernanceContext()).kind).toBe("unavailable");
+    const other = project("other-owner");
+    expect(selectDashboardAttention(state([owner, other], [{ ...item, localDefinitions: [] }, { ...schedule(other.id), localDefinitions: [local] }]), REFERENCE_DATE, initialGovernanceContext()).kind).toBe("unavailable");
+  });
   it("classifies both inclusive Due boundaries, excludes +15, and classifies past Plan as Overdue", () => {
     const owner = project("attention-boundaries");
     const read = expectAvailable(selectDashboardAttention(state([owner], [
@@ -137,7 +165,7 @@ describe("selectDashboardAttention", () => {
         milestone("outside", "milestone-a-a2-a-close", "2026-10-08"),
         milestone("overdue", "milestone-mdrr", "2026-09-22"),
       ]),
-    ]), REFERENCE_DATE));
+    ]), REFERENCE_DATE, initialGovernanceContext()));
 
     expect(read.referenceDate).toBe("2026-09-23");
     expect(read.due.matches.map(({ milestoneId }) => milestoneId)).toEqual([
@@ -164,7 +192,7 @@ describe("selectDashboardAttention", () => {
         milestone("system-build", "milestone-c1-c-main-build", "2026-09-25"),
         milestone("ramp-main-build", "milestone-ramp-main-build", "2026-09-26"),
       ]),
-    ]), REFERENCE_DATE));
+    ]), REFERENCE_DATE, initialGovernanceContext()));
 
     expect(read.due).toMatchObject({ projectIds: [], projectCount: 0, matches: [] });
     expect(read.overdue).toMatchObject({ projectIds: [], projectCount: 0, matches: [] });
@@ -187,7 +215,7 @@ describe("selectDashboardAttention", () => {
         milestone("ramp-smt", "milestone-ramp-smt", "2026-09-26"),
         milestone("mdrr", "milestone-mdrr", "2026-09-27"),
       ]),
-    ]), REFERENCE_DATE));
+    ]), REFERENCE_DATE, initialGovernanceContext()));
 
     expect(read.due.matches.map(({ milestoneId }) => milestoneId)).toEqual([
       "go",
@@ -214,7 +242,7 @@ describe("selectDashboardAttention", () => {
           milestone("second-go", "milestone-a1-a-g-o", "2026-09-24"),
         ]),
       ],
-    ), REFERENCE_DATE));
+    ), REFERENCE_DATE, initialGovernanceContext()));
 
     expect(read.due.projectIds).toEqual([second.id, first.id]);
     expect(read.due.projectCount).toBe(2);
@@ -232,7 +260,7 @@ describe("selectDashboardAttention", () => {
         milestone("due", "milestone-mdrr", "2026-10-03"),
         milestone("overdue", "milestone-a1-a-smt", "2026-09-16"),
       ]),
-    ]), REFERENCE_DATE));
+    ]), REFERENCE_DATE, initialGovernanceContext()));
 
     expect(read.due.projectIds).toEqual([owner.id]);
     expect(read.due.projectCount).toBe(1);
@@ -255,7 +283,7 @@ describe("selectDashboardAttention", () => {
     const read = expectAvailable(selectDashboardAttention(
       state([owner], [ownerSchedule]),
       REFERENCE_DATE,
-    ));
+     initialGovernanceContext()));
     expect(read.due.matches.map(({ milestoneId }) => milestoneId)).toEqual(["current"]);
     expect(read.overdue.matches).toEqual([]);
   });
@@ -277,7 +305,7 @@ describe("selectDashboardAttention", () => {
           { ...draftIdentity, milestones: [draftMilestone("published-due", "milestone-a1-a-smt", "2026-10-08")] },
         ),
       ],
-    ), REFERENCE_DATE));
+    ), REFERENCE_DATE, initialGovernanceContext()));
 
     expect(read.due.projectIds).toEqual([draftWouldHide.id]);
     expect(read.due.matches.map(({ milestoneId }) => milestoneId)).toEqual([
@@ -295,12 +323,12 @@ describe("selectDashboardAttention", () => {
     expect(expectAvailable(selectDashboardAttention(
       state([owner], [before]),
       REFERENCE_DATE,
-    )).due.projectCount).toBe(0);
+     initialGovernanceContext())).due.projectCount).toBe(0);
 
     const published = publishScheduleWorkingDraft(
       before,
       { publishedAt: "2026-09-23T00:00:00Z" },
-      { milestoneDefinitions },
+      initialScheduleCommandContext(),
     );
     expect(published.ok).toBe(true);
     if (!published.ok) throw new Error("Expected Publish to succeed");
@@ -308,7 +336,7 @@ describe("selectDashboardAttention", () => {
     const afterRead = expectAvailable(selectDashboardAttention(
       state([owner], [published.schedule]),
       REFERENCE_DATE,
-    ));
+     initialGovernanceContext()));
     expect(afterRead.due.projectIds).toEqual([owner.id]);
     expect(afterRead.due.matches.map(({ plan }) => plan)).toEqual(["2026-09-28"]);
   });
@@ -322,7 +350,7 @@ describe("selectDashboardAttention", () => {
         createEmptyCanonicalProjectSchedule(noPublished.id),
         schedule(emptyPublished.id),
       ],
-    ), REFERENCE_DATE));
+    ), REFERENCE_DATE, initialGovernanceContext()));
 
     expect(read.due).toEqual({ projectIds: [], projectCount: 0, matches: [] });
     expect(read.overdue).toEqual({ projectIds: [], projectCount: 0, matches: [] });
@@ -362,7 +390,7 @@ describe("selectDashboardAttention", () => {
         ]),
         ...badSchedules(bad),
       ],
-    ), REFERENCE_DATE);
+    ), REFERENCE_DATE, initialGovernanceContext());
 
     expect(read.kind).toBe("unavailable");
     if (read.kind !== "unavailable") {
@@ -387,7 +415,7 @@ describe("selectDashboardAttention", () => {
         schedule(duplicate.id),
         schedule(duplicate.id),
       ],
-    ), REFERENCE_DATE);
+    ), REFERENCE_DATE, initialGovernanceContext());
 
     expect(read.kind).toBe("unavailable");
     if (read.kind !== "unavailable") {

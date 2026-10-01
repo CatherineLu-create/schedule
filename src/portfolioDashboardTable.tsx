@@ -2,15 +2,14 @@ import * as React from "react";
 import type { PortfolioCurrentPublishedRead, PortfolioDashboardRow } from "./application/selectors/portfolioDashboardRows";
 import type { ProjectId } from "./domain/shared/ids";
 import {
-  defaultPortfolioColumnWidths, getPortfolioVisibleSchema,
   portfolioStickyColumnKeys, resizePortfolioColumnWidth,
   type PortfolioColumn, type PortfolioColumnKey, type PortfolioColumnWidths, type PortfolioProjectInfoColumnKey,
-  type PortfolioScheduleColumnMapping,
+  type PortfolioScheduleColumnMapping, type PortfolioVisibleSchema,
 } from "./portfolioDashboardColumns";
 
 export interface PortfolioDashboardTableProps {
   readonly rows: readonly PortfolioDashboardRow[];
-  readonly schemaRows?: readonly PortfolioDashboardRow[];
+  readonly schema: PortfolioVisibleSchema;
   readonly onOpenProject: (projectId: ProjectId) => void;
 }
 interface BottomScrollerLayout {
@@ -76,9 +75,9 @@ function ProjectStatus({ value }: { value: string }) {
   return <span className="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{value}</span>;
 }
 
-export function PortfolioDashboardTable({ rows, schemaRows = rows, onOpenProject }: PortfolioDashboardTableProps): React.ReactElement {
-  const schema = getPortfolioVisibleSchema(schemaRows);
-  const [widths, setWidths] = React.useState<PortfolioColumnWidths>(defaultPortfolioColumnWidths);
+export function PortfolioDashboardTable({ rows, schema, onOpenProject }: PortfolioDashboardTableProps): React.ReactElement {
+  const [resizedWidths, setWidths] = React.useState<PortfolioColumnWidths>({});
+  const widths = Object.fromEntries(schema.columns.map(column => [column.key, resizedWidths[column.key] ?? column.defaultWidth])) as Record<PortfolioColumnKey, number>;
   const [resizing, setResizing] = React.useState<{ key: PortfolioColumnKey; minWidth: number; startX: number; startWidth: number } | null>(null);
   const [bottomScrollerLayout, setBottomScrollerLayout] = React.useState<BottomScrollerLayout>(
     hiddenBottomScrollerLayout,
@@ -208,7 +207,7 @@ export function PortfolioDashboardTable({ rows, schemaRows = rows, onOpenProject
               if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
               event.preventDefault(); event.stopPropagation();
               const delta = event.key === "ArrowLeft" ? -10 : 10;
-              setWidths((current) => ({ ...current, [column.key]: resizePortfolioColumnWidth(current[column.key], delta, column.minWidth) }));
+              setWidths((current) => ({ ...current, [column.key]: resizePortfolioColumnWidth(current[column.key] ?? column.defaultWidth, delta, column.minWidth) }));
             }} />
         </th>)}</tr>
       </thead>
