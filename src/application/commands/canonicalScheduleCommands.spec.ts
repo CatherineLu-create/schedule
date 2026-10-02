@@ -244,11 +244,11 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
     const before = structuredClone({ state, item });
     const derived = releaseBackedCommandContext(state);
     expect(derived.retiredDraftOccurrenceGrants).toEqual([]);
-    for (const result of [
-      updateScheduleWorkingDraftMilestone(item, { milestoneId: fixture.grant.milestoneId, field: "plan", value: dateOnly("2026-10-02") }, derived),
-      publishScheduleWorkingDraft(item, { publishedAt: "2026-10-01T03:00:00Z" }, derived),
-    ]) {
-      expect(result).toMatchObject({ ok: false, reason: "validation-failed", issues: [expect.objectContaining({ code: "schedule.draft.definition-not-addable-or-retained" })] });
+    for (const [result, code] of [
+      [updateScheduleWorkingDraftMilestone(item, { milestoneId: fixture.grant.milestoneId, field: "plan", value: dateOnly("2026-10-02") }, derived), "schedule.draft.definition-not-addable-or-retained"],
+      [publishScheduleWorkingDraft(item, { publishedAt: "2026-10-01T03:00:00Z" }, derived), "schedule.import.retired-definition-not-retained"],
+    ] as const) {
+      expect(result).toMatchObject({ ok: false, reason: "validation-failed", issues: [expect.objectContaining({ code })] });
       expect(result).not.toHaveProperty("schedule");
       expect(result).not.toHaveProperty("version");
     }
@@ -690,10 +690,25 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
     )).toEqual({ ok: false, reason: "next-version-unavailable" });
   });
 
+  it.each([
+    { label: "missing-plan", values: { plan: null }, code: "schedule.data.missing-plan-and-actual" },
+    { label: "actual-without-plan", values: { plan: null, actual: dateOnly("2026-10-02") }, code: "schedule.data.actual-without-plan" },
+    { label: "N/A-with-date", values: { applicability: "notApplicable" as const }, code: "schedule.import.not-applicable-with-date" },
+    { label: "invalid-date", values: { plan: "2026-02-30" as DateOnly }, code: "schedule.import.invalid-date" },
+  ])("real Publish rejects current Draft date blockers without import candidates: $label", ({ values, code }) => {
+    const original = freezeScheduleGraph(scheduleWithDraft([draftMilestone("invalid-current-date", definitionA.id, values)], [version(1)]));
+    const before = structuredClone(original);
+    const result = publishScheduleWorkingDraft(original, { publishedAt: "must-not-publish" }, context);
+    expect(result).toMatchObject({ ok: false, reason: "validation-failed", issues: expect.arrayContaining([expect.objectContaining({ code })]) });
+    expect(result).not.toHaveProperty("schedule");
+    expect(result).not.toHaveProperty("version");
+    expect(original).toEqual(before);
+  });
+
   it("publishes [v3, v1] as a separate immutable v4 snapshot", () => {
     const original = freezeScheduleGraph(scheduleWithDraft(
       [draftMilestone("lineage", definitionA.id, {
-        applicability: "notApplicable",
+        applicability: "applicable",
         plan: dateOnly("2030-01-15"),
         actual: dateOnly("2030-01-16"),
       })],

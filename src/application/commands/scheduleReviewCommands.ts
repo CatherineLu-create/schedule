@@ -4,7 +4,8 @@ import { getCurrentPublishedVersion, type CanonicalProjectSchedule } from "../..
 import { createScheduleImportCandidate, type ConfirmProjectLocalMilestoneDefinitionInput, type ScheduleReviewFailureCode,
   type ConfirmScheduleImportDecisionInput, type GovernanceSimulationPack, type ScheduleReviewIdBundle,
   type ScheduleImportDecisionPreview, type ScheduleImportCandidate, type ScheduleReviewSession, type ScheduleEvidenceRecord,
-  type DateApplyAction } from "../../domain/schedule/scheduleReview";
+  type DateApplyAction, type MapDraftLocalOccurrenceToPublicInput, type ConfirmMapDraftLocalOccurrenceToPublicInput,
+  type LocalToPublicPreview } from "../../domain/schedule/scheduleReview";
 import type { EffectiveMilestoneGovernanceContext } from "../governance/effectiveMilestoneGovernanceContext";
 import type { CanonicalScheduleCommandContext } from "./canonicalScheduleCommands";
 import { resolveScheduleDefinitions } from "../governance/scheduleDefinitionResolution";
@@ -194,7 +195,7 @@ function occurrenceDateIssues(row: CanonicalScheduleWorkingDraftMilestone): read
   return issues;
 }
 
-/** Reporting only in GOV-07. This function does not change the existing Publish lifecycle. */
+/** Shared by review previews and the actual Schedule Publish boundary. */
 export function collectSchedulePublishBlockingFindings(schedule: CanonicalProjectSchedule, context: CanonicalScheduleCommandContext): readonly ValidationIssue[] {
   const draft = schedule.workingDraft;
   if (draft === null) return [];
@@ -322,4 +323,64 @@ export function confirmScheduleImportDecision(schedule: CanonicalProjectSchedule
     targetMilestoneId: operation.after!.milestoneId, targetDefinitionId: operation.after!.milestoneDefinitionId,
     dateActions: Object.freeze({ plan: Object.freeze({ ...input.plan }), actual: Object.freeze({ ...input.actual }) }), applicabilityAction: Object.freeze({ ...input.applicability }),
   })] } };
+}
+
+export function previewDraftLocalOccurrenceToPublic(
+  schedule: CanonicalProjectSchedule,
+  input: MapDraftLocalOccurrenceToPublicInput,
+  context: CanonicalScheduleCommandContext,
+): CommandResult<LocalToPublicPreview, ScheduleReviewFailureCode> {
+  const draft = schedule.workingDraft;
+  if (draft === null) return reviewFailure("no-working-draft", schedule.projectId, "workingDraft", "A Working Draft is required.");
+  const rows = draft.milestones.filter(row => row.milestoneId === input.milestoneId);
+  if (rows.length !== 1) return reviewFailure(rows.length ? "duplicate-milestone-id" : "target-not-found", input.milestoneId, "milestoneId", "Mapping requires one exact current Draft occurrence.");
+  const beforeOccurrence = rows[0];
+  if (beforeOccurrence.milestoneDefinitionId !== input.localDefinitionId || input.localDefinitionId === input.publicDefinitionId) {
+    return reviewFailure("target-definition-mismatch", input.milestoneId, "localDefinitionId", "The occurrence must still reference the selected distinct local definition.");
+  }
+  if (schedule.localDefinitions.filter(definition => definition.id === input.localDefinitionId).length !== 1
+    || context.governance.definitionsForHistoricalResolution.some(definition => definition.id === input.localDefinitionId)
+    || !scheduleDefinitions(schedule, context).some(definition => definition.id === input.localDefinitionId)) {
+    return reviewFailure("invalid-local-classification", input.milestoneId, "localDefinitionId", "Mapping requires a legal confirmed definition from this Project's local registry.");
+  }
+  if (!context.governance.addablePublicDefinitions.some(definition => definition.id === input.publicDefinitionId)) {
+    return reviewFailure("definition-not-addable", input.milestoneId, "publicDefinitionId", "Mapping creates a new public reference and requires a currently addable public definition.");
+  }
+  if (draft.milestones.some(row => row.milestoneDefinitionId === input.publicDefinitionId)) {
+    return reviewFailure("duplicate-target-definition", input.milestoneId, "publicDefinitionId", "The target public definition already has a Draft occurrence; mapping cannot merge rows.");
+  }
+  return { ok: true, value: { beforeOccurrence, afterOccurrence: { ...beforeOccurrence, milestoneDefinitionId: input.publicDefinitionId } } };
+}
+
+export function mapDraftLocalOccurrenceToPublic(
+  schedule: CanonicalProjectSchedule,
+  input: ConfirmMapDraftLocalOccurrenceToPublicInput,
+  context: CanonicalScheduleCommandContext,
+): CommandResult<CanonicalProjectSchedule, ScheduleReviewFailureCode> {
+  // Re-resolve against the supplied current context; a previous preview grants no eligibility.
+  const preview = previewDraftLocalOccurrenceToPublic(schedule, input, context);
+  if (!preview.ok) return preview;
+  const assertion = input.assertion;
+  if (assertion === null || typeof assertion !== "object" || Array.isArray(assertion)
+    || assertion.workContent !== true || assertion.stage !== true || assertion.type !== true || assertion.completionCriteria !== true) {
+    return reviewFailure("invalid-equivalence-assertion", input.milestoneId, "assertion", "All four equivalence assertions must be explicitly true.");
+  }
+  const draft = schedule.workingDraft!;
+  const reservedSessionIds = [...draft.reviewSessionIds, ...schedule.reviewSessions.map(session => session.id),
+    ...schedule.reviewClosures.map(closure => closure.sessionId), ...schedule.reviewDecisions.map(decision => decision.sessionId)];
+  if (!validInjectedIds([input.sessionId], reservedSessionIds)
+    || !validInjectedIds([input.decisionId], schedule.reviewDecisions.map(decision => decision.id))) {
+    return reviewFailure("id-collision", input.milestoneId, "ids", "Supply nonempty unused session and decision IDs.");
+  }
+  const session: ScheduleReviewSession = Object.freeze({ id: input.sessionId, workingDraftId: draft.workingDraftId,
+    source: "manual-local-mapping", evidenceIds: Object.freeze([]) });
+  const decision = Object.freeze({ id: input.decisionId, sessionId: session.id, targetMilestoneId: input.milestoneId,
+    fromLocalDefinitionId: input.localDefinitionId, toPublicDefinitionId: input.publicDefinitionId,
+    assertion: Object.freeze({ workContent: assertion.workContent, stage: assertion.stage, type: assertion.type, completionCriteria: assertion.completionCriteria }),
+  });
+  return { ok: true, value: { ...schedule,
+    reviewSessions: [...schedule.reviewSessions, session], reviewDecisions: [...schedule.reviewDecisions, decision],
+    workingDraft: { ...draft, reviewSessionIds: [...draft.reviewSessionIds, session.id],
+      milestones: draft.milestones.map(row => row === preview.value.beforeOccurrence ? preview.value.afterOccurrence : row) },
+  } };
 }

@@ -33,20 +33,26 @@ it.each(["unknown", "bundled", "future", "nonRetiring"] as const)("App rejects E
   fireEvent.click(screen.getByRole("button", { name: "Publish" }));
   fireEvent.click(within(screen.getByRole("dialog", { name: "Publish Working Draft" })).getByRole("button", { name: "Publish" }));
   expect.soft(screen.queryByLabelText("Applicability for Kickoff")).toBeInTheDocument();
-  expect(screen.getByText(/Nonaddable public definitions require exact Current Published lineage/)).toBeInTheDocument();
+  expect(screen.getByText("Retired definition requires exact current lineage or D1 grant.")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Working Draft" })).toBeInTheDocument();
+  expect(screen.queryByText("Published v01")).not.toBeInTheDocument();
   expect({ state, prototype: fixture.prototype }).toEqual(before);
 });
 
 it("App edits and publishes a genuinely issued D1 row", () => {
   const fixture = publishedRetirementFixture();
+  const before = structuredClone(fixture.prototype);
   vi.mocked(createInitialMilestoneGovernanceRuntimeState).mockReturnValueOnce(fixture.state);
   render(<App initialState={fixture.prototype} initialSelectedProjectId={devProject001.id} />);
   fireEvent.change(screen.getByLabelText("Applicability for Kickoff"), { target: { value: "notApplicable" } });
   expect(screen.getByLabelText("Applicability for Kickoff")).toHaveValue("notApplicable");
+  fireEvent.click(screen.getByRole("button", { name: /^Clear Plan for Kickoff occurrence/ }));
+  expect(screen.getByLabelText(/^Plan for Kickoff occurrence/)).toHaveValue("");
   fireEvent.click(screen.getByRole("button", { name: "Publish" }));
   fireEvent.click(within(screen.getByRole("dialog", { name: "Publish Working Draft" })).getByRole("button", { name: "Publish" }));
   expect(screen.queryByLabelText("Applicability for Kickoff")).not.toBeInTheDocument();
   expect(screen.getByText("Published v01")).toBeInTheDocument();
+  expect(fixture.prototype).toEqual(before);
 });
 
 it("one mounted App retains its released consumer context across navigation and renders", () => {

@@ -25,6 +25,7 @@ import type {
   MilestoneId,
 } from "../../domain/shared/ids";
 import type { ValidationIssue } from "../../domain/validation/validationIssue";
+import { collectSchedulePublishBlockingFindings } from "./scheduleReviewCommands";
 
 export interface CanonicalScheduleCommandContext {
   readonly governance: EffectiveMilestoneGovernanceContext;
@@ -138,7 +139,7 @@ export type CancelScheduleWorkingDraftResult =
       readonly ok: true;
       readonly schedule: CanonicalProjectSchedule;
     }
-  | CanonicalScheduleCommandFailure<"no-working-draft">;
+  | CanonicalScheduleCommandFailure<"no-working-draft" | "validation-failed">;
 
 export interface PublishScheduleWorkingDraftInput {
   readonly publishedAt: string;
@@ -310,15 +311,38 @@ export function removeScheduleWorkingDraftMilestone(
   };
 }
 
+/** Only attached current-Draft sessions participate in this transition. */
+function reviewClosureIssues(schedule: CanonicalProjectSchedule): readonly ValidationIssue[] {
+  const draft = schedule.workingDraft;
+  if (draft === null) return [];
+  const seen = new Set<string>();
+  const issues: ValidationIssue[] = [];
+  for (const sessionId of draft.reviewSessionIds) {
+    const matches = schedule.reviewSessions.filter(session => session.id === sessionId);
+    if (typeof sessionId !== "string" || !sessionId.trim() || seen.has(sessionId)
+      || matches.length !== 1 || matches[0].workingDraftId !== draft.workingDraftId
+      || schedule.reviewClosures.some(closure => closure.sessionId === sessionId)) {
+      issues.push({ code: "schedule.review.invalid-session-closure", domain: "schedule", source: "data", severity: "blocking",
+        message: "Each attached session must resolve once to an open session belonging to this Working Draft.",
+        target: { section: "schedule.workingDraft", entityId: sessionId, field: "reviewSessionIds" } });
+    }
+    seen.add(sessionId);
+  }
+  return issues;
+}
+
 export function cancelScheduleWorkingDraft(
   schedule: CanonicalProjectSchedule,
 ): CancelScheduleWorkingDraftResult {
   if (schedule.workingDraft === null) {
     return { ok: false, reason: "no-working-draft", issues: [] };
   }
+  const issues = reviewClosureIssues(schedule);
+  if (issues.length > 0) return { ok: false, reason: "validation-failed", issues };
+  const closures = schedule.workingDraft.reviewSessionIds.map(sessionId => Object.freeze({ sessionId, kind: "discarded" as const }));
   return {
     ok: true,
-    schedule: { ...schedule, workingDraft: null },
+    schedule: { ...schedule, reviewClosures: closures.length ? [...schedule.reviewClosures, ...closures] : schedule.reviewClosures, workingDraft: null },
   };
 }
 
@@ -352,8 +376,8 @@ export function publishScheduleWorkingDraft(
   const draft = schedule.workingDraft;
   const issues = [
     ...validateCanonicalProjectSchedule(schedule, definitionsFor(schedule, context)),
-    ...validateScheduleWorkingDraft(draft, definitionsFor(schedule, context)),
-    ...retainedDraftIssues(schedule, context),
+    ...collectSchedulePublishBlockingFindings(schedule, context),
+    ...reviewClosureIssues(schedule),
   ];
   if (issues.length > 0) {
     return { ok: false, reason: "validation-failed", issues };
@@ -362,18 +386,20 @@ export function publishScheduleWorkingDraft(
   if (!next.ok) {
     return { ok: false, reason: "next-version-unavailable", issues: [] };
   }
-  const version: CanonicalPublishedScheduleVersion = {
+  const version: CanonicalPublishedScheduleVersion = Object.freeze({
     versionNumber: next.versionNumber,
     versionNote: null,
     publishedAt: input.publishedAt,
-    milestones: draft.milestones.map((milestone) => ({ ...milestone })),
-  };
+    milestones: Object.freeze(draft.milestones.map((milestone) => Object.freeze({ ...milestone }))),
+  });
+  const closures = draft.reviewSessionIds.map(sessionId => Object.freeze({ sessionId, kind: "published" as const, versionNumber: version.versionNumber }));
   return {
     ok: true,
     version,
     schedule: {
       ...schedule,
       publishedVersions: [...schedule.publishedVersions, version],
+      reviewClosures: closures.length ? [...schedule.reviewClosures, ...closures] : schedule.reviewClosures,
       workingDraft: null,
     },
   };

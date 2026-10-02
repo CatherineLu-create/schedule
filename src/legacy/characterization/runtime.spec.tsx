@@ -826,9 +826,6 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     applyDateInput(screen.getByLabelText(/^Plan for Kickoff occurrence/), "2033-03-04");
     applyDateInput(screen.getByLabelText(/^Actual for Kickoff occurrence/), "2033-03-05");
-    fireEvent.change(screen.getByLabelText("Applicability for Kickoff"), {
-      target: { value: "notApplicable" },
-    });
     fireEvent.click(screen.getByRole("button", { name: "Publish" }));
     let dialog = screen.getByRole("dialog", { name: "Publish Working Draft" });
     expect(within(dialog).getByText("Publish as v02")).toBeInTheDocument();
@@ -841,7 +838,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(screen.getByText("2033/03/04")).toBeInTheDocument();
     expect(screen.getByText("2033/03/05")).toBeInTheDocument();
     expect(within(screen.getByRole("row", { name: /Kickoff/ }))
-      .getByText("Not Applicable")).toBeInTheDocument();
+      .getByText("Applicable")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Working Draft" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Publish" })).not.toBeInTheDocument();
   });
@@ -858,11 +855,25 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(within(schedule).getByRole("option", { name: "A1 Close" })).toBeInTheDocument();
     addMilestone("milestone-a1-a-close");
     expect(within(schedule).getByRole("row", { name: /A1 Close/ })).toBeInTheDocument();
+    const beforePublish = lastReducedState();
+    const beforeSnapshot = structuredClone(beforePublish);
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Publish Working Draft" }))
+      .getByRole("button", { name: "Publish" }));
+    expect(screen.getByText("An applicable occurrence requires a Plan date.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Working Draft" })).toBeInTheDocument();
+    expect(screen.queryByText("Published v01")).not.toBeInTheDocument();
+    expect(lastReducedState()).toBe(beforePublish);
+    expect(lastReducedState()).toEqual(beforeSnapshot);
+    expect(lastReducedState().schedules.find(entry => entry.projectId === devProject002.id)?.publishedVersions).toEqual([]);
+    applyDateInput(screen.getByLabelText(/^Plan for A1 Close occurrence/), "2031-01-15");
     fireEvent.click(screen.getByRole("button", { name: "Publish" }));
     fireEvent.click(within(screen.getByRole("dialog", { name: "Publish Working Draft" }))
       .getByRole("button", { name: "Publish" }));
     expect(screen.getByText("Published v01")).toBeInTheDocument();
     expect(screen.getByRole("row", { name: /A1 Close/ })).toBeInTheDocument();
+    expect(screen.getByText("2031/01/15")).toBeInTheDocument();
+    expect(beforePublish).toEqual(beforeSnapshot);
   });
 
   it("isolates and resumes Drafts by exact ProjectId", () => {
@@ -985,11 +996,12 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
     expect(a1CloseCell()).toHaveTextContent(/^—$/);
     openProjectByName("Manta");
+    applyDateInput(screen.getByLabelText(/^Plan for A1 Close occurrence/), "2031-01-15");
     fireEvent.click(screen.getByRole("button", { name: "Publish" }));
     fireEvent.click(within(screen.getByRole("dialog", { name: "Publish Working Draft" }))
       .getByRole("button", { name: "Publish" }));
     fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
-    expect(a1CloseCell()).toHaveTextContent("P: —");
+    expect(a1CloseCell()).toHaveTextContent("P: 2031/01/15");
     expect(a1CloseCell()).toHaveTextContent("A: —");
   });
 
@@ -1012,6 +1024,25 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
 
     openProjectByName("Manta");
     expect(screen.getByLabelText("Applicability for A1 G/O")).toHaveValue("notApplicable");
+    const beforePublish = lastReducedState();
+    const beforeSnapshot = structuredClone(beforePublish);
+    const originalHistory = beforePublish.schedules.find(entry => entry.projectId === devProject001.id)!.publishedVersions;
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Publish Working Draft" }))
+      .getByRole("button", { name: "Publish" }));
+    expect(screen.getByText("N/A requires both dates to be cleared.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Working Draft" })).toBeInTheDocument();
+    expect(screen.queryByText("Published v02")).not.toBeInTheDocument();
+    expect(lastReducedState()).toBe(beforePublish);
+    expect(lastReducedState()).toEqual(beforeSnapshot);
+    fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
+    expect(a1GoCell()).toHaveTextContent(before!);
+    expect(a1GoCell()).not.toHaveTextContent("N/A");
+    openProjectByName("Manta");
+    fireEvent.click(screen.getByRole("button", { name: /^Clear Plan for A1 G\/O occurrence/ }));
+    expect(screen.getByLabelText(/^Plan for A1 G\/O occurrence/)).toHaveValue("");
+    expect(screen.getByLabelText(/^Actual for A1 G\/O occurrence/)).toHaveValue("");
+    expect(lastReducedState().schedules.find(entry => entry.projectId === devProject001.id)!.publishedVersions).toBe(originalHistory);
     fireEvent.click(screen.getByRole("button", { name: "Publish" }));
     fireEvent.click(within(screen.getByRole("dialog", { name: "Publish Working Draft" }))
       .getByRole("button", { name: "Publish" }));
@@ -1019,6 +1050,8 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
     expect(a1GoCell()?.querySelector('[data-milestone-id]')).toHaveTextContent(/^N\/A$/);
     expect(a1GoCell()).not.toHaveTextContent("2026/10/15");
+    expect(lastReducedState().schedules.find(entry => entry.projectId === devProject001.id)!.publishedVersions[0]).toBe(originalHistory[0]);
+    expect(beforePublish).toEqual(beforeSnapshot);
   });
 
   it("preserves an overflow Draft and reports precise Publish failure", () => {

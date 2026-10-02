@@ -160,7 +160,28 @@ describe("Attention from real local confirmation and Publish", () => {
     const registered = confirmed(owner, type);
     const definitionId = registered.localDefinitions[0].id;
     const first = published(registered, [draftMilestone("old-due", definitionId, "2026-09-23")]);
-    const current = published(first, [
+    const current = published(first, [draftMilestone("today", definitionId, "2026-09-23")]);
+    const read = expectAvailable(selectDashboardAttention(state([owner], [current]), REFERENCE_DATE, governance));
+    expect(read.due.projectIds).toEqual([owner.id]);
+    expect(read.due.projectCount).toBe(1);
+    expect(read.due.matches.map(match => [match.milestoneId, match.milestoneDefinitionId, match.milestoneName, match.plan])).toEqual([
+      ["today", definitionId, `Local ${type}`, "2026-09-23"],
+    ]);
+    expect(read.overdue.matches).toEqual([]);
+    expect(current.publishedVersions[0]).toBe(first.publishedVersions[0]);
+    const portfolio = selectPortfolioDashboardRows(state([{ ...devProject001, id: owner.id }], [current]), createInitialSelfServiceReferenceCatalogs(), governance);
+    expect(portfolio[0].schedule.kind).toBe("published");
+    if (portfolio[0].schedule.kind !== "published") throw new Error("Expected Published portfolio");
+    expect(portfolio[0].schedule.cells.map(cell => cell.milestoneDefinitionId)).toEqual(governance.portfolioColumnDefinitions.map(definition => definition.id));
+    expect(portfolio[0].schedule.cells.some(cell => cell.milestoneDefinitionId === definitionId)).toBe(false);
+  });
+
+  it.each(["type-g-o", "type-smt", "type-close", "type-mdrr"])("historical_local_repeats_preserve_date_boundaries_NA_missing_plan_and_project_deduplication: %s", type => {
+    const owner = project(`historical-attention-${type}`);
+    const registered = confirmed(owner, type);
+    const definitionId = registered.localDefinitions[0].id;
+    // Historical input remains readable; these repeated/unfinished rows are not a new Publish success fixture.
+    const current = { ...registered, publishedVersions: [version(1, [
       draftMilestone("today", definitionId, "2026-09-23"),
       draftMilestone("plus-14", definitionId, "2026-10-07"),
       draftMilestone("plus-15", definitionId, "2026-10-08"),
@@ -168,7 +189,8 @@ describe("Attention from real local confirmation and Publish", () => {
       draftMilestone("complete", definitionId, "2026-09-22", { actual: dateOnly("2026-09-23") }),
       draftMilestone("not-applicable", definitionId, "2026-09-23", { applicability: "notApplicable" }),
       draftMilestone("no-plan", definitionId, null),
-    ]);
+    ])] };
+    const before = structuredClone(current);
     const read = expectAvailable(selectDashboardAttention(state([owner], [current]), REFERENCE_DATE, governance));
     expect(read.due.projectIds).toEqual([owner.id]);
     expect(read.due.projectCount).toBe(1);
@@ -178,12 +200,7 @@ describe("Attention from real local confirmation and Publish", () => {
     ]);
     expect(read.overdue.projectIds).toEqual([owner.id]);
     expect(read.overdue.matches.map(match => match.milestoneId)).toEqual(["overdue"]);
-    expect(current.publishedVersions[0]).toBe(first.publishedVersions[0]);
-    const portfolio = selectPortfolioDashboardRows(state([{ ...devProject001, id: owner.id }], [current]), createInitialSelfServiceReferenceCatalogs(), governance);
-    expect(portfolio[0].schedule.kind).toBe("published");
-    if (portfolio[0].schedule.kind !== "published") throw new Error("Expected Published portfolio");
-    expect(portfolio[0].schedule.cells.map(cell => cell.milestoneDefinitionId)).toEqual(governance.portfolioColumnDefinitions.map(definition => definition.id));
-    expect(portfolio[0].schedule.cells.some(cell => cell.milestoneDefinitionId === definitionId)).toBe(false);
+    expect(current).toEqual(before);
   });
 
   it("real_command_created_local_draft_only_occurrence_is_not_attention", () => {

@@ -1,5 +1,6 @@
 import { parseDateOnly, type DateOnly } from "../shared/dateOnly";
 import type { CanonicalScheduleWorkingDraftMilestone } from "./canonicalScheduleWorkingDraft";
+import type { CanonicalPublishedScheduleMilestone } from "./officialSchedule";
 import type {
   CanonicalScheduleWorkingDraftId,
   MilestoneDefinitionId,
@@ -65,6 +66,23 @@ export interface LocalToPublicEquivalenceAssertion {
   readonly completionCriteria: true;
 }
 
+export interface MapDraftLocalOccurrenceToPublicInput {
+  readonly milestoneId: MilestoneId;
+  readonly localDefinitionId: MilestoneDefinitionId;
+  readonly publicDefinitionId: MilestoneDefinitionId;
+}
+
+export interface ConfirmMapDraftLocalOccurrenceToPublicInput extends MapDraftLocalOccurrenceToPublicInput {
+  readonly sessionId: ScheduleReviewSessionId;
+  readonly decisionId: ScheduleReviewDecisionId;
+  readonly assertion: LocalToPublicEquivalenceAssertion;
+}
+
+export interface LocalToPublicPreview {
+  readonly beforeOccurrence: CanonicalScheduleWorkingDraftMilestone;
+  readonly afterOccurrence: CanonicalScheduleWorkingDraftMilestone;
+}
+
 export interface ProjectLocalMilestoneDefinition {
   readonly id: MilestoneDefinitionId;
   readonly name: string;
@@ -91,7 +109,7 @@ export type ScheduleReviewFailureCode =
   | "duplicate-target-definition" | "invalid-action-for-new-occurrence"
   | "invalid-date-or-applicability" | "invalid-local-classification"
   | "definition-not-addable" | "retired-definition-not-retained"
-  | "stale-governance-context" | "id-collision";
+  | "stale-governance-context" | "id-collision" | "invalid-equivalence-assertion";
 
 export interface ScheduleImportCandidate {
   readonly id: ScheduleImportCandidateId;
@@ -142,6 +160,13 @@ export type ScheduleReviewDecisionEvent =
 export type ScheduleReviewClosureEvent =
   | { readonly sessionId: ScheduleReviewSessionId; readonly kind: "published"; readonly versionNumber: ScheduleVersionNumber }
   | { readonly sessionId: ScheduleReviewSessionId; readonly kind: "discarded" };
+
+export interface ScheduleReviewTraceItem {
+  readonly decision: ScheduleReviewDecisionEvent;
+  readonly closure: ScheduleReviewClosureEvent | null;
+  readonly finalOccurrence: CanonicalPublishedScheduleMilestone | null;
+  readonly retention: "unpublished" | "discarded" | "retained" | "not-retained";
+}
 
 export type ReviewTarget =
   | { readonly kind: "createPublicOccurrence"; readonly definitionId: MilestoneDefinitionId; readonly milestoneId: MilestoneId }

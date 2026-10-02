@@ -127,7 +127,7 @@ describe("command-confirmed local definition resolution and history", () => {
     const started = startScheduleWorkingDraft(value, { workingDraftId: toCanonicalScheduleWorkingDraftId("local-history-draft") }, context(value));
     if (!started.ok) throw new Error(JSON.stringify(started));
     // Normal Add remains public-only; the existing canonical test builder sets up the occurrence.
-    return { ...started.schedule, workingDraft: { ...started.draft, milestones: [draftMilestone("local-history-row", localId)] } };
+    return { ...started.schedule, workingDraft: { ...started.draft, milestones: [draftMilestone("local-history-row", localId, { plan: dateOnly("2026-10-15") })] } };
   }
   function published(value: CanonicalProjectSchedule) {
     const result = publishScheduleWorkingDraft(value, { publishedAt: "2026-10-01T00:00:00Z" }, context(value));
