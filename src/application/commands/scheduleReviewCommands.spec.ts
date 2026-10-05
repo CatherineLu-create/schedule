@@ -140,12 +140,16 @@ describe("confirmProjectLocalMilestoneDefinition", () => {
     const before = structuredClone(governance);
     const local = value(confirmProjectLocalMilestoneDefinition(createEmptyCanonicalProjectSchedule(devProject001.id), input(), governance));
     expect(local.localDefinitions.map(definition => definition.id)).toEqual(["local-acceptance"]);
-    for (const schedule of [local, createEmptyCanonicalProjectSchedule(devProject003.id)]) {
+    for (const [schedule, allowed] of [[local, true], [createEmptyCanonicalProjectSchedule(devProject003.id), false]] as const) {
       const context = { governance, localDefinitions: local.localDefinitions, retiredDraftOccurrenceGrants: [] };
-      const started = startScheduleWorkingDraft(schedule, { workingDraftId: toCanonicalScheduleWorkingDraftId("public-only-add") }, context);
+      const started = startScheduleWorkingDraft(schedule, { workingDraftId: toCanonicalScheduleWorkingDraftId("explicit-local-add") }, context);
       if (!started.ok) throw new Error(JSON.stringify(started));
       const added = addScheduleWorkingDraftMilestone(started.schedule, { milestoneId: toMilestoneId("local-add"), milestoneDefinitionId: input().definitionId }, context);
-      expect(added.ok).toBe(false);
+      expect(added.ok).toBe(allowed);
+      if (added.ok) {
+        expect(added.milestone).toMatchObject({ milestoneId: "local-add", milestoneDefinitionId: "local-acceptance" });
+        expect(added.schedule.localDefinitions).toBe(local.localDefinitions);
+      }
       expect(started.schedule.workingDraft?.milestones).toEqual([]);
     }
     expect(governance).toEqual(before);

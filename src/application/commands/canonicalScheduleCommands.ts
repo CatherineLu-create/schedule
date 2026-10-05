@@ -270,10 +270,15 @@ export function addScheduleWorkingDraftMilestone(
     ...current.draft,
     milestones: [...current.draft.milestones, milestone],
   };
-  const issues = validateScheduleWorkingDraft(draft, definitionsFor(schedule, context));
-  if (!context.governance.addablePublicDefinitions.some(definition => definition.id === input.milestoneDefinitionId)
+  const definitions = definitionsFor(schedule, context);
+  const issues = validateScheduleWorkingDraft(draft, definitions);
+  const isAddablePublic = context.governance.addablePublicDefinitions.some(definition => definition.id === input.milestoneDefinitionId);
+  const isConfirmedLocal = schedule.localDefinitions.filter(definition => definition.id === input.milestoneDefinitionId).length === 1
+    && !context.governance.definitionsForHistoricalResolution.some(definition => definition.id === input.milestoneDefinitionId)
+    && definitions.some(definition => definition.id === input.milestoneDefinitionId);
+  if ((!isAddablePublic && !isConfirmedLocal)
     || current.draft.milestones.some(milestone => milestone.milestoneDefinitionId === input.milestoneDefinitionId)) {
-    return { ok: false, reason: "validation-failed", issues: [...issues, membershipIssue(input.milestoneId, "Normal Add requires a current addable public definition not already present in the Draft.")] };
+    return { ok: false, reason: "validation-failed", issues: [...issues, membershipIssue(input.milestoneId, "Normal Add requires a current addable public definition or a legal confirmed same-Project local definition not already present in the Draft.")] };
   }
   if (issues.length > 0) {
     return { ok: false, reason: "validation-failed", issues };

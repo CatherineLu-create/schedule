@@ -24,6 +24,9 @@ import {
   toMilestoneId,
   toMilestoneTypeId,
   toProjectId,
+  toScheduleEvidenceId,
+  toScheduleImportCandidateId,
+  toScheduleReviewSessionId,
   toStageGroupId,
   type MilestoneDefinitionId,
 } from "../../domain/shared/ids";
@@ -40,6 +43,7 @@ import {
   type PublishScheduleWorkingDraftInput,
   type UpdateScheduleWorkingDraftMilestoneInput,
 } from "./canonicalScheduleCommands";
+import { confirmProjectLocalMilestoneDefinition, loadBuiltInScheduleSimulation } from "./scheduleReviewCommands";
 
 function dateOnly(value: string): DateOnly {
   const parsed = parseDateOnly(value);
@@ -164,6 +168,199 @@ function releaseBackedCommandContext(state: MilestoneGovernanceRuntimeState): Ca
   if (!governance.ok || !grants.ok) throw new Error("Expected valid released command authority");
   return { governance: governance.value, localDefinitions: [], retiredDraftOccurrenceGrants: grants.value };
 }
+
+function confirmedLocalSchedule(original = scheduleWithDraft([])) {
+  const confirmed = confirmProjectLocalMilestoneDefinition(original, {
+    definitionId: toMilestoneDefinitionId("manual-local"), name: "Manual local",
+    stageGroupId: toStageGroupId("stage-a1"), milestoneTypeId: toMilestoneTypeId("type-test"),
+    source: "manual", evidenceIds: [],
+  }, context.governance);
+  if (!confirmed.ok) throw new Error(JSON.stringify(confirmed));
+  return {
+    schedule: confirmed.value,
+    context: { ...context, localDefinitions: confirmed.value.localDefinitions },
+    input: { milestoneId: toMilestoneId("explicit-local-row"), milestoneDefinitionId: toMilestoneDefinitionId("manual-local") },
+  };
+}
+
+describe("normal Add of a confirmed same-Project local definition", () => {
+  it("adds_confirmed_same_project_local_definition_to_working_draft", () => {
+    const fixture = confirmedLocalSchedule(scheduleWithDraft([draftMilestone("existing")], [version(1, [publishedMilestone("official")])]));
+    const original = freezeScheduleGraph(fixture.schedule);
+    const before = structuredClone({ schedule: original, context: fixture.context });
+    const result = addScheduleWorkingDraftMilestone(original, fixture.input, fixture.context);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    expect(result.milestone).toEqual({
+      milestoneId: "explicit-local-row", milestoneDefinitionId: "manual-local",
+      applicability: "applicable", plan: null, actual: null,
+    });
+    expect(result.draft.milestones).toHaveLength(2);
+    expect(result.draft.milestones[0]).toBe(original.workingDraft!.milestones[0]);
+    expect(result.draft.milestones[1]).toBe(result.milestone);
+    expect(result.schedule.localDefinitions).toBe(original.localDefinitions);
+    expect(result.schedule.localDefinitions).toEqual(before.schedule.localDefinitions);
+    expect(result.schedule.publishedVersions).toBe(original.publishedVersions);
+    expect({ schedule: original, context: fixture.context }).toEqual(before);
+  });
+
+  it("confirming_local_definition_does_not_add_occurrence_implicitly", () => {
+    const original = freezeScheduleGraph(scheduleWithDraft([draftMilestone("existing")]));
+    const confirmed = confirmedLocalSchedule(original).schedule;
+    expect(confirmed.localDefinitions).toHaveLength(1);
+    expect(confirmed.workingDraft).toBe(original.workingDraft);
+    expect(confirmed.workingDraft!.milestones).toHaveLength(1);
+    expect(confirmed.workingDraft!.milestones.map(row => row.milestoneDefinitionId)).toEqual(["definition-a"]);
+  });
+
+  it("rejects_local_definition_not_owned_by_this_schedule", () => {
+    const fixture = confirmedLocalSchedule();
+    const foreign = freezeScheduleGraph({ ...scheduleWithDraft([]), projectId: toProjectId("foreign-project") });
+    const before = structuredClone({ foreign, owner: fixture.schedule, context: fixture.context });
+    expect(addScheduleWorkingDraftMilestone(foreign, fixture.input, fixture.context)).toMatchObject({ ok: false, reason: "validation-failed" });
+    expect({ foreign, owner: fixture.schedule, context: fixture.context }).toEqual(before);
+  });
+
+  it("rejects_unknown_local_definition_id", () => {
+    const fixture = confirmedLocalSchedule();
+    const before = structuredClone(fixture.schedule);
+    // A display name is not an identity or an authorization to infer one.
+    const result = addScheduleWorkingDraftMilestone(fixture.schedule,
+      { ...fixture.input, milestoneDefinitionId: toMilestoneDefinitionId("Manual local") }, fixture.context);
+    expect(result).toMatchObject({ ok: false, reason: "validation-failed" });
+    expect(fixture.schedule).toEqual(before);
+  });
+
+  it("rejects_retired_or_compatibility_public_definition_as_normal_add", () => {
+    const fixture = confirmedLocalSchedule();
+    const restricted = { ...fixture.context, governance: { ...fixture.context.governance, addablePublicDefinitions: [definitionB] } };
+    for (const milestoneDefinitionId of [definitionA.id, legacyDefinition.id]) {
+      const existing = { ...fixture.schedule, publishedVersions: [version(1, [publishedMilestone("retained-public", milestoneDefinitionId)])] };
+      const forged = { ...existing, localDefinitions: [{ ...existing.localDefinitions[0], id: milestoneDefinitionId }] };
+      for (const original of [existing, forged]) {
+        const addContext = { ...restricted, localDefinitions: original.localDefinitions };
+        const before = structuredClone(original);
+        expect(addScheduleWorkingDraftMilestone(original, { ...fixture.input, milestoneDefinitionId }, addContext))
+          .toMatchObject({ ok: false, reason: "validation-failed" });
+        expect(original).toEqual(before);
+      }
+    }
+  });
+
+  it("confirmed_local_add_preserves_public_add_behavior", () => {
+    const fixture = confirmedLocalSchedule();
+    const local = addScheduleWorkingDraftMilestone(fixture.schedule, fixture.input, fixture.context);
+    expect(local.ok).toBe(true);
+    if (!local.ok) throw new Error(JSON.stringify(local));
+    const added = addScheduleWorkingDraftMilestone(local.schedule,
+      { milestoneId: toMilestoneId("public-after-local"), milestoneDefinitionId: definitionA.id }, fixture.context);
+    expect(added.ok).toBe(true);
+    if (!added.ok) throw new Error(JSON.stringify(added));
+    expect(added.milestone).toEqual({ milestoneId: "public-after-local", milestoneDefinitionId: "definition-a", applicability: "applicable", plan: null, actual: null });
+    expect(added.draft.milestones[0]).toBe(local.milestone);
+    expect(added.draft.milestones).toHaveLength(2);
+    expect(added.schedule.localDefinitions).toBe(fixture.schedule.localDefinitions);
+  });
+
+  it("local_add_preserves_duplicate_definition_guard", () => {
+    const fixture = confirmedLocalSchedule();
+    const added = addScheduleWorkingDraftMilestone(fixture.schedule, fixture.input, fixture.context);
+    expect(added.ok).toBe(true);
+    if (!added.ok) throw new Error(JSON.stringify(added));
+    const before = structuredClone(added.schedule);
+    const result = addScheduleWorkingDraftMilestone(added.schedule,
+      { ...fixture.input, milestoneId: toMilestoneId("another-local-row") }, fixture.context);
+    expect(result).toMatchObject({ ok: false, reason: "validation-failed", issues: [expect.objectContaining({ code: "schedule.draft.definition-not-addable-or-retained" })] });
+    expect(added.schedule).toEqual(before);
+  });
+
+  it("local_add_preserves_milestone_id_collision_guard", () => {
+    const fixture = confirmedLocalSchedule(scheduleWithDraft([draftMilestone("existing")]));
+    const before = structuredClone(fixture.schedule);
+    const result = addScheduleWorkingDraftMilestone(fixture.schedule,
+      { ...fixture.input, milestoneId: toMilestoneId("existing") }, fixture.context);
+    expect(result).toMatchObject({ ok: false, reason: "validation-failed" });
+    if (result.ok) throw new Error("Expected MilestoneId collision");
+    expect(result.issues.map(issue => issue.code)).toContain("schedule.draft.integrity.duplicate-milestone-id");
+    expect(fixture.schedule).toEqual(before);
+  });
+
+  it.each([false, true])("local_add_does_not_create_review_evidence_or_decisions: existing review=%s", withReview => {
+    const fixture = confirmedLocalSchedule();
+    let original = fixture.schedule;
+    if (withReview) {
+      const loaded = loadBuiltInScheduleSimulation(original, { pack: "basic-success", ids: {
+        sessionId: toScheduleReviewSessionId("existing-session"),
+        evidenceIds: ["e1", "e2", "e3"].map(toScheduleEvidenceId),
+        candidateIds: ["c1", "c2", "c3"].map(toScheduleImportCandidateId),
+      } }, fixture.context);
+      if (!loaded.ok) throw new Error(JSON.stringify(loaded));
+      original = loaded.value;
+      expect(original.evidenceLedger).toHaveLength(3);
+      expect(original.workingDraft!.importCandidates).toHaveLength(3);
+    }
+    const before = structuredClone(original);
+    const added = addScheduleWorkingDraftMilestone(original, fixture.input, fixture.context);
+    expect(added.ok).toBe(true);
+    if (!added.ok) throw new Error(JSON.stringify(added));
+    for (const key of ["evidenceLedger", "reviewSessions", "reviewDecisions", "reviewClosures"] as const) {
+      expect(added.schedule[key]).toBe(original[key]);
+      expect(added.schedule[key]).toEqual(before[key]);
+    }
+    expect(added.draft.reviewSessionIds).toBe(original.workingDraft!.reviewSessionIds);
+    expect(added.draft.importCandidates).toBe(original.workingDraft!.importCandidates);
+    expect(added.draft.importCandidates).toEqual(before.workingDraft!.importCandidates);
+    expect(original).toEqual(before);
+  });
+
+  it.each(["no draft", "invalid draft"])("local_add_is_failure_atomic: %s", kind => {
+    const fixture = confirmedLocalSchedule(kind === "no draft" ? schedule([version(1)])
+      : scheduleWithDraft([draftMilestone("unresolved", toMilestoneDefinitionId("unknown"))], [version(1)]));
+    const original = freezeScheduleGraph(fixture.schedule);
+    const before = structuredClone({ schedule: original, context: fixture.context, input: fixture.input });
+    const result = addScheduleWorkingDraftMilestone(original, fixture.input, fixture.context);
+    expect(result).toMatchObject({ ok: false, reason: kind === "no draft" ? "no-working-draft" : "validation-failed" });
+    expect(result).not.toHaveProperty("schedule");
+    expect({ schedule: original, context: fixture.context, input: fixture.input }).toEqual(before);
+  });
+
+  it.each([
+    ["unconfirmed", { confirmation: "pending" }],
+    ["blank identity", { id: " " }],
+    ["blank name", { name: " " }],
+    ["illegal Stage", { stageGroupId: "unknown-stage" }],
+    ["illegal Type", { milestoneTypeId: "unknown-type" }],
+  ] as const)("rejects malformed owned local: %s", (_label, overrides) => {
+    const fixture = confirmedLocalSchedule();
+    const local = { ...fixture.schedule.localDefinitions[0], ...overrides } as ProjectLocalMilestoneDefinition;
+    const original = { ...fixture.schedule, localDefinitions: [local] };
+    const addContext = { ...fixture.context, localDefinitions: [{ ...local, confirmation: "confirmed" as const }] };
+    const before = structuredClone({ original, addContext });
+    expect(addScheduleWorkingDraftMilestone(original, { ...fixture.input, milestoneDefinitionId: local.id }, addContext))
+      .toMatchObject({ ok: false, reason: "validation-failed" });
+    expect({ original, addContext }).toEqual(before);
+  });
+
+  it.each(["same", "different"])("rejects_duplicate_local_registry_identity: %s names", names => {
+    const fixture = confirmedLocalSchedule();
+    const duplicate = { ...fixture.schedule.localDefinitions[0], name: names === "same" ? "Manual local" : "Different local" };
+    const original = { ...fixture.schedule, localDefinitions: [...fixture.schedule.localDefinitions, duplicate] };
+    const before = structuredClone(original);
+    expect(addScheduleWorkingDraftMilestone(original, fixture.input, fixture.context))
+      .toMatchObject({ ok: false, reason: "validation-failed" });
+    expect(original).toEqual(before);
+  });
+
+  it.each(["missing", "name", "stageGroupId", "milestoneTypeId"] as const)("rejects_forged_or_missing_local_context: %s", field => {
+    const fixture = confirmedLocalSchedule();
+    const local = fixture.schedule.localDefinitions[0];
+    const addContext = { ...fixture.context, localDefinitions: field === "missing" ? [] : [{ ...local, [field]: "forged" }] };
+    const before = structuredClone({ schedule: fixture.schedule, addContext });
+    expect(addScheduleWorkingDraftMilestone(fixture.schedule, fixture.input, addContext))
+      .toMatchObject({ ok: false, reason: "validation-failed" });
+    expect({ schedule: fixture.schedule, addContext }).toEqual(before);
+  });
+});
 
 describe("canonical Schedule Working Draft lifecycle commands", () => {
   it("normal Add rejects compatibility and retired definitions even when resolved", () => {
