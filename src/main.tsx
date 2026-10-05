@@ -6,6 +6,9 @@ import { selectDashboardAttention } from "./application/selectors/dashboardAtten
 import { selectPortfolioDashboardRows } from "./application/selectors/portfolioDashboardRows";
 import { createInitialMilestoneGovernanceRuntimeState } from "./application/governance/milestoneGovernanceInitializer";
 import { prepareProjectCreationCommit } from "./application/governance/projectCreationGovernance";
+import { discardGovernanceDraft, previewGovernancePublish, publishGovernanceDraft, startGovernanceDraft, updateGovernanceDraft } from "./application/governance/milestoneGovernanceCommands";
+import type { GovernanceDraftUpdate, GovernancePublishPreview, MilestoneGovernanceRuntimeState } from "./domain/governance/milestoneGovernance";
+import { GovernanceWorkspace } from "./governanceWorkspace";
 import { selectEffectiveMilestoneGovernanceContext, selectEffectiveRetiredDraftOccurrenceGrants } from "./application/governance/effectiveMilestoneGovernanceContext";
 import { createPortfolioVisibleSchema } from "./portfolioDashboardColumns";
 import {
@@ -75,10 +78,13 @@ import { toLocalDateOnly, type DateOnly } from "./domain/shared/dateOnly";
 import {
   toCanonicalScheduleWorkingDraftId,
   toCatalogItemId,
+  toGovernanceDraftId,
+  toGovernanceReleaseId,
   toMilestoneId,
   toPersonAssignmentId,
   toProjectId,
   toRequirementEnrollmentId,
+  toRequirementWithdrawalId,
   toTeamFunctionId,
   type CatalogItemId,
   type MilestoneDefinitionId,
@@ -118,7 +124,7 @@ import {
 } from "./teamMembers";
 import "./styles.css";
 
-type Page = "dashboard" | "workspace" | "projectMasterDetail";
+type Page = "dashboard" | "workspace" | "projectMasterDetail" | "governance";
 
 interface PendingDuplicateCreate {
   readonly input: CreateProjectInput;
@@ -213,6 +219,45 @@ export function App({
   );
   const [state, dispatch] = React.useReducer(prototypeReducer, initialState);
   const [governanceState, setGovernanceState] = React.useState(createInitialMilestoneGovernanceRuntimeState);
+  const [governancePreviewSnapshot, setGovernancePreviewSnapshot] = React.useState<{
+    readonly governance: MilestoneGovernanceRuntimeState;
+    readonly prototype: PrototypeState;
+    readonly preview: GovernancePublishPreview;
+  } | null>(null);
+  const [governanceIssues, setGovernanceIssues] = React.useState<readonly ValidationIssue[]>([]);
+  // A preview is actionable only for the exact two snapshots that were validated.
+  const governancePreview = governancePreviewSnapshot?.governance === governanceState && governancePreviewSnapshot.prototype === state
+    ? governancePreviewSnapshot.preview : null;
+  const startPublicGovernanceDraft = () => {
+    const result = startGovernanceDraft(governanceState, toGovernanceDraftId(globalThis.crypto.randomUUID()));
+    setGovernancePreviewSnapshot(null);
+    setGovernanceIssues(result.ok ? [] : result.issues);
+    if (result.ok) setGovernanceState(result.value);
+  };
+  const updatePublicGovernanceDraft = (update: GovernanceDraftUpdate) => {
+    const result = updateGovernanceDraft(governanceState, update);
+    setGovernancePreviewSnapshot(null);
+    setGovernanceIssues(result.ok ? [] : result.issues);
+    if (result.ok) setGovernanceState(result.value);
+  };
+  const previewPublicGovernanceDraft = () => {
+    setGovernanceIssues([]);
+    setGovernancePreviewSnapshot({ governance: governanceState, prototype: state, preview: previewGovernancePublish(governanceState, state) });
+  };
+  const publishPublicGovernanceDraft = () => {
+    if (!governancePreview || governancePreview.blockingIssues.length > 0) return;
+    const result = publishGovernanceDraft(governanceState, state, {
+      createReleaseId: () => toGovernanceReleaseId(globalThis.crypto.randomUUID()),
+      createEnrollmentId: () => toRequirementEnrollmentId(globalThis.crypto.randomUUID()),
+      createWithdrawalId: () => toRequirementWithdrawalId(globalThis.crypto.randomUUID()),
+      nowIso: () => new Date().toISOString(),
+    });
+    setGovernanceIssues(result.ok ? [] : result.issues);
+    if (result.ok) {
+      setGovernanceState(result.value);
+      setGovernancePreviewSnapshot(null);
+    }
+  };
   const { governance, retiredDraftOccurrenceGrants } = React.useMemo(() => {
     const result = selectEffectiveMilestoneGovernanceContext(governanceState);
     if (!result.ok) throw new Error(`Governance unavailable: ${result.code}`);
@@ -660,6 +705,27 @@ export function App({
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-slate-100 text-slate-950">
+      <nav aria-label="PIP navigation" className="flex justify-end border-b border-slate-200 bg-white px-4 py-2 sm:px-6">
+        <button type="button" aria-current={page === "governance" ? "page" : undefined} className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50" onClick={() => setPage("governance")}>公版管理</button>
+      </nav>
+      {page === "governance" && <GovernanceWorkspace
+        state={governanceState}
+        context={governance}
+        projects={state.projects}
+        schedules={state.schedules}
+        preview={governancePreview}
+        issues={governanceIssues}
+        onStartDraft={startPublicGovernanceDraft}
+        onUpdateDraft={updatePublicGovernanceDraft}
+        onPreview={previewPublicGovernanceDraft}
+        onPublish={publishPublicGovernanceDraft}
+        onDiscard={() => {
+          setGovernanceState(discardGovernanceDraft(governanceState));
+          setGovernancePreviewSnapshot(null);
+          setGovernanceIssues([]);
+        }}
+        onBack={backToDashboard}
+      />}
       {page === "dashboard" && (
         <PortfolioDashboardView
           attention={dashboardAttention}

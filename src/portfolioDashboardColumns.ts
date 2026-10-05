@@ -1,6 +1,7 @@
 import { toMilestoneDefinitionId, type MilestoneDefinitionId } from "./domain/shared/ids";
 import type { EffectiveMilestoneGovernanceContext } from "./application/governance/effectiveMilestoneGovernanceContext";
 import { stageGroupCatalog } from "./config/v2/referenceData";
+import { orderMilestoneDefinitions } from "./application/milestoneDefinitionOrdering";
 
 export type PortfolioColumnDomain = "project" | "schedule" | "team";
 export interface PortfolioScheduleColumnMapping {
@@ -152,11 +153,15 @@ function newDefinitionColumnKey(definitionId: MilestoneDefinitionId): PortfolioS
 export function createPortfolioVisibleSchema(
   context: EffectiveMilestoneGovernanceContext,
 ): PortfolioVisibleSchema {
-  const scheduleMappings = context.portfolioColumnDefinitions.map((definition): PortfolioScheduleColumnMapping => {
+  const scheduleMappings = orderMilestoneDefinitions(context.portfolioColumnDefinitions).map((definition): PortfolioScheduleColumnMapping => {
     const presentation = portfolioScheduleColumnMappings.find(entry => entry.milestoneDefinitionId === definition.id);
     if (presentation) return { ...presentation, label: definition.name };
     const stage = stageGroupCatalog.find(candidate => candidate.id === definition.stageGroupId)!;
-    return { key: newDefinitionColumnKey(definition.id), groupKey: stage.id, groupLabel: stage.displayName,
+    // Reuse the bundled presentation group for this exact Stage ID, even when
+    // its bundled columns are absent from the current release.
+    const stagePresentation = portfolioScheduleColumnMappings.find(mapping =>
+      context.definitionsForHistoricalResolution.find(item => item.id === mapping.milestoneDefinitionId)?.stageGroupId === stage.id);
+    return { key: newDefinitionColumnKey(definition.id), groupKey: stagePresentation?.groupKey ?? stage.id, groupLabel: stagePresentation?.groupLabel ?? stage.displayName,
       label: definition.name, milestoneDefinitionId: definition.id, portfolioVisible: true, valueMode: "planActual" };
   });
   const scheduleGroups = scheduleColumnGroups(scheduleMappings);

@@ -57,13 +57,14 @@ describe("PortfolioDashboardTable", () => {
     const cells = scheduleCells();
     expect(cells).toHaveLength(4);
     for (const [index, cell] of cells.entries()) {
-      expect(cell).toHaveTextContent(`P: 2026/10/0${index + 1}`);
-      expect(cell).toHaveTextContent(`A: 2026/11/0${index + 1}`);
-      expect(cell.querySelector('[data-milestone-id]')).toHaveAttribute("data-milestone-id", `identity-row-${index}`);
+      const sourceIndex = [3, 2, 1, 0][index];
+      expect(cell).toHaveTextContent(`P: 2026/10/0${sourceIndex + 1}`);
+      expect(cell).toHaveTextContent(`A: 2026/11/0${sourceIndex + 1}`);
+      expect(cell.querySelector('[data-milestone-id]')).toHaveAttribute("data-milestone-id", `identity-row-${sourceIndex}`);
     }
     expect(cells.map(cell => cell.dataset.columnKey)).toEqual([
-      "schedule:design:kickoff", "schedule:definition:design:kickoff",
-      "schedule:definition:definition:design:kickoff", "schedule:definition:definition:definition:design:kickoff",
+      "schedule:definition:definition:definition:design:kickoff", "schedule:definition:definition:design:kickoff",
+      "schedule:definition:design:kickoff", "schedule:design:kickoff",
     ]);
     const widthFor = (label: string) => {
       const table = screen.getByRole("table", { name: "Projects" });
@@ -98,10 +99,12 @@ describe("PortfolioDashboardTable", () => {
     const table = screen.getByRole("table", { name: "Projects" });
     expect(table.querySelectorAll("thead tr")).toHaveLength(3);
     expect(table.querySelector("thead")).toHaveClass("sticky", "top-0");
-    expect(table.querySelectorAll("col")[41]).toHaveStyle({ width: "118px" });
+    const dynamicColumnIndex = [...table.querySelectorAll("thead tr:last-child th")].indexOf(screen.getByRole("button", { name: "Resize Dynamic readiness column" }).closest("th")!);
+    expect(dynamicColumnIndex).toBe(11);
+    expect(table.querySelectorAll("col")[dynamicColumnIndex]).toHaveStyle({ width: "118px" });
     expect(table.querySelectorAll("thead tr")[0].children[1]).toHaveAttribute("colspan", "31");
     fireEvent.keyDown(screen.getByRole("button", { name: "Resize Dynamic readiness column" }), { key: "ArrowRight" });
-    expect(table.querySelectorAll("col")[41]).toHaveStyle({ width: "128px" });
+    expect(table.querySelectorAll("col")[dynamicColumnIndex]).toHaveStyle({ width: "128px" });
     const viewport = screen.getByTestId("portfolio-table-scroll");
     const proxy = screen.getByTestId("portfolio-bottom-scroll");
     expect(viewport).toHaveClass("max-h-[70vh]", "overflow-auto", "max-w-full");

@@ -1,4 +1,5 @@
 import React from "react";
+import { orderMilestoneDefinitions } from "./application/milestoneDefinitionOrdering";
 
 import type { UpdateScheduleWorkingDraftMilestoneInput } from "./application/commands/canonicalScheduleCommands";
 import type {
@@ -158,7 +159,7 @@ function ScheduleWorkspaceContent({
     ? new Set(draftRead.draft.milestones.map(({ milestoneDefinitionId }) =>
       milestoneDefinitionId))
     : new Set<MilestoneDefinitionId>();
-  const addableMilestoneDefinitions = milestoneDefinitions.filter(
+  const addableMilestoneDefinitions = orderMilestoneDefinitions(milestoneDefinitions).filter(
     ({ id }) => !representedDefinitionIds.has(id),
   );
   const selectedDefinitionIsAddable = definitionId !== "" &&

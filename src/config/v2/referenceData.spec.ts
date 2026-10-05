@@ -190,7 +190,7 @@ describe("authoritative V2 reference data", () => {
         "ME Portion",
         "Thermal",
         "A1-stage",
-        "A/A2-stage",
+        "A2-stage",
         "C1-stage",
         "C2-stage",
         "RAMP-stage",

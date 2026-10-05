@@ -12,16 +12,37 @@ const { columns: portfolioColumns, domainGroups: portfolioDomainGroups, subgroup
 const portfolioScheduleColumnGroups = portfolioSubgroups.filter(group => group.domain === "schedule").map(group => ({ ...group, columns: portfolioColumns.filter(column => column.subgroup === group.key) }));
 
 describe("Portfolio visual schema", () => {
+  it("ordering_uses_stage_catalog_not_encounter_order_and_tie_is_deterministic_by_stable_id", () => {
+    const initial = initialGovernanceContext();
+    const c1 = initial.addablePublicDefinitions.find(d => d.id === "milestone-c1-close")!;
+    const additions = ["runtime-z", "runtime-a"].map(id => ({ ...c1, id: toMilestoneDefinitionId(id), name: "Same label", displayOrder: 9999 }));
+    const context = publishPortfolioDefinitionsForTest(additions, ["milestone-mdrr", ...additions.map(d => d.id), "milestone-c1-close", "milestone-design-kickoff"].map(toMilestoneDefinitionId));
+    const before = structuredClone(context.portfolioColumnDefinitions);
+    expect(createPortfolioVisibleSchema(context).scheduleMappings.map(d => d.milestoneDefinitionId)).toEqual(["milestone-design-kickoff", "milestone-c1-close", "runtime-a", "runtime-z", "milestone-mdrr"]);
+    expect(context.portfolioColumnDefinitions).toEqual(before);
+  });
+  it("canonical_ordering_groups_runtime_c1_definition_with_c1_without_a_second_group_after_mdrr", () => {
+    const initial = initialGovernanceContext();
+    const c1 = initial.addablePublicDefinitions.find(definition => definition.id === "milestone-c1-close")!;
+    const added = { ...c1, id: toMilestoneDefinitionId("runtime-c1"), name: "Runtime C1 gate", displayOrder: 9999 };
+    const context = publishPortfolioDefinitionsForTest([added], [...initial.portfolioColumnDefinitions.map(d => d.id), added.id]);
+    const schema = createPortfolioVisibleSchema(context);
+    const ids = schema.scheduleMappings.map(d => d.milestoneDefinitionId);
+    expect(ids.slice(ids.indexOf(c1.id), ids.indexOf(c1.id) + 3)).toEqual(["milestone-c1-close", "runtime-c1", "milestone-c2-c-g-o"]);
+    expect(schema.subgroups.filter(group => group.label === "C1-stage")).toEqual([{ key: "c1-stage", label: "C1-stage", domain: "schedule", colSpan: 7 }]);
+    expect(ids.at(-1)).toBe("milestone-mdrr");
+    expect(createPortfolioVisibleSchema({ ...context, portfolioColumnDefinitions: [...context.portfolioColumnDefinitions].reverse() }).scheduleMappings).toEqual(schema.scheduleMappings);
+  });
   it("escapes published ID collisions against the full legacy registry and keeps prefix-shaped IDs distinct", () => {
     const legacy = initialGovernanceContext().definitionsForHistoricalResolution.find(definition => definition.id === "milestone-design-kickoff")!;
     const additions = ["design:kickoff", "definition:design:kickoff", "definition:definition:design:kickoff", "ordinary-extra"].map((id, index) => ({ ...legacy, id: toMilestoneDefinitionId(id), name: `Separate kickoff ${index + 1}` }));
     const context = publishPortfolioDefinitionsForTest(additions, [legacy.id, ...additions.map(definition => definition.id)]);
     const schema = createPortfolioVisibleSchema(context);
     expect(schema.scheduleMappings.map(mapping => [mapping.milestoneDefinitionId, mapping.key])).toEqual([
-      ["milestone-design-kickoff", "schedule:design:kickoff"],
-      ["design:kickoff", "schedule:definition:design:kickoff"],
-      ["definition:design:kickoff", "schedule:definition:definition:design:kickoff"],
       ["definition:definition:design:kickoff", "schedule:definition:definition:definition:design:kickoff"],
+      ["definition:design:kickoff", "schedule:definition:definition:design:kickoff"],
+      ["design:kickoff", "schedule:definition:design:kickoff"],
+      ["milestone-design-kickoff", "schedule:design:kickoff"],
       ["ordinary-extra", "schedule:ordinary-extra"],
     ]);
     expect(new Set(schema.scheduleMappings.map(mapping => mapping.key)).size).toBe(5);

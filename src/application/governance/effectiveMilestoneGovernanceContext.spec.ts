@@ -80,12 +80,12 @@ describe("effective governance context", () => {
     ]) expect(selectEffectiveMilestoneGovernanceContext({ ...baseline, releases: [invalid] })).toMatchObject({ ok: false, code: "invalid-release-reference" });
     expect(selectEffectiveMilestoneGovernanceContext({ ...baseline, releases: [release, release] })).toMatchObject({ ok: false, code: "invalid-release-reference" });
   });
-  it("preserves release order across interleaved stages and keeps keys independent of labels", () => {
+  it("groups interleaved released stages canonically and keeps keys independent of labels", () => {
     const initial = value(selectEffectiveMilestoneGovernanceContext(baseline));
     const context = { ...initial, portfolioColumnDefinitions: [release.definitions[0], testDefinition, release.definitions[1], extra] };
     const schema = createPortfolioVisibleSchema(context);
     expect(schema.columns.filter(column => column.domain === "schedule").map(column => column.key)).toEqual([
-      "schedule:design:kickoff", "schedule:a1-stage:a-test", "schedule:design:id-fix", "schedule:released-extra-test",
+      "schedule:design:kickoff", "schedule:design:id-fix", "schedule:a1-stage:a-test", "schedule:released-extra-test",
     ]);
     const renamedPresentation = createPortfolioVisibleSchema({ ...context, portfolioColumnDefinitions: [{ ...extra, name: "Display-only alternate label" }] });
     expect(renamedPresentation.scheduleMappings[0].key).toBe("schedule:released-extra-test");
@@ -109,7 +109,7 @@ describe("effective governance context", () => {
     const context = value(selectEffectiveMilestoneGovernanceContext(next));
     expect(context.addablePublicDefinitions.map(d => d.id)).toContain(extra.id);
     const schema = createPortfolioVisibleSchema(context);
-    expect(schema.scheduleMappings.map(m => [m.key, m.label])).toEqual([["schedule:released-extra-test", "Release readiness"], ["schedule:a1-stage:a-test", "A1 Test"]]);
+    expect(schema.scheduleMappings.map(m => [m.key, m.label])).toEqual([["schedule:a1-stage:a-test", "A1 Test"], ["schedule:released-extra-test", "Release readiness"]]);
     const rows = selectPortfolioDashboardRows(prototype, catalogs, context);
     expect(rows[0].schedule).toMatchObject({ kind: "published", milestoneCount: 1, cells: [{ milestoneDefinitionId: extra.id, occurrences: [] }, { milestoneDefinitionId: testDefinition.id, occurrences: [{ milestoneId: "existing-test" }] }] });
     expect(selectDashboardAttention(prototype, referenceDate, context)).toMatchObject({ kind: "available", due: { projectCount: 1, matches: [{ milestoneDefinitionId: testDefinition.id, milestoneName: "A1 Test" }] } });

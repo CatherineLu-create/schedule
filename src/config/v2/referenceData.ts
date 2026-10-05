@@ -223,7 +223,7 @@ export const stageGroupCatalog: readonly CatalogItem<StageGroupId>[] = [
   },
   {
     id: stageGroupIds.aA2,
-    displayName: "A/A2-stage",
+    displayName: "A2-stage",
     aliases: [],
     active: true,
     reviewStatus: "reviewed",

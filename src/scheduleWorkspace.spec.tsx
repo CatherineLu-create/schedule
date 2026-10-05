@@ -13,10 +13,15 @@ import {
 import type { CanonicalPublishedScheduleVersion } from "./domain/schedule/officialSchedule";
 import { toScheduleVersionNumber } from "./domain/schedule/schedule";
 import { parseDateOnly, type DateOnly } from "./domain/shared/dateOnly";
-import { toCanonicalScheduleWorkingDraftId, toMilestoneDefinitionId, toMilestoneId, toProjectId } from "./domain/shared/ids";
+import { toCanonicalScheduleWorkingDraftId, toMilestoneDefinitionId, toMilestoneId, toProjectId, toStageGroupId } from "./domain/shared/ids";
 import type { ValidationIssue } from "./domain/validation/validationIssue";
 import { ScheduleWorkspace, type ScheduleWorkspaceProps } from "./scheduleWorkspace";
-import { initialGovernanceContext } from "./test/governanceTestUtils";
+import { initialGovernanceContext, publishedRetirementFixture, publishPortfolioDefinitionsForTest } from "./test/governanceTestUtils";
+import { selectEffectiveMilestoneGovernanceContext } from "./application/governance/effectiveMilestoneGovernanceContext";
+import { createPortfolioVisibleSchema } from "./portfolioDashboardColumns";
+import { selectScheduleWorkingDraft } from "./application/selectors/scheduleSelectors";
+import { createEmptyCanonicalProjectSchedule } from "./domain/schedule/officialSchedule";
+import { devProject001 } from "./fixtures/v2/canonicalProjectFixtures";
 
 const onAddMilestone = vi.fn<ScheduleWorkspaceProps["onAddMilestone"]>();
 const onCancelDraft = vi.fn<ScheduleWorkspaceProps["onCancelDraft"]>();
@@ -93,6 +98,44 @@ const publishedVersion: CanonicalPublishedScheduleVersion = {
 };
 
 describe("Schedule Workspace presentation", () => {
+  it("schedule_and_portfolio_resolve_A2_display_through_shared_catalog_with_canonical_identity", () => {
+    const initial = initialGovernanceContext();
+    const added = { ...initial.addablePublicDefinitions[0], id: toMilestoneDefinitionId("runtime-a2-display"), name: "A2 human milestone", stageGroupId: toStageGroupId("stage-a-a2"), displayOrder: 10 };
+    const context = publishPortfolioDefinitionsForTest([added], [added.id]);
+    const state = { projects: [devProject001], schedules: [{ ...createEmptyCanonicalProjectSchedule(devProject001.id), workingDraft: { ...draft, milestones: [{ ...draft.milestones[0], milestoneDefinitionId: added.id }] } }] };
+    const draftRead = selectScheduleWorkingDraft(state, devProject001.id, context);
+    render(<ScheduleWorkspace {...workingDraftProps} projectId={devProject001.id} draftRead={draftRead} milestoneDefinitions={context.addablePublicDefinitions} />);
+    expect(screen.getByRole("cell", { name: "A2-stage" })).toBeVisible();
+    expect(screen.queryByText("A/A2-stage")).not.toBeInTheDocument();
+    const schema = createPortfolioVisibleSchema(context);
+    expect(schema.scheduleMappings[0]).toMatchObject({ groupLabel: "A2-stage", milestoneDefinitionId: "runtime-a2-display" });
+    expect(context.addablePublicDefinitions.find(item => item.id === added.id)?.stageGroupId).toBe("stage-a-a2");
+  });
+  it("schedule_select_places_runtime_c1_definition_after_existing_c1_items_before_c2_and_keeps_draft_exclusion", () => {
+    const initial = initialGovernanceContext();
+    const c1 = initial.addablePublicDefinitions.find(definition => definition.id === "milestone-c1-close")!;
+    const added = { ...c1, id: toMilestoneDefinitionId("runtime-c1"), name: "Runtime C1 gate", displayOrder: 9999 };
+    const context = publishPortfolioDefinitionsForTest([added], [...initial.portfolioColumnDefinitions.map(d => d.id), added.id]);
+    render(<ScheduleWorkspace {...workingDraftProps} milestoneDefinitions={[...context.addablePublicDefinitions].reverse()} />);
+    const options = within(screen.getByLabelText("Milestone definition")).getAllByRole("option").map(option => (option as HTMLOptionElement).value);
+    const position = options.indexOf("milestone-c1-close");
+    expect(options.slice(position, position + 3)).toEqual(["milestone-c1-close", "runtime-c1", "milestone-c2-c-g-o"]);
+    expect(options.filter(Boolean)).toEqual(createPortfolioVisibleSchema(context).scheduleMappings.map(mapping => mapping.milestoneDefinitionId).filter(id => id !== "milestone-design-kickoff"));
+    expect(options).not.toContain("milestone-design-kickoff");
+    for (const definition of compatibilityOnlyMilestoneDefinitions) expect(options).not.toContain(definition.id);
+  });
+  it("retired_compatibility_add_exclusion_still_works_after_sort", () => {
+    const fixture = publishedRetirementFixture();
+    const selected = selectEffectiveMilestoneGovernanceContext(fixture.state);
+    if (!selected.ok) throw new Error(JSON.stringify(selected));
+    render(<ScheduleWorkspace {...workingDraftProps}
+      draftRead={{ kind: "workingDraft", draft: { ...draft, milestones: [] }, milestoneRows: [] }}
+      milestoneDefinitions={[...selected.value.addablePublicDefinitions].reverse()} />);
+    const options = within(screen.getByLabelText("Milestone definition")).getAllByRole("option").map(option => (option as HTMLOptionElement).value);
+    expect(options).not.toContain(fixture.grant.milestoneDefinitionId);
+    expect(options[1]).toBe("milestone-design-id-fix");
+    for (const definition of compatibilityOnlyMilestoneDefinitions) expect(options).not.toContain(definition.id);
+  });
   it.each([
     ["unavailable", {
       kind: "unavailable",
