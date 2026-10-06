@@ -128,10 +128,15 @@ export function PortfolioDashboardView({ attention, rows, schema, followUpGroups
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
         {attentionCards.map((card) => <div key={card.title} role="group" aria-label={card.title} className={`rounded-lg border p-4 ${card.tone}`}>
           <h3 className="text-sm font-medium">{card.title}</h3>
-          <div className="mt-2 text-2xl font-semibold">{card.value}</div>
-          <p className="mt-1 text-xs">{card.supporting}</p>
-          {card.projects.length > 0 && <div className="mt-3 space-y-3 border-t border-current/15 pt-3">
-            {card.projects.map((project) => <div key={project.projectId}>
+          {card.title === "Blocking Issues" ? <>
+            <div className="mt-2 text-2xl font-semibold">{card.value}</div>
+            <p className="mt-1 text-xs">{card.supporting}</p>
+          </> : <div className="mt-2 text-xs">
+            <span className="text-xl font-semibold">{card.value}</span>
+            {" · "}<span>{card.supporting}</span>
+          </div>}
+          {card.projects.length > 0 && <div className="mt-3 space-y-1 border-t border-current/15 pt-3">
+            {card.projects.map((project) => <div key={project.projectId} className="whitespace-normal break-words text-xs leading-relaxed">
               <button
                 type="button"
                 aria-label={`Open Project ${project.projectName}`}
@@ -140,11 +145,11 @@ export function PortfolioDashboardView({ attention, rows, schema, followUpGroups
               >
                 {project.projectName}
               </button>
-              <ul className="mt-1 space-y-0.5 text-xs">
-                {project.milestones.map((milestone) => <li key={milestone.milestoneId}>
-                  {milestone.definitionLabel} · {milestone.planLabel}
-                </li>)}
-              </ul>
+              {" — "}
+              {project.milestones.map((milestone, index) => <React.Fragment key={milestone.milestoneId}>
+                {index > 0 && " ｜ "}
+                <span>{milestone.definitionLabel} · {milestone.planLabel}</span>
+              </React.Fragment>)}
             </div>)}
           </div>}
         </div>)}

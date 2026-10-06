@@ -4,12 +4,12 @@ import { createPortfolioVisibleSchema } from "./portfolioDashboardColumns";
 import React from "react";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DashboardAttentionRead } from "./application/selectors/dashboardAttention";
+import { selectDashboardAttention, type DashboardAttentionRead } from "./application/selectors/dashboardAttention";
 import { selectPortfolioDashboardRows } from "./application/selectors/portfolioDashboardRows";
 import { canonicalProjectFixtures } from "./fixtures/v2/canonicalProjectFixtures";
 import { canonicalScheduleFixtures } from "./fixtures/v2/canonicalScheduleFixtures";
 import { parseDateOnly, type DateOnly } from "./domain/shared/dateOnly";
-import { toMilestoneDefinitionId, toMilestoneId } from "./domain/shared/ids";
+import { toMilestoneDefinitionId, toMilestoneId, toProjectId } from "./domain/shared/ids";
 import { PortfolioDashboardView } from "./portfolioDashboardView";
 
 afterEach(cleanup);
@@ -88,6 +88,87 @@ function select(label: string, value: string) {
 }
 
 describe("Portfolio Dashboard shell", () => {
+  it.each([
+    ["Upcoming Milestones", "2", "Next 14 days · unique projects"],
+    ["Overdue", "1", "Past due · unique projects"],
+  ])("keeps %s count and supporting text in one compact inline summary", (title, count, supporting) => {
+    setup(detailedAttention);
+    const card = within(screen.getByRole("group", { name: title }));
+    const value = card.getByText(count);
+    const summary = value.parentElement!;
+    expect(summary).toContainElement(card.getByText(supporting));
+    expect(summary).toHaveTextContent(`${count} · ${supporting}`);
+    expect(value.tagName).toBe("SPAN");
+    expect(card.getByText(supporting).tagName).toBe("SPAN");
+  });
+
+  it.each(["Upcoming Milestones", "Overdue"])("renders %s as one wrapping Project row with all concrete milestone dates inline", (title) => {
+    if (detailedAttention.kind !== "available") throw new Error("Expected available fixture");
+    // The view must present the selector's matches, not apply its own date/category rules.
+    const callbacks = setup({ ...detailedAttention, overdue: detailedAttention.due });
+    const card = screen.getByRole("group", { name: title });
+    const project = within(card).getByRole("button", { name: "Open Project Manta" });
+    const row = project.parentElement!;
+    expect(row).toHaveTextContent("Manta — A1 G/O · 2026/09/28 ｜ MDRR · 2026/10/03 ｜ C1 G/O · 2026/10/04");
+    expect(within(row).getAllByText("Manta", { exact: true })).toHaveLength(1);
+    expect(within(row).queryByRole("list")).not.toBeInTheDocument();
+    expect(row).toHaveClass("whitespace-normal", "break-words");
+    for (const label of ["A1 G/O · 2026/09/28", "MDRR · 2026/10/03", "C1 G/O · 2026/10/04"]) {
+      const item = within(row).getByText(label);
+      expect(item).toBeVisible();
+      expect(item.tagName).toBe("SPAN");
+    }
+    const single = within(card).getByRole("button", { name: "Open Project Nautilus" }).parentElement!;
+    expect(single).toHaveTextContent("Nautilus — C1 Close · 2026/09/30");
+    fireEvent.click(project);
+    expect(callbacks.onOpenProject).toHaveBeenCalledExactlyOnceWith(rows[0].projectId);
+  });
+
+  it("shows every qualifying Project without Top N, Show more, clipping or an internal card scrollbar", () => {
+    const manyRows = Array.from({ length: 12 }, (_, index) => ({
+      ...rows[0], projectId: toProjectId(`compact-project-${index}`),
+      project: { ...rows[0].project, projectName: `Compact Project ${index + 1}` },
+    }));
+    const group = {
+      projectIds: manyRows.map(row => row.projectId), projectCount: 12,
+      matches: manyRows.map(row => ({
+        projectId: row.projectId, milestoneId: toMilestoneId(`${row.projectId}-go`),
+        milestoneDefinitionId: toMilestoneDefinitionId("milestone-a1-a-g-o"),
+        milestoneName: "A1 G/O", plan: referenceDate,
+      })),
+    };
+    render(<PortfolioDashboardView schema={createPortfolioVisibleSchema(initialGovernanceContext())}
+      attention={{ kind: "available", referenceDate, due: group, overdue: group }} rows={manyRows}
+      onCreateProject={() => {}} onExport={() => {}} onOpenProject={() => {}} />);
+    for (const title of ["Upcoming Milestones", "Overdue"]) {
+      const card = screen.getByRole("group", { name: title });
+      expect(within(card).getAllByRole("button", { name: /^Open Project Compact Project / })).toHaveLength(12);
+      expect(within(card).getAllByText("A1 G/O · 2026/09/23")).toHaveLength(12);
+      expect(within(card).queryByText(/show more|top \d+/i)).not.toBeInTheDocument();
+      for (const element of [card, ...card.querySelectorAll<HTMLElement>("*")]) {
+        expect(element.className).not.toMatch(/(?:^|\s)(?:\S*:)?(?:max-h-|h-\d|overflow-(?:[xy]-)?(?:auto|scroll|hidden)|truncate|line-clamp-|whitespace-nowrap)/);
+        expect(element.style.maxHeight).toBe("");
+        expect(element.style.height).toBe("");
+      }
+    }
+  });
+
+  it("renders the real selector's exact SSL/GL presentation rather than stored FCS", () => {
+    const original = canonicalScheduleFixtures[0];
+    const attention = selectDashboardAttention({
+      projects: [canonicalProjectFixtures[0]],
+      schedules: [{ ...original, publishedVersions: [{ ...original.publishedVersions[0], milestones: [{
+        milestoneId: toMilestoneId("compact-sslgl"),
+        milestoneDefinitionId: toMilestoneDefinitionId("milestone-ramp-fcs"),
+        applicability: "applicable", plan: referenceDate, actual: null,
+      }] }] }],
+    }, referenceDate, initialGovernanceContext());
+    setup(attention);
+    const card = within(screen.getByRole("group", { name: "Upcoming Milestones" }));
+    expect(card.getByText("SSL/GL · 2026/09/23")).toBeVisible();
+    expect(card.queryByText(/FCS/)).not.toBeInTheDocument();
+  });
+
   it("presents the exact resolved local Attention name without a global catalog lookup", () => {
     setup({ ...zeroAttention, kind: "available", due: {
       projectIds: [rows[0].projectId], projectCount: 1,
