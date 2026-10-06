@@ -1,4 +1,4 @@
-import { milestoneTypeCatalog, stageGroupCatalog } from "../../config/v2/referenceData";
+import { validateClassificationCatalogs } from "../../domain/governance/classificationCatalogs";
 import {
   validateMilestoneGovernanceReleaseContinuity,
   type CommandResult,
@@ -45,6 +45,11 @@ function validId(id: string): boolean {
 /** Copy nested aliases too: no published value may retain a caller-owned array. */
 function copyCandidate(candidate: Candidate): Candidate {
   return {
+    stageGroups: candidate.stageGroups.map(item => ({ ...item, aliases: [...item.aliases] })),
+    milestoneTypes: candidate.milestoneTypes.map(item => ({ ...item, aliases: [...item.aliases] })),
+    selectableStageGroupIds: [...candidate.selectableStageGroupIds],
+    selectableMilestoneTypeIds: [...candidate.selectableMilestoneTypeIds],
+    automaticAttentionTypeIds: [...candidate.automaticAttentionTypeIds],
     definitions: candidate.definitions.map(d => ({ ...d, aliases: [...d.aliases] })),
     addableDefinitionIds: [...candidate.addableDefinitionIds],
     portfolioColumnDefinitionIds: [...candidate.portfolioColumnDefinitionIds],
@@ -54,6 +59,13 @@ function copyCandidate(candidate: Candidate): Candidate {
 }
 
 function freezeRelease(release: MilestoneGovernanceRelease): MilestoneGovernanceRelease {
+  for (const catalog of [release.stageGroups, release.milestoneTypes]) {
+    for (const item of catalog) { Object.freeze(item.aliases); Object.freeze(item); }
+    Object.freeze(catalog);
+  }
+  Object.freeze(release.selectableStageGroupIds);
+  Object.freeze(release.selectableMilestoneTypeIds);
+  Object.freeze(release.automaticAttentionTypeIds);
   for (const definition of release.definitions) {
     Object.freeze(definition.aliases);
     Object.freeze(definition);
@@ -71,6 +83,8 @@ export function startGovernanceDraft(state: State, draftId: GovernanceDraftId): 
   if (!validId(draftId)) return failure("invalid-reference", "The governance draft ID must not be blank.");
   const current = state.releases.find(r => r.id === state.currentReleaseId);
   if (!current) return failure("invalid-reference", "The current governance release must exist.");
+  const classificationIssues = validateClassificationCatalogs(current);
+  if (classificationIssues.length) return { ok: false, code: "invalid-reference", issues: classificationIssues };
   return { ok: true, value: { ...state, draft: {
     id: draftId,
     baseReleaseId: current.id,
@@ -84,9 +98,36 @@ export function updateGovernanceDraft(state: State, update: GovernanceDraftUpdat
   const draft = state.draft;
   if (!draft) return failure("no-draft", "Start a governance draft before editing.");
   if (draft.baseReleaseId !== state.currentReleaseId) return failure("stale-base-release", "The governance draft base release has changed.");
+  const replaceClassification = (candidateRelease: Candidate): Result => {
+    const current = state.releases.find(release => release.id === state.currentReleaseId);
+    if (!current) return failure("invalid-reference", "The current governance release must exist.");
+    const issues = validateClassificationCatalogs(candidateRelease, current);
+    if (issues.length) return { ok: false, code: issues[0].code as GovernanceCommandFailureCode, issues };
+    return { ok: true, value: { ...state, draft: { ...draft, candidateRelease: copyCandidate(candidateRelease) } } };
+  };
   switch (update.kind) {
     case "replace-candidate-release":
-      return { ok: true, value: { ...state, draft: { ...draft, candidateRelease: copyCandidate(update.candidateRelease) } } };
+      return replaceClassification(update.candidateRelease);
+    case "add-stage":
+    case "add-type": {
+      if (!validId(update.id) || typeof update.displayName !== "string" || !update.displayName.trim()) return failure("invalid-reference", "A classification requires a nonblank ID and label.");
+      const candidate = draft.candidateRelease;
+      const item = { id: update.id, displayName: update.displayName.trim(), active: true, reviewStatus: "reviewed" as const, aliases: [] };
+      return update.kind === "add-stage"
+        ? replaceClassification({ ...candidate, stageGroups: [...candidate.stageGroups, { ...item, id: update.id }], selectableStageGroupIds: [...candidate.selectableStageGroupIds, update.id] })
+        : replaceClassification({ ...candidate, milestoneTypes: [...candidate.milestoneTypes, { ...item, id: update.id }], selectableMilestoneTypeIds: [...candidate.selectableMilestoneTypeIds, update.id] });
+    }
+    case "retire-stage": {
+      const candidate = draft.candidateRelease;
+      if (!candidate.selectableStageGroupIds.includes(update.id)) return failure("invalid-reference", "Only a selectable Stage can be retired.");
+      return replaceClassification({ ...candidate, stageGroups: candidate.stageGroups.map(item => item.id === update.id ? { ...item, active: false } : item), selectableStageGroupIds: candidate.selectableStageGroupIds.filter(id => id !== update.id) });
+    }
+    case "retire-type": {
+      const candidate = draft.candidateRelease;
+      if (candidate.automaticAttentionTypeIds.includes(update.id)) return failure("protected-classification", "System automatic Types cannot be retired.");
+      if (!candidate.selectableMilestoneTypeIds.includes(update.id)) return failure("invalid-reference", "Only a selectable ordinary Type can be retired.");
+      return replaceClassification({ ...candidate, milestoneTypes: candidate.milestoneTypes.map(item => item.id === update.id ? { ...item, active: false } : item), selectableMilestoneTypeIds: candidate.selectableMilestoneTypeIds.filter(id => id !== update.id) });
+    }
     case "replace-existing-project-assignments":
       return { ok: true, value: { ...state, draft: { ...draft, existingProjectAssignments: update.assignments.map(a => ({ ...a })) } } };
     case "replace-withdrawals":
@@ -101,6 +142,10 @@ export function discardGovernanceDraft(state: State): State {
 function diffRelease(previous: MilestoneGovernanceRelease, candidate: Candidate): GovernancePublishDiff {
   const oldDefinitions = new Map(previous.definitions.map(d => [d.id, d]));
   return {
+    addedStageGroupIds: candidate.stageGroups.filter(item => !previous.stageGroups.some(old => old.id === item.id)).map(item => item.id),
+    retiredStageGroupIds: previous.selectableStageGroupIds.filter(id => !candidate.selectableStageGroupIds.includes(id)),
+    addedMilestoneTypeIds: candidate.milestoneTypes.filter(item => !previous.milestoneTypes.some(old => old.id === item.id)).map(item => item.id),
+    retiredMilestoneTypeIds: previous.selectableMilestoneTypeIds.filter(id => !candidate.selectableMilestoneTypeIds.includes(id)),
     addedDefinitionIds: candidate.definitions.filter(d => !oldDefinitions.has(d.id)).map(d => d.id),
     changedDefinitionIds: candidate.definitions.filter(d => {
       const old = oldDefinitions.get(d.id);
@@ -135,7 +180,8 @@ function buildGovernancePublishTransition(state: State, prototype: PrototypeStat
   const draft = state.draft;
   const currentIndex = state.releases.findIndex(r => r.id === state.currentReleaseId);
   const current = state.releases[currentIndex];
-  const candidate = draft ? copyCandidate(draft.candidateRelease) : null;
+  const classificationIssues = draft ? validateClassificationCatalogs(draft.candidateRelease, current) : [];
+  const candidate = draft && classificationIssues.length === 0 ? copyCandidate(draft.candidateRelease) : null;
   const preview: GovernancePublishPreview = {
     candidateRelease: candidate,
     diff: current && candidate ? diffRelease(current, candidate) : null,
@@ -145,6 +191,10 @@ function buildGovernancePublishTransition(state: State, prototype: PrototypeStat
     blockingIssues,
     warnings,
   };
+  if (classificationIssues.length) {
+    blockingIssues.push(...classificationIssues);
+    return { preview, failureCode: classificationIssues[0].code as GovernanceCommandFailureCode };
+  }
   if (!draft || !candidate) {
     block("no-draft", "Start a governance draft before publishing.", "draft");
     return { preview, failureCode };
@@ -170,22 +220,38 @@ function buildGovernancePublishTransition(state: State, prototype: PrototypeStat
   const definitions = new Map(candidate.definitions.map(d => [d.id, d]));
   const localDefinitionIds = new Set(prototype.schedules.flatMap(schedule =>
     schedule.localDefinitions.map(definition => definition.id)));
-  const stages = new Set(stageGroupCatalog.map(s => s.id));
-  const types = new Set(milestoneTypeCatalog.map(t => t.id));
+  const stages = new Set(candidate.stageGroups.map(s => s.id));
+  const types = new Set(candidate.milestoneTypes.map(t => t.id));
+  const historicalDefinitionIds = new Set(state.releases.flatMap(release => release.definitions.map(definition => definition.id)));
   for (const definition of candidate.definitions) {
     if (localDefinitionIds.has(definition.id)) {
       block("duplicate-id", "A public definition ID must not be used by any Project-local definition.", "definitions", definition.id);
     }
-    if (!stages.has(definition.stageGroupId) || !types.has(definition.milestoneTypeId)) {
-      block("invalid-reference", "Definitions must use an existing Stage and Type.", "definitions", definition.id);
+    if (!stages.has(definition.stageGroupId) || (definition.milestoneTypeId !== null && !types.has(definition.milestoneTypeId))) {
+      block("invalid-reference", "Definitions must use a resolvable Stage and an optional resolvable Type.", "definitions", definition.id);
+    } else if (!historicalDefinitionIds.has(definition.id) && (!candidate.selectableStageGroupIds.includes(definition.stageGroupId)
+      || (definition.milestoneTypeId !== null && !candidate.selectableMilestoneTypeIds.includes(definition.milestoneTypeId)))) {
+      block("invalid-reference", "New definitions require a selectable Stage and an optional selectable Type.", "definitions", definition.id);
     }
   }
   // Validate against every published identity, including older authoritative records.
   const candidateForContinuity = { ...candidate, id: current.id, publishedAt: current.publishedAt };
   for (const release of state.releases) {
+    const classifications = validateClassificationCatalogs(candidate, release);
+    if (classifications.length) failureCode ??= "invalid-reference";
+    blockingIssues.push(...classifications);
     const findings = validateMilestoneGovernanceReleaseContinuity(release, candidateForContinuity);
     if (findings.length) failureCode ??= "invalid-reference";
     blockingIssues.push(...findings);
+  }
+  const dependencies = [...current.definitions, ...prototype.schedules.flatMap(schedule => schedule.localDefinitions)];
+  for (const [ids, field, message] of [
+    [preview.diff!.retiredStageGroupIds, "stageGroupId", "此階段仍被既有里程碑使用；停用後僅停止新定義選用，不會停用既有里程碑。"],
+    [preview.diff!.retiredMilestoneTypeIds, "milestoneTypeId", "此類型仍被既有里程碑使用；停用後僅停止新定義選用，不會停用既有里程碑。"],
+  ] as const) {
+    for (const id of ids) if (dependencies.some(definition => definition[field] === id)) {
+      warnings.push({ ...issue("classification-retained-dependency", message, "classification", id), severity: "advisory" });
+    }
   }
   for (const field of ["addableDefinitionIds", "portfolioColumnDefinitionIds", "additionalAttentionDefinitionIds", "newProjectRequirementDefinitionIds"] as const) {
     uniqueIds(candidate[field], field);

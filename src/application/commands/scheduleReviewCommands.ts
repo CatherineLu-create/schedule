@@ -1,4 +1,3 @@
-import { milestoneTypeCatalog, stageGroupCatalog } from "../../config/v2/referenceData";
 import type { CommandResult } from "../../domain/governance/milestoneGovernance";
 import { getCurrentPublishedVersion, type CanonicalProjectSchedule } from "../../domain/schedule/officialSchedule";
 import { createScheduleImportCandidate, type ConfirmProjectLocalMilestoneDefinitionInput, type ScheduleReviewFailureCode,
@@ -42,10 +41,10 @@ export function confirmProjectLocalMilestoneDefinition(
   if (typeof input.name !== "string" || !input.name.trim()) {
     return failure("invalid-local-classification", "name", "A local milestone definition requires a nonempty name.");
   }
-  if (!stageGroupCatalog.some(stage => stage.id === input.stageGroupId)) {
+  if (!context.selectableStageGroups.some(stage => stage.id === input.stageGroupId)) {
     return failure("invalid-local-classification", "stageGroupId", "Select an existing Stage Group ID.");
   }
-  if (!milestoneTypeCatalog.some(type => type.id === input.milestoneTypeId)) {
+  if (input.milestoneTypeId !== null && !context.selectableMilestoneTypes.some(type => type.id === input.milestoneTypeId)) {
     return failure("invalid-local-classification", "milestoneTypeId", "Select an existing Milestone Type ID.");
   }
   if (input.source !== "manual" && input.source !== "import") {
@@ -86,6 +85,15 @@ function importIssue(code: string, entityId: string, field: string, message: str
 
 function reviewFailure(code: ScheduleReviewFailureCode, entityId: string, field: string, message: string) {
   return { ok: false as const, code, issues: [importIssue(`schedule.import.${code}`, entityId, field, message)] };
+}
+
+function unknownRawTypeFindings(schedule: CanonicalProjectSchedule, candidate: ScheduleImportCandidate, context: CanonicalScheduleCommandContext): readonly ValidationIssue[] {
+  const raw = schedule.evidenceLedger.find(evidence => evidence.id === candidate.evidenceId)?.rawValues.milestoneType;
+  if (!raw || raw.presence === "missing" || !raw.raw.trim()) return [];
+  const text = raw.raw.trim().toLocaleLowerCase();
+  const known = context.governance.milestoneTypesForHistoricalResolution.some(type =>
+    type.id === raw.raw || [type.displayName, ...type.aliases].some(label => label.toLocaleLowerCase() === text));
+  return known ? [] : [importIssue("schedule.import.invalid-local-classification", candidate.id, "milestoneType", "The explicit source Type is unknown. It cannot be treated as No Type.")];
 }
 
 function scheduleDefinitions(schedule: CanonicalProjectSchedule, context: CanonicalScheduleCommandContext) {
@@ -164,7 +172,7 @@ export function loadBuiltInScheduleSimulation(
     const rawValues = Object.freeze({ ...record.rawValues,
       milestoneName: Object.freeze({ presence: "present" as const, raw: definition.name }),
       stage: Object.freeze({ presence: "present" as const, raw: definition.stageGroupId }),
-      milestoneType: Object.freeze({ presence: "present" as const, raw: definition.milestoneTypeId }),
+      milestoneType: Object.freeze(definition.milestoneTypeId === null ? { presence: "missing" as const } : { presence: "present" as const, raw: definition.milestoneTypeId }),
       plan: Object.freeze({ ...record.rawValues.plan }), actual: Object.freeze({ ...record.rawValues.actual }), applicability: Object.freeze({ ...record.rawValues.applicability }),
     });
     const entry: ScheduleEvidenceRecord = Object.freeze({ id: ids.evidenceIds[index], sourceKind: "built-in-simulation",
@@ -220,7 +228,7 @@ export function collectSchedulePublishBlockingFindings(schedule: CanonicalProjec
       issues.push(importIssue("schedule.import.target-not-found", candidate.id, "evidenceId", "Candidate evidence and current session must resolve exactly."));
     }
     if (candidate.status === "pending") {
-      issues.push(importIssue("schedule.import.pending-decision", candidate.id, "status", "This candidate still needs an explicit decision."), ...candidate.rawFindings);
+      issues.push(importIssue("schedule.import.pending-decision", candidate.id, "status", "This candidate still needs an explicit decision."), ...candidate.rawFindings, ...unknownRawTypeFindings(schedule, candidate, context));
     }
   }
   return issues;
@@ -253,6 +261,8 @@ function validateScheduleImportOperation(schedule: CanonicalProjectSchedule, inp
   const reject = (code: ScheduleReviewFailureCode, field: string, message: string): CommandResult<ImportOperation, ScheduleReviewFailureCode> => ({
     ok: true, value: { candidate, session, before, after: null, blockers: reviewFailure(code, candidate.id, field, message).issues, failureCode: code },
   });
+  const classificationFindings = unknownRawTypeFindings(schedule, candidate, context);
+  if (classificationFindings.length) return { ok: true, value: { candidate, session, before, after: null, blockers: classificationFindings, failureCode: "invalid-local-classification" } };
   if (target.kind === "updateExistingOccurrence" && rows.length !== 1) return reject(rows.length ? "duplicate-milestone-id" : "target-not-found", "milestoneId", "Update requires one exact existing occurrence.");
   const definitionId = target.kind === "createPublicOccurrence" ? target.definitionId : target.kind === "createLocalOccurrence" ? target.localDefinitionId : before!.milestoneDefinitionId;
   if ((candidate.sourceDefinitionId !== undefined && candidate.sourceDefinitionId !== definitionId)

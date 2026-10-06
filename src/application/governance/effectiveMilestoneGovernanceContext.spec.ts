@@ -44,6 +44,34 @@ function changedDraft(): MilestoneGovernanceRuntimeState {
 }
 
 describe("effective governance context", () => {
+  it("keeps the exact SSL/GL system membership separate from unpublished and released admin additions", () => {
+    const draft = changedDraft();
+    const initial = value(selectEffectiveMilestoneGovernanceContext(baseline));
+    const pending = value(selectEffectiveMilestoneGovernanceContext(draft));
+    expect(initial.systemAutomaticAttentionDefinitionIds).toEqual(new Set(["milestone-ramp-fcs"]));
+    expect(pending.systemAutomaticAttentionDefinitionIds).toEqual(new Set(["milestone-ramp-fcs"]));
+    expect(pending.additionalAttentionDefinitionIds).toEqual(new Set());
+    const next = value(publishGovernanceDraft(draft, prototype, {
+      createReleaseId: () => toGovernanceReleaseId("ssl-gl-policy-release"),
+      createEnrollmentId: () => toRequirementEnrollmentId("unused-ssl-gl-enrollment"),
+      createWithdrawalId: () => toRequirementWithdrawalId("unused-ssl-gl-withdrawal"),
+      nowIso: () => "2026-10-01T01:00:00.000Z",
+    }));
+    const context = value(selectEffectiveMilestoneGovernanceContext(next));
+    expect(context.systemAutomaticAttentionDefinitionIds).toEqual(new Set(["milestone-ramp-fcs"]));
+    expect(context.additionalAttentionDefinitionIds).toEqual(new Set([testDefinition.id]));
+    expect([...context.automaticAttentionTypeIds]).toEqual(["type-g-o", "type-smt", "type-pre-build", "type-close"]);
+    const original = release.definitions.find(definition => definition.id === "milestone-ramp-fcs")!;
+    expect(original).toMatchObject({ name: "FCS", stageGroupId: "stage-ramp", milestoneTypeId: "type-fcs", displayOrder: 290 });
+    expect(context.definitionsForHistoricalResolution.filter(definition => definition.id === original.id)).toEqual([original]);
+    expect(context.milestoneTypesForHistoricalResolution).toEqual(initial.milestoneTypesForHistoricalResolution);
+    expect(context.selectableMilestoneTypes.map(type => type.id)).toEqual(["type-g-o", "type-smt", "type-pre-build", "type-close", "type-test", "type-certification", "type-preparation"]);
+    expect(context.milestoneTypesForHistoricalResolution.find(type => type.id === "type-fcs")).toMatchObject({ displayName: "FCS", active: false });
+    expect(context.milestoneTypesForHistoricalResolution.some(type => type.id === "type-ssl-gl")).toBe(false);
+    expect(createPortfolioVisibleSchema(context).scheduleMappings.find(mapping => mapping.milestoneDefinitionId === original.id)).toBeUndefined();
+    expect(next.releases[0]).toBe(release);
+    expect(next.releases.at(-1)!.definitions.find(definition => definition.id === original.id)).toEqual(original);
+  });
   it("derives grants only from a real retirement in history through the current release", () => {
     const fixture = publishedRetirementFixture();
     const invalidGrants = Object.values(fixture.invalidIssuingReleaseIds).map(retiredByReleaseId => ({ ...fixture.grant, retiredByReleaseId }));
@@ -67,7 +95,7 @@ describe("effective governance context", () => {
     expect(context.releaseId).toBe("governance-release-bundled-baseline");
     expect(context.addablePublicDefinitions).toHaveLength(30);
     expect(context.portfolioColumnDefinitions).toHaveLength(30);
-    expect([...context.automaticAttentionTypeIds]).toEqual(["type-g-o", "type-smt", "type-close", "type-mdrr"]);
+    expect([...context.automaticAttentionTypeIds]).toEqual(["type-g-o", "type-smt", "type-pre-build", "type-close"]);
   });
   it("returns explicit missing/invalid failures without baseline fallback", () => {
     expect(selectEffectiveMilestoneGovernanceContext({ ...baseline, releases: [] })).toMatchObject({ ok: false, code: "missing-current-release" });

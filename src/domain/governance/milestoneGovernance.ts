@@ -1,10 +1,13 @@
 import type { MilestoneDefinition } from "../schedule/milestoneCatalog";
+import type { CatalogItem } from "../reference-data/catalog";
 import type {
   CanonicalScheduleWorkingDraftId,
   GovernanceDraftId,
   GovernanceReleaseId,
   MilestoneDefinitionId,
   MilestoneId,
+  MilestoneTypeId,
+  StageGroupId,
   ProjectId,
   RequirementEnrollmentId,
   RequirementWithdrawalId,
@@ -15,6 +18,11 @@ export interface MilestoneGovernanceRelease {
   readonly id: GovernanceReleaseId;
   readonly publishedAt: string | null;
   readonly definitions: readonly MilestoneDefinition[];
+  readonly stageGroups: readonly CatalogItem<StageGroupId>[];
+  readonly milestoneTypes: readonly CatalogItem<MilestoneTypeId>[];
+  readonly selectableStageGroupIds: readonly StageGroupId[];
+  readonly selectableMilestoneTypeIds: readonly MilestoneTypeId[];
+  readonly automaticAttentionTypeIds: readonly MilestoneTypeId[];
   readonly addableDefinitionIds: readonly MilestoneDefinitionId[];
   readonly portfolioColumnDefinitionIds: readonly MilestoneDefinitionId[];
   readonly additionalAttentionDefinitionIds: readonly MilestoneDefinitionId[];
@@ -75,15 +83,25 @@ export type GovernanceCommandFailureCode =
   | "stale-base-release"
   | "invalid-reference"
   | "duplicate-id"
+  | "duplicate-label"
+  | "protected-classification"
   | "retire-requirement-conflict"
   | "no-legal-fulfillment-path";
 
 export type GovernanceDraftUpdate =
+  | { readonly kind: "add-stage"; readonly id: StageGroupId; readonly displayName: string }
+  | { readonly kind: "retire-stage"; readonly id: StageGroupId }
+  | { readonly kind: "add-type"; readonly id: MilestoneTypeId; readonly displayName: string }
+  | { readonly kind: "retire-type"; readonly id: MilestoneTypeId }
   | { readonly kind: "replace-candidate-release"; readonly candidateRelease: MilestoneGovernanceDraft["candidateRelease"] }
   | { readonly kind: "replace-existing-project-assignments"; readonly assignments: MilestoneGovernanceDraft["existingProjectAssignments"] }
   | { readonly kind: "replace-withdrawals"; readonly enrollmentIds: readonly RequirementEnrollmentId[] };
 
 export interface GovernancePublishDiff {
+  readonly addedStageGroupIds: readonly StageGroupId[];
+  readonly retiredStageGroupIds: readonly StageGroupId[];
+  readonly addedMilestoneTypeIds: readonly MilestoneTypeId[];
+  readonly retiredMilestoneTypeIds: readonly MilestoneTypeId[];
   readonly addedDefinitionIds: readonly MilestoneDefinitionId[];
   readonly changedDefinitionIds: readonly MilestoneDefinitionId[];
   readonly retiredDefinitionIds: readonly MilestoneDefinitionId[];

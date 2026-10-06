@@ -149,13 +149,18 @@ describe("createUserTrialDemoSeed", () => {
     }
     expect(attention.due.projectIds).toEqual([
       userTrialDemoProjectIds.goDueSoon,
-      userTrialDemoProjectIds.mdrrDueSoon,
     ]);
-    expect(attention.due.projectCount).toBe(2);
+    expect(attention.due.projectCount).toBe(1);
+    expect(attention.due.projectIds).not.toContain(
+      userTrialDemoProjectIds.mdrrDueSoon,
+    );
     expect(attention.overdue.projectIds).toEqual([
       userTrialDemoProjectIds.smtOverdue,
     ]);
     expect(attention.overdue.projectCount).toBe(1);
+    expect(attention.overdue.projectIds).not.toContain(
+      userTrialDemoProjectIds.mdrrDueSoon,
+    );
     expect(attention.due.projectIds).not.toContain(
       userTrialDemoProjectIds.completedMilestone,
     );

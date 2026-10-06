@@ -58,7 +58,7 @@ it("App edits and publishes a genuinely issued D1 row", () => {
 it("one mounted App retains its released consumer context across navigation and renders", () => {
   const baseline = createInitialMilestoneGovernanceRuntimeState();
   const started = value(startGovernanceDraft(baseline, toGovernanceDraftId("runtime-draft")));
-  const extra = { ...baseline.releases[0].definitions[0], id: toMilestoneDefinitionId("runtime-new"), name: "Runtime released choice" };
+  const extra = { ...baseline.releases[0].definitions[0], id: toMilestoneDefinitionId("runtime-new"), name: "Runtime released choice", milestoneTypeId: null };
   const draft = value(updateGovernanceDraft(started, { kind: "replace-candidate-release", candidateRelease: {
     ...started.draft!.candidateRelease, definitions: [...baseline.releases[0].definitions, extra],
     addableDefinitionIds: [extra.id], portfolioColumnDefinitionIds: [extra.id],
@@ -82,7 +82,7 @@ it("one mounted App retains its released consumer context across navigation and 
   fireEvent.click(within(createDialog).getByRole("button", { name: "Cancel" }));
   fireEvent.click(screen.getByRole("button", { name: /^Open Project/ }));
   fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-  expect(within(screen.getByLabelText("Milestone definition")).getAllByRole("option").map(option => option.textContent)).toEqual(["Select milestone", "Runtime released choice"]);
+  expect(within(screen.getByLabelText("Milestone definition")).getAllByRole("option").map(option => option.textContent)).toEqual(["Select milestone", "Runtime released choice", "+ Add Project-specific Milestone…"]);
   expect(screen.queryByRole("row", { name: /Runtime released choice/ })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: /Dashboard/ }));
   rerender(<App initialState={initialState} />);

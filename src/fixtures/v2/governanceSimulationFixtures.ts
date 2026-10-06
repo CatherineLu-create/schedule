@@ -1,6 +1,6 @@
 import type { GovernanceSimulationPack, RawScheduleImportValues } from "../../domain/schedule/scheduleReview";
 
-export const simulationSourceDescriptor = "模擬匯入資料｜供 PIP 流程驗收，非 Kevin 正式 JSON 格式";
+export const simulationSourceDescriptor = "Simulated import data | For PIP workflow validation only; not Kevin's official JSON format.";
 
 export interface GovernanceSimulationRecord {
   readonly candidateFingerprint: string;

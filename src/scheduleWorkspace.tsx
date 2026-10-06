@@ -1,5 +1,7 @@
 import React from "react";
+import { milestoneDefinitionDisplayName } from "./application/milestoneDefinitionPresentation";
 import { orderMilestoneDefinitions } from "./application/milestoneDefinitionOrdering";
+import type { EffectiveMilestoneGovernanceContext } from "./application/governance/effectiveMilestoneGovernanceContext";
 
 import type { UpdateScheduleWorkingDraftMilestoneInput } from "./application/commands/canonicalScheduleCommands";
 import type {
@@ -16,8 +18,11 @@ import {
   type ProjectId,
 } from "./domain/shared/ids";
 import { OfficialScheduleView } from "./officialScheduleView";
+import { collectSchedulePublishBlockingFindings } from "./application/commands/scheduleReviewCommands";
+import { ProjectLocalDefinitionEditor, SchedulePublishFindings, type ScheduleReviewBindings } from "./scheduleImportReviewPanel";
 
 export interface ScheduleWorkspaceProps {
+  readonly governance: EffectiveMilestoneGovernanceContext;
   readonly draftRead: ScheduleWorkingDraftRead;
   readonly feedback: readonly string[];
   readonly milestoneDefinitions: readonly MilestoneDefinition[];
@@ -30,6 +35,7 @@ export interface ScheduleWorkspaceProps {
   readonly onStartDraft: (() => void) | null;
   readonly onUpdateMilestone: (input: UpdateScheduleWorkingDraftMilestoneInput) => void;
   readonly projectId: ProjectId;
+  readonly review?: ScheduleReviewBindings;
 }
 
 interface DateOnlyEditorProps {
@@ -141,6 +147,7 @@ function DateOnlyEditor({
 }
 
 function ScheduleWorkspaceContent({
+  governance,
   draftRead,
   feedback,
   milestoneDefinitions,
@@ -153,13 +160,15 @@ function ScheduleWorkspaceContent({
   onStartDraft,
   onUpdateMilestone,
   projectId,
+  review,
 }: ScheduleWorkspaceProps): React.ReactElement {
   const [definitionId, setDefinitionId] = React.useState("");
+  const [localEditor, setLocalEditor] = React.useState(false);
   const representedDefinitionIds = draftRead.kind === "workingDraft"
     ? new Set(draftRead.draft.milestones.map(({ milestoneDefinitionId }) =>
       milestoneDefinitionId))
     : new Set<MilestoneDefinitionId>();
-  const addableMilestoneDefinitions = orderMilestoneDefinitions(milestoneDefinitions).filter(
+  const addableMilestoneDefinitions = orderMilestoneDefinitions(milestoneDefinitions, governance.stageGroupsForHistoricalResolution).filter(
     ({ id }) => !representedDefinitionIds.has(id),
   );
   const selectedDefinitionIsAddable = definitionId !== "" &&
@@ -176,7 +185,11 @@ function ScheduleWorkspaceContent({
       return next;
     });
   }, []);
-  const publishBlocked = unappliedEditors.size > 0;
+  const publishBlocked = unappliedEditors.size > 0 || (review !== undefined && (review.schedule.workingDraft?.importCandidates.length ?? 0) > 0 && collectSchedulePublishBlockingFindings(review.schedule, review.context).length > 0);
+  const localDefinitionEditor = review && localEditor && <ProjectLocalDefinitionEditor governance={governance} onCancel={() => setLocalEditor(false)} onCreate={input => {
+    const id = review.onCreateLocal(input);
+    if (id !== null) { setDefinitionId(id); setLocalEditor(false); }
+  }} />;
   const messages = feedback.map((message, index) => (
     <p key={`${index}:${message}`}>{message}</p>
   ));
@@ -228,6 +241,7 @@ function ScheduleWorkspaceContent({
         <button className="self-end rounded border border-slate-300 bg-white px-4 py-2 text-sm" onClick={onStartDraft} type="button">Edit</button>
       )}
       {messages}
+      {localDefinitionEditor}
     </>;
   }
 
@@ -238,12 +252,13 @@ function ScheduleWorkspaceContent({
       <table className="w-full min-w-[720px] text-left text-sm">
         <thead className="border-y border-slate-200 bg-slate-50"><tr>{(["Phase", "Stage", "Milestone", "Plan", "Actual"] as const)
           .map((label) => <th className="px-4 py-3 font-medium" key={label}>{label}</th>)}</tr></thead>
-        <tbody>{draftRead.milestoneRows.map((row) => <tr className="border-b border-slate-200" key={row.milestoneId}>
+        <tbody>{draftRead.milestoneRows.map((row, index) => <tr className="border-b border-slate-200" key={row.milestoneId}>
           <td className="px-4 py-3">{row.phase}</td>
           <td className="px-4 py-3">{row.stage}</td>
           <td className="px-4 py-3">
             <div className="flex flex-wrap items-center gap-2">
               <span>{row.milestone}</span>
+              {review?.schedule.localDefinitions.some(definition => definition.id === draftRead.draft.milestones.find(occurrence => occurrence.milestoneId === row.milestoneId)?.milestoneDefinitionId) && <span className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-800">Project-specific</span>}
               <select
                 aria-label={`Applicability for ${row.milestone}`}
                 className="rounded border border-slate-300 bg-white px-2 py-1"
@@ -269,7 +284,7 @@ function ScheduleWorkspaceContent({
             feedback={feedback}
             field="plan"
             key={`${projectId}:${row.milestoneId}:plan`}
-            label={`Plan for ${row.milestone} occurrence ${row.milestoneId} in Project ${projectId}`}
+            label={`Plan for ${row.milestone} occurrence ${index + 1} in current Project`}
             milestoneId={row.milestoneId}
             onUnappliedChange={onUnappliedChange}
             onValidValue={(value) => onUpdateMilestone({
@@ -284,7 +299,7 @@ function ScheduleWorkspaceContent({
             feedback={feedback}
             field="actual"
             key={`${projectId}:${row.milestoneId}:actual`}
-            label={`Actual for ${row.milestone} occurrence ${row.milestoneId} in Project ${projectId}`}
+            label={`Actual for ${row.milestone} occurrence ${index + 1} in current Project`}
             milestoneId={row.milestoneId}
             onUnappliedChange={onUnappliedChange}
             onValidValue={(value) => onUpdateMilestone({
@@ -300,11 +315,15 @@ function ScheduleWorkspaceContent({
     </div>
     <div className="mt-4 flex flex-wrap items-end gap-3">
       <label className="grid gap-1 text-sm">Milestone definition
-        <select className="max-w-64 rounded border border-slate-300 bg-white px-2 py-1.5" onChange={(event) => setDefinitionId(event.target.value)} value={selectedDefinitionIsAddable ? definitionId : ""}>
+        <select className="max-w-64 rounded border border-slate-300 bg-white px-2 py-1.5" onChange={(event) => {
+          if (event.target.value === "create-project-local") { setLocalEditor(true); return; }
+          setDefinitionId(event.target.value);
+        }} value={selectedDefinitionIsAddable ? definitionId : ""}>
           <option value="">Select milestone</option>
           {addableMilestoneDefinitions.map((definition) => (
-            <option key={definition.id} value={definition.id}>{definition.name}</option>
+            <option key={definition.id} value={definition.id}>{milestoneDefinitionDisplayName(definition)}</option>
           ))}
+          {review && <option value="create-project-local">+ Add Project-specific Milestone…</option>}
         </select>
       </label>
       <button
@@ -322,10 +341,12 @@ function ScheduleWorkspaceContent({
         if (!publishBlocked) setConfirmation("publish");
       }} type="button">Publish</button>
     </div>
-    {publishBlocked && <p className="mt-3 text-sm text-rose-700">Correct or clear unapplied dates before publishing.</p>}
+    {unappliedEditors.size > 0 && <p className="mt-3 text-sm text-rose-700">Correct or clear unapplied dates before publishing.</p>}
+    {review && <SchedulePublishFindings review={review} />}
     {publishDialog}
     {discardDialog}
     {messages}
+    {localDefinitionEditor}
   </section>;
 }
 

@@ -49,7 +49,7 @@ describe("MilestoneDefinition", () => {
   it("uses stable typed IDs for definition, stage, and milestone type", () => {
     expectTypeOf(stageAMilestone.id).toEqualTypeOf<MilestoneDefinitionId>();
     expectTypeOf(stageAMilestone.stageGroupId).toEqualTypeOf<StageGroupId>();
-    expectTypeOf(stageAMilestone.milestoneTypeId).toEqualTypeOf<MilestoneTypeId>();
+    expectTypeOf(stageAMilestone.milestoneTypeId).toEqualTypeOf<MilestoneTypeId | null>();
   });
 
   it("keeps aliases as lookup data rather than identity", () => {

@@ -1,5 +1,6 @@
 import type { EffectiveMilestoneGovernanceContext } from "../governance/effectiveMilestoneGovernanceContext";
 import { resolveScheduleDefinitions } from "../governance/scheduleDefinitionResolution";
+import { milestoneDefinitionDisplayName } from "../milestoneDefinitionPresentation";
 import {
   addDays,
   compareDateOnly,
@@ -78,7 +79,8 @@ export function selectDashboardAttention(
         milestone.applicability !== "applicable"
         || milestone.plan === null
         || milestone.actual !== null
-        || (!context.automaticAttentionTypeIds.has(definition.milestoneTypeId)
+        || ((definition.milestoneTypeId === null || !context.automaticAttentionTypeIds.has(definition.milestoneTypeId))
+          && !context.systemAutomaticAttentionDefinitionIds.has(definition.id)
           && !context.additionalAttentionDefinitionIds.has(definition.id))
       ) {
         continue;
@@ -88,7 +90,7 @@ export function selectDashboardAttention(
         projectId: project.id,
         milestoneId: milestone.milestoneId,
         milestoneDefinitionId: milestone.milestoneDefinitionId,
-        milestoneName: definition.name,
+        milestoneName: milestoneDefinitionDisplayName(definition),
         plan: milestone.plan,
       };
       const relativeToReference = compareDateOnly(milestone.plan, referenceDate);

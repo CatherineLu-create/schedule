@@ -206,7 +206,7 @@ it("creates_new_draft_public_definition_with_legal_stage_and_type", () => {
   setup(); start();
   expect(screen.getByRole("button", { name: "加入公版草稿" })).toBeDisabled();
   expect(within(screen.getByLabelText("階段")).getAllByRole("option").map(o => (o as HTMLOptionElement).value).filter(Boolean)).toEqual(stageGroupCatalog.filter(s => s.active && s.reviewStatus === "reviewed").map(s => s.id));
-  expect(within(screen.getByLabelText("類型")).getAllByRole("option").map(o => (o as HTMLOptionElement).value).filter(Boolean)).toEqual(milestoneTypeCatalog.filter(t => t.active && t.reviewStatus === "reviewed").map(t => t.id));
+  expect(within(screen.getByLabelText("類型")).getAllByRole("option").map(o => (o as HTMLOptionElement).value).filter(Boolean)).toEqual(["type-g-o", "type-smt", "type-pre-build", "type-close", "type-test", "type-certification", "type-preparation"]);
   addDefinition(); const definition = retained().draft!.candidateRelease.definitions.at(-1)!;
   expect(definition).toMatchObject({ id: definitionUuid, name: newName, stageGroupId: "stage-design", milestoneTypeId: "type-test", active: true, reviewStatus: "reviewed", aliases: [], showInPortfolio: false });
   expect(Number.isSafeInteger(definition.displayOrder)).toBe(true);
@@ -234,7 +234,7 @@ it("addable_portfolio_attention_requirement_are_independent", () => {
 });
 it("automatic_four_types_are_not_disable_toggles", () => {
   setup(); start(); const automatic = screen.getByRole("region", { name: "自動提醒類型" });
-  for (const name of ["G/O", "SMT", "Close", "MDRR"]) expect(within(automatic).getByText(name, { exact: true })).toBeInTheDocument();
+  for (const name of ["G/O", "SMT", "Pre-Build", "Close"]) expect(within(automatic).getByText(name, { exact: true })).toBeInTheDocument();
   expect(within(automatic).queryByRole("checkbox")).not.toBeInTheDocument();
 });
 it("retire_does_not_silently_clear_portfolio_or_attention", () => {

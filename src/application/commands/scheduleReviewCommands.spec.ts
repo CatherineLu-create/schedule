@@ -109,10 +109,10 @@ describe("confirmProjectLocalMilestoneDefinition", () => {
     expectRejected(input({ milestoneTypeId: toMilestoneTypeId(`type-${label.toLowerCase()}`) }), "milestoneTypeId");
   });
 
-  it("accepts_existing_classifications_used_by_compatibility_definitions", () => {
+  it("accepts_selectable_classifications_with_a_historical_stage", () => {
     const next = value(confirmProjectLocalMilestoneDefinition(createEmptyCanonicalProjectSchedule(devProject001.id),
-      input({ stageGroupId: toStageGroupId("stage-a-a2"), milestoneTypeId: toMilestoneTypeId("type-bios-frozen") }), initialGovernanceContext()));
-    expect(next.localDefinitions[0]).toMatchObject({ stageGroupId: "stage-a-a2", milestoneTypeId: "type-bios-frozen" });
+      input({ stageGroupId: toStageGroupId("stage-a-a2"), milestoneTypeId: toMilestoneTypeId("type-test") }), initialGovernanceContext()));
+    expect(next.localDefinitions[0]).toMatchObject({ stageGroupId: "stage-a-a2", milestoneTypeId: "type-test" });
   });
 
   it("rejects_local_definition_id_collision_with_same_project_local", () => {
@@ -264,6 +264,27 @@ function rawCandidate(schedule: CanonicalProjectSchedule, plan: RawImportCell, a
   return { ...schedule, evidenceLedger: [evidence, ...schedule.evidenceLedger.slice(1)], workingDraft: { ...schedule.workingDraft!,
     importCandidates: [{ ...createScheduleImportCandidate(evidence, candidate.id), sourceDefinitionId: candidate.sourceDefinitionId }, ...schedule.workingDraft!.importCandidates.slice(1)] } };
 }
+
+it("UX05 missing Type confirms an exact null-Type local only explicitly; unknown raw Type remains pending and failure atomic", () => {
+  const registered = value(confirmProjectLocalMilestoneDefinition(reviewDraft(), input({ milestoneTypeId: null }), initialGovernanceContext()));
+  const loaded = loadReview(registered, "basic-success");
+  const candidate = loaded.workingDraft!.importCandidates[1];
+  expect(loaded.evidenceLedger[1].rawValues.milestoneType).toEqual({ presence: "missing" });
+  expect(loaded.workingDraft!.milestones).toEqual([]);
+  const confirmed = value(confirmReview(loaded, requestFor(loaded, 1)));
+  expect(confirmed.workingDraft!.milestones[0].milestoneDefinitionId).toBe("local-acceptance");
+  const unknownEvidence = { ...loaded.evidenceLedger[1], rawValues: { ...loaded.evidenceLedger[1].rawValues, milestoneType: { presence: "present" as const, raw: "Unknown external Type" } } };
+  const schedule = freeze({ ...loaded, evidenceLedger: loaded.evidenceLedger.map((item, index) => index === 1 ? unknownEvidence : item),
+    workingDraft: { ...loaded.workingDraft!, importCandidates: loaded.workingDraft!.importCandidates.map(item => item.id === candidate.id ? createScheduleImportCandidate(unknownEvidence, item.id, item.sourceDefinitionId) : item) } });
+  const before = structuredClone(schedule);
+  expect(confirmReview(schedule, requestFor(schedule, 1))).toMatchObject({ ok: false, code: "invalid-local-classification" });
+  expect(value(previewScheduleImportDecision(schedule, requestFor(schedule, 1), reviewContext(schedule))).operationBlockingFindings).toEqual(expect.arrayContaining([
+    expect.objectContaining({ target: expect.objectContaining({ field: "milestoneType" }) }),
+  ]));
+  expect(schedule).toEqual(before);
+  expect(schedule.workingDraft!.importCandidates[1].status).toBe("pending");
+  expect(schedule.evidenceLedger[1].rawValues.milestoneType).toEqual({ presence: "present", raw: "Unknown external Type" });
+});
 
 describe("GOV-07 candidate-scoped review commands", () => {
   it("historical pending candidate IDs remain reserved after starting a later Draft", () => {
@@ -708,7 +729,7 @@ describe("GOV-08 real Publish gate and review closures", () => {
 describe("GOV-08 explicit local to public mapping", () => {
   function mappingFixture(na = false) {
     const governance = initialGovernanceContext();
-    const target = governance.addablePublicDefinitions[0];
+    const target = governance.addablePublicDefinitions.find(definition => definition.id === "milestone-a1-a-test")!;
     const local = value(confirmProjectLocalMilestoneDefinition(createEmptyCanonicalProjectSchedule(devProject001.id), input({ stageGroupId: target.stageGroupId, milestoneTypeId: target.milestoneTypeId }), governance));
     const row = { milestoneId: toMilestoneId("local-row"), milestoneDefinitionId: local.localDefinitions[0].id,
       plan: na ? null : parseDateOnly("2026-10-15"), actual: na ? null : parseDateOnly("2026-10-16"), applicability: na ? "notApplicable" as const : "applicable" as const };

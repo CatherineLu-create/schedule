@@ -14,7 +14,7 @@ describe("PF-03 typed raw simulation groups", () => {
     expect(governanceSimulationPacks["retired-no-reference-negative"][0].targetRole).toBe("retired-no-reference");
   });
   it("discloses simulation source and provides N/A with blank dates and fixable ambiguous raw", () => {
-    expect(simulationSourceDescriptor).toBe("模擬匯入資料｜供 PIP 流程驗收，非 Kevin 正式 JSON 格式");
+    expect(simulationSourceDescriptor).toBe("Simulated import data | For PIP workflow validation only; not Kevin's official JSON format.");
     expect(governanceSimulationPacks["basic-success"][2].rawValues).toMatchObject({
       applicability: { presence: "present", raw: "N/A" }, plan: { presence: "present", raw: "" }, actual: { presence: "present", raw: "" },
     });

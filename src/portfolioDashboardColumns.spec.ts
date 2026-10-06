@@ -35,7 +35,7 @@ describe("Portfolio visual schema", () => {
   });
   it("escapes published ID collisions against the full legacy registry and keeps prefix-shaped IDs distinct", () => {
     const legacy = initialGovernanceContext().definitionsForHistoricalResolution.find(definition => definition.id === "milestone-design-kickoff")!;
-    const additions = ["design:kickoff", "definition:design:kickoff", "definition:definition:design:kickoff", "ordinary-extra"].map((id, index) => ({ ...legacy, id: toMilestoneDefinitionId(id), name: `Separate kickoff ${index + 1}` }));
+    const additions = ["design:kickoff", "definition:design:kickoff", "definition:definition:design:kickoff", "ordinary-extra"].map((id, index) => ({ ...legacy, id: toMilestoneDefinitionId(id), name: `Separate kickoff ${index + 1}`, milestoneTypeId: null }));
     const context = publishPortfolioDefinitionsForTest(additions, [legacy.id, ...additions.map(definition => definition.id)]);
     const schema = createPortfolioVisibleSchema(context);
     expect(schema.scheduleMappings.map(mapping => [mapping.milestoneDefinitionId, mapping.key])).toEqual([
@@ -89,7 +89,7 @@ describe("Portfolio visual schema", () => {
       ["schedule:ramp-stage:ramp-smt", "RAMP SMT", "milestone-ramp-smt"],
       ["schedule:ramp-stage:ramp-pre-build", "RAMP Pre-build", "milestone-ramp-pre-build"],
       ["schedule:ramp-stage:ramp-main-build", "RAMP Main build", "milestone-ramp-main-build"],
-      ["schedule:ramp-stage:fcs", "FCS", "milestone-ramp-fcs"],
+      ["schedule:ramp-stage:fcs", "SSL/GL", "milestone-ramp-fcs"],
       ["schedule:mdrr:mdrr", "MDRR", "milestone-mdrr"],
     ]);
     const active = portfolioScheduleColumnMappings.slice(0, 29);

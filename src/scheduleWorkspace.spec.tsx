@@ -67,6 +67,7 @@ const workingDraftRow: ScheduleWorkingDraftMilestoneRow = {
 };
 
 const baseProps: ScheduleWorkspaceProps = {
+  governance: initialGovernanceContext(),
   draftRead: { kind: "noWorkingDraft" },
   feedback: [],
   milestoneDefinitions,
@@ -98,13 +99,20 @@ const publishedVersion: CanonicalPublishedScheduleVersion = {
 };
 
 describe("Schedule Workspace presentation", () => {
+  it("offers SSL/GL under its existing public definition ID without creating a second option", () => {
+    render(<ScheduleWorkspace {...workingDraftProps} />);
+    const select = within(screen.getByLabelText("Milestone definition"));
+    expect(select.getByRole("option", { name: "SSL/GL" })).toHaveValue("milestone-ramp-fcs");
+    expect(select.queryByRole("option", { name: "FCS" })).not.toBeInTheDocument();
+    expect(select.getAllByRole("option").filter(option => option.getAttribute("value") === "milestone-ramp-fcs")).toHaveLength(1);
+  });
   it("schedule_and_portfolio_resolve_A2_display_through_shared_catalog_with_canonical_identity", () => {
     const initial = initialGovernanceContext();
-    const added = { ...initial.addablePublicDefinitions[0], id: toMilestoneDefinitionId("runtime-a2-display"), name: "A2 human milestone", stageGroupId: toStageGroupId("stage-a-a2"), displayOrder: 10 };
+    const added = { ...initial.addablePublicDefinitions[0], id: toMilestoneDefinitionId("runtime-a2-display"), name: "A2 human milestone", stageGroupId: toStageGroupId("stage-a-a2"), milestoneTypeId: null, displayOrder: 10 };
     const context = publishPortfolioDefinitionsForTest([added], [added.id]);
     const state = { projects: [devProject001], schedules: [{ ...createEmptyCanonicalProjectSchedule(devProject001.id), workingDraft: { ...draft, milestones: [{ ...draft.milestones[0], milestoneDefinitionId: added.id }] } }] };
     const draftRead = selectScheduleWorkingDraft(state, devProject001.id, context);
-    render(<ScheduleWorkspace {...workingDraftProps} projectId={devProject001.id} draftRead={draftRead} milestoneDefinitions={context.addablePublicDefinitions} />);
+    render(<ScheduleWorkspace {...workingDraftProps} governance={context} projectId={devProject001.id} draftRead={draftRead} milestoneDefinitions={context.addablePublicDefinitions} />);
     expect(screen.getByRole("cell", { name: "A2-stage" })).toBeVisible();
     expect(screen.queryByText("A/A2-stage")).not.toBeInTheDocument();
     const schema = createPortfolioVisibleSchema(context);
@@ -203,10 +211,10 @@ describe("Schedule Workspace presentation", () => {
   it("keeps labelled mutable native inputs and hides field actions while inactive", () => {
     render(<ScheduleWorkspace {...workingDraftProps} />);
     const plan = screen.getByLabelText(
-      "Plan for Kickoff occurrence draft-kickoff in Project workspace-project",
+      "Plan for Kickoff occurrence 1 in current Project",
     );
     const actual = screen.getByLabelText(
-      "Actual for Kickoff occurrence draft-kickoff in Project workspace-project",
+      "Actual for Kickoff occurrence 1 in current Project",
     );
     for (const input of [plan, actual]) {
       expect(input).toHaveAttribute("type", "date");
@@ -456,15 +464,15 @@ describe("Schedule Workspace presentation", () => {
     expect(screen.getByRole("button", { name: "Publish" })).toBeEnabled();
   });
 
-  it("distinguishes duplicate milestone definitions by occurrence and Project in each date action", () => {
+  it("distinguishes duplicate milestone definitions by human row number without exposing internal IDs", () => {
     const secondId = toMilestoneId("draft-kickoff-two");
     render(<ScheduleWorkspace {...workingDraftProps} draftRead={{
       kind: "workingDraft",
       draft: { ...draft, milestones: [draft.milestones[0]!, { ...draft.milestones[0]!, milestoneId: secondId }] },
       milestoneRows: [workingDraftRow, { ...workingDraftRow, milestoneId: secondId }],
     }} />);
-    for (const occurrence of ["draft-kickoff", "draft-kickoff-two"]) {
-      const name = `Plan for Kickoff occurrence ${occurrence} in Project workspace-project`;
+    for (const occurrence of [1, 2]) {
+      const name = `Plan for Kickoff occurrence ${occurrence} in current Project`;
       const input = screen.getByLabelText(name);
       expect(input).toBeInTheDocument();
       expect(screen.getByRole("button", { name: `Clear ${name}` })).toBeInTheDocument();
@@ -619,7 +627,7 @@ describe("Schedule Workspace presentation", () => {
     const catalog = screen.getByLabelText("Milestone definition");
     expect(within(catalog).getAllByRole("option").map((option) => option.textContent)).toEqual([
       "Select milestone",
-      ...activeMilestoneDefinitions.map(({ name }) => name),
+      ...activeMilestoneDefinitions.map(({ id, name }) => id === "milestone-ramp-fcs" ? "SSL/GL" : name),
     ]);
     for (const { name } of compatibilityOnlyMilestoneDefinitions) {
       expect(within(catalog).queryByRole("option", { name })).not.toBeInTheDocument();

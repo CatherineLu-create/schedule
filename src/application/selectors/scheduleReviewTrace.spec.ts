@@ -29,7 +29,7 @@ const manualId = toScheduleReviewSessionId("trace-manual-session");
 function reviewed(local = false) {
   let schedule = createEmptyCanonicalProjectSchedule(devProject001.id);
   if (local) {
-    const definition = initialGovernanceContext().addablePublicDefinitions[3];
+    const definition = initialGovernanceContext().addablePublicDefinitions.find(item => item.id === "milestone-a1-a-test")!;
     schedule = value(confirmProjectLocalMilestoneDefinition(schedule, { definitionId: toMilestoneDefinitionId("trace-local"), name: definition.name, stageGroupId: definition.stageGroupId, milestoneTypeId: definition.milestoneTypeId, source: "manual", evidenceIds: [] }, context(schedule).governance));
   }
   schedule = successful(startScheduleWorkingDraft(schedule, { workingDraftId: toCanonicalScheduleWorkingDraftId("trace-draft") }, context(schedule))).schedule;

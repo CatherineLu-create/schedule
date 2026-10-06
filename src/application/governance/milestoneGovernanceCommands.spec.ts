@@ -216,7 +216,7 @@ describe("F2 and D1 exact fulfillment paths", () => {
   it("every candidate release requires new requirements subset of post-release addable", () => {
     expect(publishGovernanceDraft(candidate(drafting(), { newProjectRequirementDefinitionIds: [x] }), emptyPrototype, factories()).ok).toBe(true);
     const id = toMilestoneDefinitionId("new-definition");
-    const state = candidate(drafting(), { definitions: [...baseline.releases[0].definitions, { ...baseline.releases[0].definitions[0], id }], newProjectRequirementDefinitionIds: [id] });
+    const state = candidate(drafting(), { definitions: [...baseline.releases[0].definitions, { ...baseline.releases[0].definitions[0], id, milestoneTypeId: null }], newProjectRequirementDefinitionIds: [id] });
     rejection(state, "retire-requirement-conflict");
   });
   it("rejects_existing_project_assignment_without_legal_fulfillment_path", () => {
@@ -282,7 +282,7 @@ describe("complete release integrity and immutable historical meaning", () => {
     const before = structuredClone([cpuReferenceFixtures, gpuReferenceFixtures, panelSizeReferenceFixtures, productLineReferenceFixtures]);
     const next = value(publishGovernanceDraft(candidate(drafting(), { addableDefinitionIds: [], portfolioColumnDefinitionIds: [], additionalAttentionDefinitionIds: [] }), emptyPrototype, factories()));
     expect(next.releases[1].definitions).toEqual(baseline.releases[0].definitions);
-    expect(dashboardAttentionMilestoneTypeIds).toEqual(["type-g-o", "type-smt", "type-close", "type-mdrr"]);
+    expect(dashboardAttentionMilestoneTypeIds).toEqual(["type-g-o", "type-smt", "type-pre-build", "type-close"]);
     expect([cpuReferenceFixtures, gpuReferenceFixtures, panelSizeReferenceFixtures, productLineReferenceFixtures]).toEqual(before);
   });
   it.each(["addableDefinitionIds", "portfolioColumnDefinitionIds", "additionalAttentionDefinitionIds", "newProjectRequirementDefinitionIds"] as const)("rejects duplicate and unresolved membership: %s", field => {
@@ -303,9 +303,9 @@ describe("complete release integrity and immutable historical meaning", () => {
   });
   it("reports added, changed and retired definitions with ordered membership diff", () => {
     const definitions = baseline.releases[0].definitions;
-    const added = { ...definitions[0], id: toMilestoneDefinitionId("new"), name: "New" };
+    const added = { ...definitions[0], id: toMilestoneDefinitionId("new"), name: "New", milestoneTypeId: null };
     const state = candidate(retire(), { definitions: [{ ...definitions[0], active: false }, ...definitions.slice(1), added], portfolioColumnDefinitionIds: [y, x], additionalAttentionDefinitionIds: [y] });
-    expect(previewGovernancePublish(state, emptyPrototype).diff).toEqual({ addedDefinitionIds: [added.id], changedDefinitionIds: [x], retiredDefinitionIds: [x], addableDefinitionIdsBefore: baseline.releases[0].addableDefinitionIds, addableDefinitionIdsAfter: baseline.releases[0].addableDefinitionIds.filter(id => id !== x), portfolioDefinitionIdsBefore: baseline.releases[0].portfolioColumnDefinitionIds, portfolioDefinitionIdsAfter: [y, x], additionalAttentionIdsBefore: [], additionalAttentionIdsAfter: [y] });
+    expect(previewGovernancePublish(state, emptyPrototype).diff).toEqual({ addedStageGroupIds: [], retiredStageGroupIds: [], addedMilestoneTypeIds: [], retiredMilestoneTypeIds: [], addedDefinitionIds: [added.id], changedDefinitionIds: [x], retiredDefinitionIds: [x], addableDefinitionIdsBefore: baseline.releases[0].addableDefinitionIds, addableDefinitionIdsAfter: baseline.releases[0].addableDefinitionIds.filter(id => id !== x), portfolioDefinitionIdsBefore: baseline.releases[0].portfolioColumnDefinitionIds, portfolioDefinitionIdsAfter: [y, x], additionalAttentionIdsBefore: [], additionalAttentionIdsAfter: [y] });
     expect(publishGovernanceDraft(state, emptyPrototype, factories()).ok).toBe(true);
   });
   it.each(["stage", "type"])("new definition must use a legal %s independently of PF06 continuity", classification => {
@@ -313,7 +313,7 @@ describe("complete release integrity and immutable historical meaning", () => {
     rejection(candidate(drafting(), { definitions: [...baseline.releases[0].definitions, definition], addableDefinitionIds: [...baseline.releases[0].addableDefinitionIds, definition.id] }), "invalid-reference");
   });
   it("adds a new reviewed public definition using existing Stage and Type", () => {
-    const definition = { ...baseline.releases[0].definitions[0], id: toMilestoneDefinitionId("new-definition"), name: "New work" };
+    const definition = { ...baseline.releases[0].definitions[0], id: toMilestoneDefinitionId("new-definition"), name: "New work", milestoneTypeId: toMilestoneTypeId("type-test") };
     const state = assign(candidate(drafting(), { definitions: [...baseline.releases[0].definitions, definition], addableDefinitionIds: [...baseline.releases[0].addableDefinitionIds, definition.id], newProjectRequirementDefinitionIds: [definition.id] }), [{ projectId, milestoneDefinitionId: definition.id }]);
     const next = value(publishGovernanceDraft(state, emptyPrototype, factories()));
     expect(next.releases[1].definitions.at(-1)).toEqual(definition);

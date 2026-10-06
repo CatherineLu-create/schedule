@@ -87,7 +87,7 @@ export interface ProjectLocalMilestoneDefinition {
   readonly id: MilestoneDefinitionId;
   readonly name: string;
   readonly stageGroupId: StageGroupId;
-  readonly milestoneTypeId: MilestoneTypeId;
+  readonly milestoneTypeId: MilestoneTypeId | null;
   readonly displayOrder: number;
   readonly source: "manual" | "import";
   readonly confirmation: "confirmed";
@@ -98,7 +98,7 @@ export interface ConfirmProjectLocalMilestoneDefinitionInput {
   readonly definitionId: MilestoneDefinitionId;
   readonly name: string;
   readonly stageGroupId: StageGroupId;
-  readonly milestoneTypeId: MilestoneTypeId;
+  readonly milestoneTypeId: MilestoneTypeId | null;
   readonly source: "manual" | "import";
   readonly evidenceIds: readonly ScheduleEvidenceId[];
 }

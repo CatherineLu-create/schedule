@@ -1,4 +1,5 @@
 import type { CatalogItem } from "../../domain/reference-data/catalog";
+import { protectedAutomaticAttentionTypeIds } from "../../domain/governance/classificationCatalogs";
 import type { MilestoneDefinition } from "../../domain/schedule/milestoneCatalog";
 import type {
   CatalogItemId,
@@ -88,12 +89,7 @@ const milestoneTypeIds = {
   mdrr: toMilestoneTypeId("type-mdrr"),
 } as const;
 
-export const dashboardAttentionMilestoneTypeIds: readonly MilestoneTypeId[] = [
-  milestoneTypeIds.go,
-  milestoneTypeIds.smt,
-  milestoneTypeIds.close,
-  milestoneTypeIds.mdrr,
-];
+export const dashboardAttentionMilestoneTypeIds = protectedAutomaticAttentionTypeIds;
 
 export const statusCatalog: readonly CatalogItem<CatalogItemId>[] = [
   {

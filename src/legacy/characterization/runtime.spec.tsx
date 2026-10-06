@@ -14,6 +14,8 @@ import {
   startScheduleWorkingDraft,
 } from "../../application/commands/canonicalScheduleCommands";
 import { selectDashboardProjectRow } from "../../application/selectors/dashboardProjectRows";
+import { selectPortfolioDashboardRows } from "../../application/selectors/portfolioDashboardRows";
+import { createInitialSelfServiceReferenceCatalogs } from "../../application/reference-data/selfServiceCatalogs";
 import { selectTeamMemberRows } from "../../application/selectors/teamMemberRows";
 import {
   selectDashboardAttention,
@@ -279,6 +281,7 @@ function LocalScheduleWorkspaceHarness({ schedule }: { schedule: CanonicalProjec
       row={row}
       scheduleWorkspaceProps={{
         draftRead: selectScheduleWorkingDraft(localState, devProject003.id, initialGovernanceContext()),
+        governance: initialGovernanceContext(),
         feedback: [],
         milestoneDefinitions,
         nextVersionLabel: null,
@@ -362,6 +365,7 @@ function MalformedDraftWorkspaceHarness(): React.ReactElement {
       schedule: result.schedule });
   };
   const scheduleWorkspaceProps: ScheduleWorkspaceProps = {
+    governance: initialGovernanceContext(),
     draftRead: selectScheduleWorkingDraft(state, devProject001.id, initialGovernanceContext()),
     feedback: [],
     milestoneDefinitions,
@@ -408,6 +412,45 @@ function addMilestone(milestoneDefinitionId: string): void {
 }
 
 describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
+  it("GOV10 review changes stay out of Dashboard, Portfolio and Attention until canonical Publish", () => {
+    let sequence = 0;
+    vi.spyOn(globalThis.crypto, "randomUUID").mockImplementation(() => `22222222-2222-4222-8222-${String(++sequence).padStart(12, "0")}`);
+    const initial: PrototypeState = { projects: [devProject001], schedules: [createEmptyCanonicalProjectSchedule(devProject001.id)] };
+    const catalogs = createInitialSelfServiceReferenceCatalogs();
+    const governance = initialGovernanceContext();
+    const official = (state: PrototypeState) => ({
+      dashboard: selectDashboardProjectRow(state, devProject001.id, catalogs),
+      portfolio: selectPortfolioDashboardRows(state, catalogs, governance),
+      attention: selectDashboardAttention(state, dashboardReferenceDate, governance),
+      schedule: selectCurrentPublishedSchedule(state, devProject001.id, governance),
+    });
+    const before = official(initial);
+    render(<App initialState={initial} initialSelectedProjectId={devProject001.id} referenceDate={dashboardReferenceDate} />);
+    fireEvent.click(screen.getByRole("button", { name: "公版管理" }));
+    fireEvent.click(screen.getByText("進階治理與試用工具"));
+    fireEvent.change(screen.getByLabelText("模擬情境"), { target: { value: "fixable-validation" } });
+    fireEvent.click(screen.getByRole("button", { name: "載入模擬匯入資料" }));
+    fireEvent.click(screen.getByRole("button", { name: "建立草稿並載入" }));
+    const cards = within(screen.getByRole("region", { name: "匯入審核" })).getAllByRole("article");
+    fireEvent.click(within(cards[0]).getByRole("button", { name: "確認" }));
+    fireEvent.click(within(cards[1]).getByRole("button", { name: "確認" }));
+    fireEvent.change(within(cards[2]).getByLabelText("計畫處理方式"), { target: { value: "set" } });
+    fireEvent.change(within(cards[2]).getByLabelText("計畫日期"), { target: { value: "2026-11-10" } });
+    fireEvent.click(within(cards[2]).getByRole("button", { name: "確認" }));
+    const confirmed = lastReducedState();
+    expect(official(confirmed)).toEqual(before);
+    expect(confirmed.schedules[0].reviewDecisions).toHaveLength(3);
+    fireEvent.click(screen.getByRole("button", { name: "發布此專案草稿" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "發布此專案 Working Draft" })).getByRole("button", { name: "確認發布" }));
+    const published = lastReducedState();
+    expect(published.schedules[0].workingDraft).toBeNull();
+    expect(published.schedules[0].reviewClosures).toEqual([{ sessionId: confirmed.schedules[0].reviewSessions[0].id, kind: "published", versionNumber: 1 }]);
+    expect(official(published).schedule).toMatchObject({ kind: "published", versionLabel: "Published v01" });
+    expect(official(published).portfolio).not.toEqual(before.portfolio);
+    fireEvent.click(screen.getByRole("button", { name: "回到 Dashboard" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Open Project/ }));
+    expect(screen.getByRole("region", { name: "Current Schedule" })).toHaveTextContent("2026/10/15");
+  });
   it("shows one Current Schedule directly below Resources", () => {
     render(<App />);
     openProjectByName("Manta");
@@ -1127,10 +1170,8 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     if (attentionRead.kind !== "available") {
       throw new Error("Expected available runtime Dashboard attention");
     }
-    expect(attentionRead.due.projectIds).toEqual(expect.arrayContaining([
-      userTrialDemoProjectIds.goDueSoon,
-      userTrialDemoProjectIds.mdrrDueSoon,
-    ]));
+    expect(attentionRead.due.projectIds).toContain(userTrialDemoProjectIds.goDueSoon);
+    expect(attentionRead.due.projectIds).not.toContain(userTrialDemoProjectIds.mdrrDueSoon);
     expect(attentionRead.overdue.projectIds).toContain(
       userTrialDemoProjectIds.smtOverdue,
     );
@@ -1140,7 +1181,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(attentionRead.overdue.projectIds).not.toContain(
       userTrialDemoProjectIds.completedMilestone,
     );
-    expect(attentionRead.due.projectCount).toBe(2);
+    expect(attentionRead.due.projectCount).toBe(1);
     expect(attentionRead.overdue.projectCount).toBe(1);
 
     render(<App
@@ -1162,10 +1203,10 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
       name: "Open Project DEMO - G/O Due Soon",
     })).toBeVisible();
     expect(within(upcoming).getByText("A1 G/O · 2026/09/28")).toBeVisible();
-    expect(within(upcoming).getByRole("button", {
+    expect(within(upcoming).queryByRole("button", {
       name: "Open Project DEMO - MDRR Due Soon",
-    })).toBeVisible();
-    expect(within(upcoming).getByText("MDRR · 2026/10/03")).toBeVisible();
+    })).not.toBeInTheDocument();
+    expect(within(upcoming).queryByText("MDRR · 2026/10/03")).not.toBeInTheDocument();
     expect(within(overdue).getByRole("button", {
       name: "Open Project DEMO - SMT Overdue",
     })).toBeVisible();
@@ -1188,9 +1229,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(within(screen.getByLabelText("Customer"))
       .getByRole("option", { name: "DEMO" })).toBeInTheDocument();
 
-    fireEvent.click(within(upcoming).getByRole("button", {
-      name: "Open Project DEMO - MDRR Due Soon",
-    }));
+    openProjectByName("DEMO - MDRR Due Soon");
     expect(within(projectHeader()).getByText(
       "Project Name: DEMO - MDRR Due Soon",
     )).toBeInTheDocument();

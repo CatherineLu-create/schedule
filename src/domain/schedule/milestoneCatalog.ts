@@ -9,7 +9,7 @@ export interface MilestoneDefinition {
   readonly id: MilestoneDefinitionId;
   readonly name: string;
   readonly stageGroupId: StageGroupId;
-  readonly milestoneTypeId: MilestoneTypeId;
+  readonly milestoneTypeId: MilestoneTypeId | null;
   readonly displayOrder: number;
   readonly active: boolean;
   readonly reviewStatus: CatalogReviewStatus;

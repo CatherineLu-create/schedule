@@ -1,14 +1,9 @@
 import {
-  stageGroupCatalog,
-} from "../../config/v2/referenceData";
-import {
-  orderScheduleWorkingDraftMilestonesByDefinition,
   validateScheduleWorkingDraft,
   type CanonicalScheduleWorkingDraft,
 } from "../../domain/schedule/canonicalScheduleWorkingDraft";
 import {
   getCurrentPublishedVersion,
-  orderPublishedMilestonesByDefinition,
   validateCanonicalProjectSchedule,
   type CanonicalProjectSchedule,
   type CanonicalPublishedScheduleVersion,
@@ -19,7 +14,9 @@ import type { MilestoneId, ProjectId } from "../../domain/shared/ids";
 import type { ValidationIssue } from "../../domain/validation/validationIssue";
 import type { PrototypeState } from "../state/prototypeState";
 import type { EffectiveMilestoneGovernanceContext } from "../governance/effectiveMilestoneGovernanceContext";
+import { milestoneDefinitionDisplayName } from "../milestoneDefinitionPresentation";
 import { resolveScheduleDefinitions } from "../governance/scheduleDefinitionResolution";
+import { orderMilestoneOccurrences } from "../milestoneDefinitionOrdering";
 
 export interface PublishedScheduleMilestoneRow {
   readonly milestoneId: MilestoneId;
@@ -248,9 +245,10 @@ export function selectCurrentPublishedSchedule(
     throw new Error("Validated non-empty Schedule has no Published version");
   }
 
-  const milestoneRows = orderPublishedMilestonesByDefinition(
+  const milestoneRows = orderMilestoneOccurrences(
     version.milestones,
     milestoneDefinitions,
+    context.stageGroupsForHistoricalResolution,
   ).map((publishedMilestone): PublishedScheduleMilestoneRow => {
     const definition = milestoneDefinitions.find(
       (candidate) =>
@@ -263,7 +261,7 @@ export function selectCurrentPublishedSchedule(
       );
     }
 
-    const stage = stageGroupCatalog.find(
+    const stage = context.stageGroupsForHistoricalResolution.find(
       (candidate) => candidate.id === definition.stageGroupId,
     );
 
@@ -271,7 +269,7 @@ export function selectCurrentPublishedSchedule(
       milestoneId: publishedMilestone.milestoneId,
       phase: "-",
       stage: stage?.displayName ?? "-",
-      milestone: definition.name,
+      milestone: milestoneDefinitionDisplayName(definition),
       applicability: publishedMilestone.applicability,
       plan: displayDate(publishedMilestone.plan),
       actual: displayDate(publishedMilestone.actual),
@@ -305,21 +303,22 @@ export function selectScheduleWorkingDraft(
     return { kind: "unavailable", workingDraftExists: true, issues };
   }
 
-  const milestoneRows = orderScheduleWorkingDraftMilestonesByDefinition(
+  const milestoneRows = orderMilestoneOccurrences(
     draft.milestones,
     milestoneDefinitions,
+    context.stageGroupsForHistoricalResolution,
   ).map((draftMilestone): ScheduleWorkingDraftMilestoneRow => {
     const definition = milestoneDefinitions.find(
       ({ id }) => id === draftMilestone.milestoneDefinitionId,
     )!;
-    const stage = stageGroupCatalog.find(
+    const stage = context.stageGroupsForHistoricalResolution.find(
       ({ id }) => id === definition.stageGroupId,
     );
     return {
       milestoneId: draftMilestone.milestoneId,
       phase: "-",
       stage: stage?.displayName ?? "-",
-      milestone: definition.name,
+      milestone: milestoneDefinitionDisplayName(definition),
       applicability: draftMilestone.applicability,
       plan: draftMilestone.plan,
       actual: draftMilestone.actual,

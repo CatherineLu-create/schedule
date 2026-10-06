@@ -7,6 +7,13 @@ import { toMilestoneTypeId, toStageGroupId } from "../../domain/shared/ids";
 import { selectPortfolioDashboardRows } from "./portfolioDashboardRows";
 import { createInitialSelfServiceReferenceCatalogs } from "../reference-data/selfServiceCatalogs";
 import { devProject001 } from "../../fixtures/v2/canonicalProjectFixtures";
+import { createInitialMilestoneGovernanceRuntimeState } from "../governance/milestoneGovernanceInitializer";
+import { selectEffectiveMilestoneGovernanceContext } from "../governance/effectiveMilestoneGovernanceContext";
+import { previewGovernancePublish, publishGovernanceDraft, startGovernanceDraft, updateGovernanceDraft } from "../governance/milestoneGovernanceCommands";
+import type { CommandResult, MilestoneGovernanceRuntimeState } from "../../domain/governance/milestoneGovernance";
+import { toGovernanceDraftId, toGovernanceReleaseId, toRequirementEnrollmentId, toRequirementWithdrawalId } from "../../domain/shared/ids";
+import { selectScheduleWorkingDraft, selectCurrentPublishedSchedule } from "./scheduleSelectors";
+import { resolveScheduleDefinitions } from "../governance/scheduleDefinitionResolution";
 
 import {
   dashboardAttentionMilestoneTypeIds,
@@ -135,6 +142,156 @@ function expectAvailable(
   return read;
 }
 
+describe("SSL/GL exact system Attention", () => {
+  const sslGlId = toMilestoneDefinitionId("milestone-ramp-fcs");
+  const mdrrId = toMilestoneDefinitionId("milestone-mdrr");
+  function value<T>(result: CommandResult<T, string>): T {
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    return result.value;
+  }
+  function publish(state: MilestoneGovernanceRuntimeState, prototype: PrototypeState) {
+    return value(publishGovernanceDraft(state, prototype, {
+      createReleaseId: () => toGovernanceReleaseId("ssl-gl-retirement-release"),
+      createEnrollmentId: () => toRequirementEnrollmentId("unused-ssl-gl-enrollment"),
+      createWithdrawalId: () => toRequirementWithdrawalId("unused-ssl-gl-withdrawal"),
+      nowIso: () => "2026-09-23T01:00:00Z",
+    }));
+  }
+
+  it("monitors Current Published SSL/GL with inclusive DateOnly boundaries and keeps concrete matches while deduplicating projects", () => {
+    const owner = project("ssl-gl-boundaries");
+    const current = schedule(owner.id, [
+      milestone("today", sslGlId, "2026-09-23"),
+      milestone("plus-14", sslGlId, "2026-10-07"),
+      milestone("plus-15", sslGlId, "2026-10-08"),
+      milestone("overdue", sslGlId, "2026-09-22"),
+      milestone("actual", sslGlId, "2026-09-22", { actual: REFERENCE_DATE }),
+      milestone("na", sslGlId, "2026-09-23", { applicability: "notApplicable" }),
+      milestone("no-plan", sslGlId, null),
+    ]);
+    const read = expectAvailable(selectDashboardAttention(state([owner], [current]), REFERENCE_DATE, initialGovernanceContext()));
+    expect(read.due).toMatchObject({ projectIds: [owner.id], projectCount: 1, matches: [
+      { milestoneId: "today", milestoneDefinitionId: sslGlId, milestoneName: "SSL/GL", plan: "2026-09-23" },
+      { milestoneId: "plus-14", milestoneDefinitionId: sslGlId, milestoneName: "SSL/GL", plan: "2026-10-07" },
+    ] });
+    expect(read.overdue).toMatchObject({ projectIds: [owner.id], projectCount: 1, matches: [{ milestoneId: "overdue", plan: "2026-09-22" }] });
+  });
+
+  it("ignores SSL/GL in Draft and older versions while retaining a current qualifying occurrence", () => {
+    const owner = project("ssl-gl-current-only");
+    const governance = initialGovernanceContext();
+    const draftOnly = { ...createEmptyCanonicalProjectSchedule(owner.id), workingDraft: { ...draftIdentity, milestones: [draftMilestone("draft", sslGlId, "2026-09-23")] } };
+    expect(expectAvailable(selectDashboardAttention(state([owner], [draftOnly]), REFERENCE_DATE, governance)).due.matches).toEqual([]);
+    const current = { ...draftOnly, publishedVersions: [version(3, [milestone("current", sslGlId, "2026-09-23")]), version(1, [milestone("old", sslGlId, "2026-09-22")])], workingDraft: { ...draftIdentity, milestones: [draftMilestone("current", sslGlId, "2026-10-08")] } };
+    const read = expectAvailable(selectDashboardAttention(state([owner], [current]), REFERENCE_DATE, governance));
+    expect(read.due.matches.map(match => match.milestoneId)).toEqual(["current"]);
+    expect(read.overdue.matches).toEqual([]);
+  });
+
+  it("keeps canonical FCS identity through real schedule Publish while exposing SSL/GL in Draft and Published rows", () => {
+    const governance = initialGovernanceContext();
+    const original = governance.definitionsForHistoricalResolution.find(definition => definition.id === sslGlId)!;
+    const originalSnapshot = structuredClone(original);
+    const before = { ...createEmptyCanonicalProjectSchedule(devProject001.id), workingDraft: { ...draftIdentity, milestones: [draftMilestone("ssl-gl", sslGlId, "2026-09-23")] } };
+    expect(selectScheduleWorkingDraft(state([devProject001], [before]), devProject001.id, governance)).toMatchObject({ kind: "workingDraft", milestoneRows: [{ milestone: "SSL/GL" }] });
+    const result = publishScheduleWorkingDraft(before, { publishedAt: "2026-09-23T00:00:00Z" }, { governance, localDefinitions: [], retiredDraftOccurrenceGrants: [] });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    expect(selectCurrentPublishedSchedule(state([devProject001], [result.schedule]), devProject001.id, governance)).toMatchObject({ kind: "published", milestoneRows: [{ milestone: "SSL/GL" }] });
+    expect(resolveScheduleDefinitions(governance, []).filter(definition => definition.id === sslGlId)).toEqual([originalSnapshot]);
+    expect(governance.definitionsForHistoricalResolution.find(definition => definition.id === sslGlId)).toEqual(originalSnapshot);
+    expect(result.schedule.publishedVersions[0].milestones[0].milestoneDefinitionId).toBe(sslGlId);
+  });
+
+  it("uses exact public identity independently of its name and Type in a read-only test projection", () => {
+    const initial = initialGovernanceContext();
+    const governance = { ...initial, definitionsForHistoricalResolution: initial.definitionsForHistoricalResolution.map(definition => definition.id === sslGlId ? { ...definition, name: "Alternate display source", milestoneTypeId: null } : definition) };
+    const owner = project("ssl-gl-null-type");
+    const read = expectAvailable(selectDashboardAttention(state([owner], [schedule(owner.id, [milestone("exact", sslGlId, "2026-09-23")])]), REFERENCE_DATE, governance));
+    expect(read.due.matches).toMatchObject([{ milestoneDefinitionId: sslGlId, milestoneName: "SSL/GL" }]);
+  });
+
+  it.each(["SSL/GL", "FCS"])("same-name local %s remains ordinary while independent automatic Type still participates", name => {
+    const owner = project(`ssl-gl-local-${name}`);
+    const initial = initialGovernanceContext();
+    const local = value(confirmProjectLocalMilestoneDefinition(createEmptyCanonicalProjectSchedule(owner.id), { definitionId: toMilestoneDefinitionId("local-ssl-gl"), name, stageGroupId: toStageGroupId("stage-ramp"), milestoneTypeId: null, source: "manual", evidenceIds: [] }, initial));
+    const current = { ...local, publishedVersions: [version(1, [milestone("local", local.localDefinitions[0].id, "2026-09-23")])] };
+    expect(expectAvailable(selectDashboardAttention(state([owner], [current]), REFERENCE_DATE, initial)).due.matches).toEqual([]);
+    const typed = { ...current, localDefinitions: [{ ...current.localDefinitions[0], milestoneTypeId: toMilestoneTypeId("type-smt") }] };
+    expect(expectAvailable(selectDashboardAttention(state([owner], [typed]), REFERENCE_DATE, initial)).due.matches).toMatchObject([{ milestoneDefinitionId: "local-ssl-gl", milestoneName: name }]);
+  });
+
+  it("does not grant system Attention to a local ID absent from current released public definitions", () => {
+    const baseline = createInitialMilestoneGovernanceRuntimeState();
+    const release = baseline.releases[0];
+    const remove = (ids: readonly typeof sslGlId[]) => ids.filter(id => id !== sslGlId);
+    const projected = { ...baseline, releases: [{ ...release, definitions: release.definitions.filter(definition => definition.id !== sslGlId), addableDefinitionIds: remove(release.addableDefinitionIds), portfolioColumnDefinitionIds: remove(release.portfolioColumnDefinitionIds) }] };
+    const context = value(selectEffectiveMilestoneGovernanceContext(projected));
+    const local = value(confirmProjectLocalMilestoneDefinition(createEmptyCanonicalProjectSchedule(devProject001.id), { definitionId: sslGlId, name: "SSL/GL", stageGroupId: toStageGroupId("stage-ramp"), milestoneTypeId: null, source: "manual", evidenceIds: [] }, context));
+    expect(context.systemAutomaticAttentionDefinitionIds).toEqual(new Set());
+    expect(expectAvailable(selectDashboardAttention(state([devProject001], [{ ...local, publishedVersions: [version(1, [milestone("local", sslGlId, "2026-09-23")])] }]), REFERENCE_DATE, context)).due.matches).toEqual([]);
+  });
+
+  it("retirement cannot disable SSL/GL monitoring or make the retired definition addable", () => {
+    const baseline = createInitialMilestoneGovernanceRuntimeState();
+    const started = value(startGovernanceDraft(baseline, toGovernanceDraftId("ssl-gl-retirement")));
+    const candidate = started.draft!.candidateRelease;
+    const draft = value(updateGovernanceDraft(started, { kind: "replace-candidate-release", candidateRelease: { ...candidate, definitions: candidate.definitions.map(definition => definition.id === sslGlId ? { ...definition, active: false } : definition), addableDefinitionIds: candidate.addableDefinitionIds.filter(id => id !== sslGlId), additionalAttentionDefinitionIds: [] } }));
+    const prototype = state([devProject001], [schedule(devProject001.id, [milestone("retained", sslGlId, "2026-09-23")])]);
+    expect(previewGovernancePublish(draft, prototype).blockingIssues).toEqual([]);
+    const pending = value(selectEffectiveMilestoneGovernanceContext(draft));
+    expect(pending.addablePublicDefinitions.some(definition => definition.id === sslGlId)).toBe(true);
+    const next = publish(draft, prototype);
+    const context = value(selectEffectiveMilestoneGovernanceContext(next));
+    expect(context.addablePublicDefinitions.some(definition => definition.id === sslGlId)).toBe(false);
+    expect(context.systemAutomaticAttentionDefinitionIds).toEqual(new Set([sslGlId]));
+    expect(context.additionalAttentionDefinitionIds).toEqual(new Set());
+    for (const effective of [pending, context]) expect(expectAvailable(selectDashboardAttention(prototype, REFERENCE_DATE, effective)).due.matches).toMatchObject([{ milestoneId: "retained", milestoneName: "SSL/GL" }]);
+    expect(next.releases[0]).toBe(baseline.releases[0]);
+  });
+
+  it("MDRR joins only after explicit admin publication, alongside system and automatic Type matches", () => {
+    const initial = createInitialMilestoneGovernanceRuntimeState();
+    const started = value(startGovernanceDraft(initial, toGovernanceDraftId("ssl-gl-union")));
+    const draft = value(updateGovernanceDraft(started, { kind: "replace-candidate-release", candidateRelease: { ...started.draft!.candidateRelease, additionalAttentionDefinitionIds: [mdrrId] } }));
+    const prototype = state([devProject001], [schedule(devProject001.id, [milestone("ssl-gl", sslGlId, "2026-09-23"), milestone("mdrr", mdrrId, "2026-09-23"), milestone("go", "milestone-ramp-g-o", "2026-09-23")])]);
+    const pending = value(selectEffectiveMilestoneGovernanceContext(draft));
+    expect(expectAvailable(selectDashboardAttention(prototype, REFERENCE_DATE, pending)).due.matches.map(match => match.milestoneId)).toEqual(["ssl-gl", "go"]);
+    const context = value(selectEffectiveMilestoneGovernanceContext(publish(draft, prototype)));
+    expect(expectAvailable(selectDashboardAttention(prototype, REFERENCE_DATE, context)).due).toMatchObject({ projectCount: 1, matches: [{ milestoneId: "ssl-gl" }, { milestoneId: "mdrr" }, { milestoneId: "go" }] });
+    expect(context.systemAutomaticAttentionDefinitionIds.has(mdrrId)).toBe(false);
+    expect(context.definitionsForHistoricalResolution.find(definition => definition.id === mdrrId)?.milestoneTypeId).toBe("type-mdrr");
+  });
+
+  it.each(["remove", "rename", "change-type"])("preview and Publish reject an attempted SSL/GL identity %s without disabling current monitoring", change => {
+    const initial = createInitialMilestoneGovernanceRuntimeState();
+    const started = value(startGovernanceDraft(initial, toGovernanceDraftId(`ssl-gl-${change}`)));
+    const candidate = started.draft!.candidateRelease;
+    const draft = value(updateGovernanceDraft(started, { kind: "replace-candidate-release", candidateRelease: {
+      ...candidate,
+      definitions: change === "remove" ? candidate.definitions.filter(definition => definition.id !== sslGlId)
+        : candidate.definitions.map(definition => definition.id !== sslGlId ? definition : { ...definition,
+          ...(change === "rename" ? { name: "SSL/GL" } : { milestoneTypeId: null }) }),
+      addableDefinitionIds: candidate.addableDefinitionIds.filter(id => id !== sslGlId),
+      portfolioColumnDefinitionIds: candidate.portfolioColumnDefinitionIds.filter(id => id !== sslGlId),
+    } }));
+    const prototype = state([devProject001], [schedule(devProject001.id, [milestone("retained", sslGlId, "2026-09-23")])]);
+    const preview = previewGovernancePublish(draft, prototype);
+    expect(preview.blockingIssues).toEqual(expect.arrayContaining([expect.objectContaining({
+      code: change === "remove" ? "governance.definition.historical-resolution-dropped" : "governance.definition.semantic-identity-changed",
+      target: expect.objectContaining({ entityId: sslGlId }),
+    })]));
+    expect(publishGovernanceDraft(draft, prototype, {
+      createReleaseId: () => toGovernanceReleaseId("must-not-publish"),
+      createEnrollmentId: () => toRequirementEnrollmentId("unused"),
+      createWithdrawalId: () => toRequirementWithdrawalId("unused"), nowIso: () => "2026-09-23T01:00:00Z",
+    })).toMatchObject({ ok: false });
+    const context = value(selectEffectiveMilestoneGovernanceContext(draft));
+    expect(context.systemAutomaticAttentionDefinitionIds).toEqual(new Set([sslGlId]));
+    expect(expectAvailable(selectDashboardAttention(prototype, REFERENCE_DATE, context)).due.matches).toMatchObject([{ milestoneId: "retained" }]);
+  });
+});
+
 describe("Attention from real local confirmation and Publish", () => {
   const governance = initialGovernanceContext();
   function confirmed(owner: Project, type: string) {
@@ -155,7 +312,7 @@ describe("Attention from real local confirmation and Publish", () => {
     return result.schedule;
   }
 
-  it.each(["type-g-o", "type-smt", "type-close", "type-mdrr"])("real_command_created_local_automatic_type_resolves_in_current_published_attention: %s", type => {
+  it.each(["type-g-o", "type-smt", "type-pre-build", "type-close"])("real_command_created_local_automatic_type_resolves_in_current_published_attention: %s", type => {
     const owner = project(`confirmed-attention-${type}`);
     const registered = confirmed(owner, type);
     const definitionId = registered.localDefinitions[0].id;
@@ -176,7 +333,7 @@ describe("Attention from real local confirmation and Publish", () => {
     expect(portfolio[0].schedule.cells.some(cell => cell.milestoneDefinitionId === definitionId)).toBe(false);
   });
 
-  it.each(["type-g-o", "type-smt", "type-close", "type-mdrr"])("historical_local_repeats_preserve_date_boundaries_NA_missing_plan_and_project_deduplication: %s", type => {
+  it.each(["type-g-o", "type-smt", "type-pre-build", "type-close"])("historical_local_repeats_preserve_date_boundaries_NA_missing_plan_and_project_deduplication: %s", type => {
     const owner = project(`historical-attention-${type}`);
     const registered = confirmed(owner, type);
     const definitionId = registered.localDefinitions[0].id;
@@ -236,7 +393,7 @@ describe("Attention from real local confirmation and Publish", () => {
 });
 
 describe("selectDashboardAttention", () => {
-  it.each(["type-g-o", "type-smt", "type-close", "type-mdrr"])("resolves Published same-Project local %s by exact identity", (type) => {
+  it.each(["type-g-o", "type-smt", "type-pre-build", "type-close"])("resolves Published same-Project local %s by exact identity", (type) => {
     const owner = project("local-owner");
     const local: ProjectLocalMilestoneDefinition = { id: toMilestoneDefinitionId("local-exact"), name: "Local concrete name", stageGroupId: toStageGroupId("stage-a1"), milestoneTypeId: toMilestoneTypeId(type), displayOrder: 1, source: "manual", confirmation: "confirmed", evidenceIds: [] };
     const item = { ...schedule(owner.id, [milestone("local-row", local.id, "2026-09-23")]), localDefinitions: [local] };
@@ -264,7 +421,7 @@ describe("selectDashboardAttention", () => {
         milestone("due-start", "milestone-a1-a-g-o", "2026-09-23"),
         milestone("due-end", "milestone-a1-a-smt", "2026-10-07"),
         milestone("outside", "milestone-a-a2-a-close", "2026-10-08"),
-        milestone("overdue", "milestone-mdrr", "2026-09-22"),
+        milestone("overdue", "milestone-c1-c-pre-build", "2026-09-22"),
       ]),
     ]), REFERENCE_DATE, initialGovernanceContext()));
 
@@ -299,12 +456,12 @@ describe("selectDashboardAttention", () => {
     expect(read.overdue).toMatchObject({ projectIds: [], projectCount: 0, matches: [] });
   });
 
-  it("uses the exact four stable Milestone Type IDs including hidden MDRR", () => {
+  it("uses exactly four automatic Types including Pre-Build while MDRR requires additional enrollment", () => {
     expect(dashboardAttentionMilestoneTypeIds).toEqual([
       "type-g-o",
       "type-smt",
+      "type-pre-build",
       "type-close",
-      "type-mdrr",
     ]);
     const owner = project("attention-types");
     const read = expectAvailable(selectDashboardAttention(state([owner], [
@@ -315,6 +472,7 @@ describe("selectDashboardAttention", () => {
         milestone("ramp-go", "milestone-ramp-g-o", "2026-09-26"),
         milestone("ramp-smt", "milestone-ramp-smt", "2026-09-26"),
         milestone("mdrr", "milestone-mdrr", "2026-09-27"),
+        milestone("pre-build", "milestone-c1-c-pre-build", "2026-09-27"),
       ]),
     ]), REFERENCE_DATE, initialGovernanceContext()));
 
@@ -324,7 +482,7 @@ describe("selectDashboardAttention", () => {
       "close",
       "ramp-go",
       "ramp-smt",
-      "mdrr",
+      "pre-build",
     ]);
     expect(read.due.projectCount).toBe(1);
   });
@@ -336,7 +494,7 @@ describe("selectDashboardAttention", () => {
       [second, first],
       [
         schedule(first.id, [
-          milestone("first-mdrr", "milestone-mdrr", "2026-09-27"),
+          milestone("first-pre-build", "milestone-c1-c-pre-build", "2026-09-27"),
         ]),
         schedule(second.id, [
           milestone("second-smt", "milestone-a1-a-smt", "2026-09-25"),
@@ -350,7 +508,7 @@ describe("selectDashboardAttention", () => {
     expect(read.due.matches.map(({ milestoneId }) => milestoneId)).toEqual([
       "second-smt",
       "second-go",
-      "first-mdrr",
+      "first-pre-build",
     ]);
   });
 
@@ -358,7 +516,7 @@ describe("selectDashboardAttention", () => {
     const owner = project("attention-both");
     const read = expectAvailable(selectDashboardAttention(state([owner], [
       schedule(owner.id, [
-        milestone("due", "milestone-mdrr", "2026-10-03"),
+        milestone("due", "milestone-c1-c-pre-build", "2026-10-03"),
         milestone("overdue", "milestone-a1-a-smt", "2026-09-16"),
       ]),
     ]), REFERENCE_DATE, initialGovernanceContext()));

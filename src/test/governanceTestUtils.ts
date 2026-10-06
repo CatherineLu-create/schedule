@@ -1,6 +1,5 @@
 import { createInitialMilestoneGovernanceRuntimeState } from "../application/governance/milestoneGovernanceInitializer";
 import type { EffectiveMilestoneGovernanceContext } from "../application/governance/effectiveMilestoneGovernanceContext";
-import { dashboardAttentionMilestoneTypeIds } from "../config/v2/referenceData";
 import type { CanonicalScheduleCommandContext } from "../application/commands/canonicalScheduleCommands";
 import { publishGovernanceDraft, startGovernanceDraft, updateGovernanceDraft } from "../application/governance/milestoneGovernanceCommands";
 import { selectEffectiveMilestoneGovernanceContext } from "../application/governance/effectiveMilestoneGovernanceContext";
@@ -13,16 +12,9 @@ import { parseDateOnly } from "../domain/shared/dateOnly";
 
 /** Explicit bundled baseline for old characterization fixtures; never a runtime fallback. */
 export function initialGovernanceContext(): EffectiveMilestoneGovernanceContext {
-  const release = createInitialMilestoneGovernanceRuntimeState().releases[0];
-  return {
-    releaseId: release.id,
-    definitionsForHistoricalResolution: release.definitions,
-    addablePublicDefinitions: release.addableDefinitionIds.map(id => release.definitions.find(d => d.id === id)!),
-    portfolioColumnDefinitions: release.portfolioColumnDefinitionIds.map(id => release.definitions.find(d => d.id === id)!),
-    automaticAttentionTypeIds: new Set(dashboardAttentionMilestoneTypeIds),
-    additionalAttentionDefinitionIds: new Set(),
-    newProjectRequirementDefinitionIds: new Set(),
-  };
+  const result = selectEffectiveMilestoneGovernanceContext(createInitialMilestoneGovernanceRuntimeState());
+  if (!result.ok) throw new Error(JSON.stringify(result));
+  return result.value;
 }
 
 export function initialScheduleCommandContext(): CanonicalScheduleCommandContext {

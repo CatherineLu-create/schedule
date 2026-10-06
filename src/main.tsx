@@ -9,6 +9,7 @@ import { prepareProjectCreationCommit } from "./application/governance/projectCr
 import { discardGovernanceDraft, previewGovernancePublish, publishGovernanceDraft, startGovernanceDraft, updateGovernanceDraft } from "./application/governance/milestoneGovernanceCommands";
 import type { GovernanceDraftUpdate, GovernancePublishPreview, MilestoneGovernanceRuntimeState } from "./domain/governance/milestoneGovernance";
 import { GovernanceWorkspace } from "./governanceWorkspace";
+import type { GovernanceScheduleToolsBindings } from "./governanceAdvancedTools";
 import { selectEffectiveMilestoneGovernanceContext, selectEffectiveRetiredDraftOccurrenceGrants } from "./application/governance/effectiveMilestoneGovernanceContext";
 import { createPortfolioVisibleSchema } from "./portfolioDashboardColumns";
 import {
@@ -117,6 +118,12 @@ import {
 } from "./projectMasterControls";
 import { ProjectMasterDetail } from "./projectMasterDetail";
 import { ScheduleWorkspace, type ScheduleWorkspaceProps } from "./scheduleWorkspace";
+import { scheduleReviewFailureMessage, type LocalDefinitionFormInput, type LocalMappingFormInput } from "./scheduleImportReviewPanel";
+import { confirmProjectLocalMilestoneDefinition, confirmScheduleImportDecision, loadBuiltInScheduleSimulation, mapDraftLocalOccurrenceToPublic } from "./application/commands/scheduleReviewCommands";
+import { resolveScheduleDefinitions } from "./application/governance/scheduleDefinitionResolution";
+import type { ConfirmScheduleImportDecisionInput, GovernanceSimulationPack } from "./domain/schedule/scheduleReview";
+import { governanceSimulationPacks } from "./fixtures/v2/governanceSimulationFixtures";
+import { toMilestoneDefinitionId, toScheduleEvidenceId, toScheduleImportCandidateId, toScheduleReviewDecisionId, toScheduleReviewSessionId } from "./domain/shared/ids";
 import { TeamMemberWorkspace, type TeamMemberWorkspaceProps } from "./teamMemberWorkspace";
 import {
   defaultTeamMemberFields,
@@ -293,6 +300,9 @@ export function App({
   const [editIssues, setEditIssues] = React.useState<readonly ValidationIssue[]>([]);
   const [editFeedback, setEditFeedback] = React.useState<readonly ValidationIssue[]>([]);
   const [scheduleFeedback, setScheduleFeedback] = React.useState<readonly string[]>([]);
+  const [governanceScheduleFeedback, setGovernanceScheduleFeedback] = React.useState<{ projectId: ProjectId; messages: readonly string[] } | null>(null);
+  const commandContextRef = React.useRef(scheduleCommandContext);
+  commandContextRef.current = scheduleCommandContext;
 
   const selectedCanonicalProject =
     selectedProjectId === null ? null : getProjectById(state, selectedProjectId);
@@ -455,41 +465,110 @@ export function App({
     setScheduleFeedback([]);
   };
 
-  const cancelScheduleDraft = (): void => {
-    if (selectedProjectId === null) return;
-    const projectId = selectedProjectId;
-    const owner = resolveCanonicalScheduleOwner(state, projectId);
+  const cancelScheduleDraft = (projectId: ProjectId, report: (messages: readonly string[]) => void = setScheduleFeedback): void => {
+    const owner = resolveCanonicalScheduleOwner(stateRef.current, projectId);
     if (owner.kind === "unavailable") {
-      setScheduleFeedback(owner.issues.map(({ message }) => message));
+      report(owner.issues.map(({ message }) => message));
       return;
     }
     const result = cancelScheduleWorkingDraft(owner.schedule);
     if (!result.ok) {
-      setScheduleFeedback(scheduleFailureMessages(result));
+      report(scheduleFailureMessages(result));
       return;
     }
     dispatchScheduleReplacement(projectId, result);
-    setScheduleFeedback([]);
+    report([]);
   };
 
-  const publishScheduleDraft = (): void => {
-    if (selectedProjectId === null) return;
-    const projectId = selectedProjectId;
-    const owner = resolveCanonicalScheduleOwner(state, projectId);
+  const publishScheduleDraft = (projectId: ProjectId, report: (messages: readonly string[]) => void = setScheduleFeedback): void => {
+    const owner = resolveCanonicalScheduleOwner(stateRef.current, projectId);
     if (owner.kind === "unavailable") {
-      setScheduleFeedback(owner.issues.map(({ message }) => message));
+      report(owner.issues.map(({ message }) => message));
       return;
     }
     const publishedAt = new Date().toISOString();
     const result = publishScheduleWorkingDraft(
-      owner.schedule, { publishedAt }, scheduleCommandContext(owner.schedule),
+      owner.schedule, { publishedAt }, commandContextRef.current(owner.schedule),
     );
     if (!result.ok) {
-      setScheduleFeedback(scheduleFailureMessages(result));
+      report(scheduleFailureMessages(result));
       return;
     }
     dispatchScheduleReplacement(projectId, result);
+    report([]);
+  };
+
+  // Review commands always resolve the current Project owner and governance at confirmation.
+  const currentReviewOwner = (projectId: ProjectId) => resolveCanonicalScheduleOwner(stateRef.current, projectId);
+  const createProjectLocalDefinition = (projectId: ProjectId, input: LocalDefinitionFormInput): MilestoneDefinitionId | null => {
+    const owner = currentReviewOwner(projectId);
+    if (owner.kind !== "available") return null;
+    const definitionId = toMilestoneDefinitionId(globalThis.crypto.randomUUID());
+    const result = confirmProjectLocalMilestoneDefinition(owner.schedule, { ...input, definitionId, source: "manual", evidenceIds: [] }, commandContextRef.current(owner.schedule).governance);
+    if (!result.ok) { setScheduleFeedback([scheduleReviewFailureMessage(result.code)]); return null; }
+    dispatchScheduleReplacement(projectId, { ok: true, schedule: result.value });
     setScheduleFeedback([]);
+    return definitionId;
+  };
+  const reportGovernanceSchedule = (projectId: ProjectId, messages: readonly string[]): void => setGovernanceScheduleFeedback({ projectId, messages });
+  const loadScheduleSimulation = (projectId: ProjectId, pack: GovernanceSimulationPack): void => {
+    const owner = currentReviewOwner(projectId);
+    if (owner.kind !== "available") return;
+    let schedule = owner.schedule;
+    if (schedule.workingDraft === null) {
+      const started = startScheduleWorkingDraft(schedule, { workingDraftId: toCanonicalScheduleWorkingDraftId(globalThis.crypto.randomUUID()) }, commandContextRef.current(schedule));
+      if (!started.ok) { reportGovernanceSchedule(projectId, ["此專案目前無法建立草稿，請檢查既有排程與公版設定。"]); return; }
+      schedule = started.schedule;
+    }
+    const records = governanceSimulationPacks[pack];
+    const result = loadBuiltInScheduleSimulation(schedule, { pack, ids: {
+      sessionId: toScheduleReviewSessionId(globalThis.crypto.randomUUID()),
+      evidenceIds: records.map(() => toScheduleEvidenceId(globalThis.crypto.randomUUID())),
+      candidateIds: records.map(() => toScheduleImportCandidateId(globalThis.crypto.randomUUID())),
+    } }, commandContextRef.current(schedule));
+    if (!result.ok) { reportGovernanceSchedule(projectId, [scheduleReviewFailureMessage(result.code, "zh")]); return; }
+    if (result.value === owner.schedule) { reportGovernanceSchedule(projectId, ["此模擬情境已載入，未重複加入。"]); return; }
+    // Start + load is committed once, only after both commands succeed.
+    dispatchScheduleReplacement(projectId, { ok: true, schedule: result.value });
+    reportGovernanceSchedule(projectId, []);
+  };
+  const confirmScheduleImport = (projectId: ProjectId, input: ConfirmScheduleImportDecisionInput): void => {
+    const owner = currentReviewOwner(projectId);
+    if (owner.kind !== "available") return;
+    const target = input.target.kind === "updateExistingOccurrence" ? input.target : { ...input.target, milestoneId: toMilestoneId(globalThis.crypto.randomUUID()) };
+    const result = confirmScheduleImportDecision(owner.schedule, { ...input, target, decisionId: toScheduleReviewDecisionId(globalThis.crypto.randomUUID()) }, commandContextRef.current(owner.schedule));
+    if (!result.ok) { reportGovernanceSchedule(projectId, [scheduleReviewFailureMessage(result.code, "zh")]); return; }
+    dispatchScheduleReplacement(projectId, { ok: true, schedule: result.value });
+    reportGovernanceSchedule(projectId, []);
+  };
+  const mapScheduleLocal = (projectId: ProjectId, input: LocalMappingFormInput): boolean => {
+    const owner = currentReviewOwner(projectId);
+    if (owner.kind !== "available") return false;
+    const result = mapDraftLocalOccurrenceToPublic(owner.schedule, { ...input,
+      sessionId: toScheduleReviewSessionId(globalThis.crypto.randomUUID()), decisionId: toScheduleReviewDecisionId(globalThis.crypto.randomUUID()),
+    }, commandContextRef.current(owner.schedule));
+    if (!result.ok) { reportGovernanceSchedule(projectId, [scheduleReviewFailureMessage(result.code, "zh")]); return false; }
+    dispatchScheduleReplacement(projectId, { ok: true, schedule: result.value });
+    reportGovernanceSchedule(projectId, []);
+    return true;
+  };
+
+  const bindGovernanceProject = (projectId: ProjectId): GovernanceScheduleToolsBindings | null => {
+    const owner = resolveCanonicalScheduleOwner(state, projectId);
+    if (owner.kind !== "available") return null;
+    return {
+      review: {
+        schedule: owner.schedule, context: scheduleCommandContext(owner.schedule),
+        onCreateLocal: () => null,
+        onLoadSimulation: pack => loadScheduleSimulation(projectId, pack),
+        onConfirmImport: input => confirmScheduleImport(projectId, input),
+        onMapLocal: input => mapScheduleLocal(projectId, input),
+      },
+      feedback: governanceScheduleFeedback?.projectId === projectId ? governanceScheduleFeedback.messages : [],
+      onClearFeedback: () => setGovernanceScheduleFeedback(null),
+      onPublish: () => publishScheduleDraft(projectId, messages => reportGovernanceSchedule(projectId, messages.length ? ["此專案草稿尚無法發布，請檢查日期、適用性及待處理項目。"] : [])),
+      onDiscard: () => cancelScheduleDraft(projectId, messages => reportGovernanceSchedule(projectId, messages.length ? ["此專案目前無法捨棄草稿，請重新檢查排程。"] : [])),
+    };
   };
 
   const nextVersion =
@@ -506,13 +585,26 @@ export function App({
       ? null
       : {
           draftRead: selectedDraftRead,
+          governance,
           feedback: scheduleFeedback,
-          milestoneDefinitions: governance.addablePublicDefinitions,
+          milestoneDefinitions: selectedScheduleOwner?.kind === "available"
+            ? resolveScheduleDefinitions(governance, selectedScheduleOwner.schedule.localDefinitions).filter(definition =>
+              governance.addablePublicDefinitions.some(publicDefinition => publicDefinition.id === definition.id)
+              || selectedScheduleOwner.schedule.localDefinitions.some(local => local.id === definition.id))
+            : governance.addablePublicDefinitions,
+          review: selectedScheduleOwner?.kind === "available" ? {
+            schedule: selectedScheduleOwner.schedule,
+            context: scheduleCommandContext(selectedScheduleOwner.schedule),
+            onCreateLocal: input => createProjectLocalDefinition(selectedProjectId, input),
+            onLoadSimulation: pack => loadScheduleSimulation(selectedProjectId, pack),
+            onConfirmImport: input => confirmScheduleImport(selectedProjectId, input),
+            onMapLocal: input => mapScheduleLocal(selectedProjectId, input),
+          } : undefined,
           nextVersionLabel,
           officialRead: selectedScheduleRead,
           onAddMilestone: addScheduleDraftMilestone,
-          onCancelDraft: cancelScheduleDraft,
-          onPublishDraft: publishScheduleDraft,
+          onCancelDraft: () => cancelScheduleDraft(selectedProjectId),
+          onPublishDraft: () => publishScheduleDraft(selectedProjectId),
           onRemoveMilestone: removeScheduleDraftMilestone,
           onStartDraft: selectedScheduleOwner?.kind === "available"
             ? startScheduleDraft
@@ -713,6 +805,7 @@ export function App({
         context={governance}
         projects={state.projects}
         schedules={state.schedules}
+        scheduleTools={bindGovernanceProject}
         preview={governancePreview}
         issues={governanceIssues}
         onStartDraft={startPublicGovernanceDraft}

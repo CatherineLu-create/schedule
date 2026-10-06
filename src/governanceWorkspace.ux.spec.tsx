@@ -28,7 +28,7 @@ function draftState() {
   const started = value(startGovernanceDraft(createInitialMilestoneGovernanceRuntimeState(), toGovernanceDraftId("ux-draft")));
   const candidate = started.draft!.candidateRelease;
   return value(updateGovernanceDraft(started, { kind: "replace-candidate-release", candidateRelease: { ...candidate,
-    definitions: [...candidate.definitions, { ...candidate.definitions[0], id: gateId, name: "GOV Demo Gate", displayOrder: 9999 }],
+    definitions: [...candidate.definitions, { ...candidate.definitions[0], id: gateId, name: "GOV Demo Gate", milestoneTypeId: null, displayOrder: 9999 }],
   } }));
 }
 function setup(initial = draftState(), issues: readonly ValidationIssue[] = []) {
@@ -56,6 +56,41 @@ const picker = () => screen.getByText("專案選取", { selector: "legend", exac
 const pick = (name: string) => fireEvent.click(within(picker()).getByRole("checkbox", { name }));
 const options = () => within(picker()).getAllByRole("checkbox").map(item => item.getAttribute("aria-label"));
 const showPreview = () => { click("檢查並預覽發布"); return screen.getByRole("region", { name: "公版發布預覽" }); };
+
+it("UX05 manages Chinese Stage and Type Draft catalogs with protected and historical read-only Types", () => {
+  const state = setup();
+  const stages = within(screen.getByRole("region", { name: "階段管理" }));
+  const types = within(screen.getByRole("region", { name: "類型管理" }));
+  expect(types.getByRole("heading", { name: "可選類型" })).toBeVisible();
+  expect(types.getByRole("heading", { name: "歷史類型" })).toBeVisible();
+  expect(types.getAllByText("系統自動提醒")).toHaveLength(4);
+  expect(types.queryByRole("button", { name: /停用類型.*G\/O|停用類型.*SMT|停用類型.*Pre-Build|停用類型.*Close|停用類型.*MDRR|重新命名/ })).not.toBeInTheDocument();
+  fireEvent.change(stages.getByLabelText("新階段名稱"), { target: { value: "New Stage" } });
+  fireEvent.click(stages.getByRole("button", { name: "新增階段" }));
+  fireEvent.change(types.getByLabelText("新類型名稱"), { target: { value: "New Type" } });
+  fireEvent.click(types.getByRole("button", { name: "新增類型" }));
+  expect(state().draft!.candidateRelease.stageGroups.at(-1)?.displayName).toBe("New Stage");
+  expect(state().draft!.candidateRelease.milestoneTypes.at(-1)?.displayName).toBe("New Type");
+  fireEvent.click(stages.getByRole("button", { name: "停用階段 Design" }));
+  fireEvent.click(types.getByRole("button", { name: "停用類型 Test" }));
+  const preview = within(showPreview());
+  for (const heading of ["新增階段", "停用階段", "新增類型", "停用類型"]) expect(preview.getByRole("heading", { name: heading })).toBeVisible();
+  expect(preview.getByText("此階段仍被既有里程碑使用；停用後僅停止新定義選用，不會停用既有里程碑。")).toBeVisible();
+  expect(preview.queryByRole("button")).not.toBeInTheDocument();
+  expect(state().releases[0].stageGroups.some(item => item.displayName === "New Stage")).toBe(false);
+});
+
+it("UX05 public editor allows No Type and seven selectable Types while preserving MDRR legacy label and ordinary reminder", () => {
+  const state = setup();
+  const types = within(screen.getByLabelText("類型", { exact: true })).getAllByRole("option");
+  expect(types.map(item => item.textContent)).toEqual(["無類型", "G/O", "SMT", "Pre-Build", "Close", "Test", "Certification", "Preparation"]);
+  change("公版里程碑名稱", "No Type public work"); change("階段", "stage-design");
+  click("加入公版草稿");
+  expect(state().draft!.candidateRelease.definitions.at(-1)?.milestoneTypeId).toBeNull();
+  expect(within(row("No Type public work")).getByRole("checkbox", { name: "加入日期提醒" })).toBeEnabled();
+  expect(within(row("MDRR")).getByRole("checkbox", { name: "加入日期提醒" })).toBeEnabled();
+  expect(state().draft!.candidateRelease.definitions.find(item => item.id === "milestone-mdrr")?.milestoneTypeId).toBe("type-mdrr");
+});
 
 it("governance_primary_labels_are_traditional_chinese_and_simulation_disclosure_remains_exact_without_fake_permissions", () => {
   setup();
@@ -202,7 +237,7 @@ it("inserts_at_stage_end_front_bundled_anchor_and_runtime_anchor_without_renumbe
   add("C1 after runtime", "inserted-3");
   const definitions = state().draft!.candidateRelease.definitions;
   expect(definitions.filter(item => item.stageGroupId === "stage-c1").length).toBe(10);
-  expect(orderMilestoneDefinitions(definitions.filter(item => item.stageGroupId === "stage-c1")).map(item => item.id)).toEqual([
+  expect(orderMilestoneDefinitions(definitions.filter(item => item.stageGroupId === "stage-c1"), state().draft!.candidateRelease.stageGroups).map(item => item.id)).toEqual([
     "inserted-2", "milestone-c1-c-g-o", "inserted-3", "inserted-4", "milestone-c1-c-smt", "milestone-c1-c-pre-build", "milestone-c1-c-main-build", "milestone-c1-c-test", "milestone-c1-close", "inserted-1",
   ]);
   expect(definitions.slice(0, before.length)).toEqual(before);
@@ -249,23 +284,43 @@ it("type_explanation_and_date_reminder_indicator_follow_automatic_type_policy_wi
   const redundantId = toMilestoneDefinitionId("milestone-c1-c-g-o");
   const seeded = value(updateGovernanceDraft(initial, { kind: "replace-candidate-release", candidateRelease: { ...candidate, additionalAttentionDefinitionIds: [redundantId] } }));
   const state = setup(seeded);
-  expect(screen.getByText("G/O、SMT、Close、MDRR 會自動加入 Dashboard 的 Upcoming / Overdue；其他類型可另外設定「加入日期提醒」。")).toBeVisible();
-  expect(screen.getByText("G/O、SMT、Close、MDRR 會自動提醒；其他類型可勾選加入 Dashboard 的 Upcoming / Overdue。")).toBeVisible();
+  expect(screen.getByText("G/O、SMT、Pre-Build、Close 會自動加入 Dashboard 的 Upcoming / Overdue；其他類型或無類型可另外設定「加入日期提醒」。")).toBeVisible();
+  expect(screen.getByText("G/O、SMT、Pre-Build、Close 會自動提醒；其他類型或無類型可勾選加入 Dashboard 的 Upcoming / Overdue。")).toBeVisible();
   const table = screen.getByRole("table", { name: "公版里程碑與設定" });
   expect(within(table).getByRole("columnheader", { name: "加入日期提醒" })).toBeVisible();
-  const automatic = candidate.definitions.filter(item => ["type-g-o", "type-smt", "type-close", "type-mdrr"].includes(item.milestoneTypeId));
+  const automatic = candidate.definitions.filter(item => item.milestoneTypeId !== null && ["type-g-o", "type-smt", "type-pre-build", "type-close"].includes(item.milestoneTypeId));
   expect(automatic.length).toBeGreaterThan(4);
-  const rows = within(table).getAllByRole("row").slice(1);
   for (const definition of automatic) {
-    const index = candidate.definitions.findIndex(item => item.id === definition.id);
-    expect(within(rows[index]).getByText("自動提醒")).toBeVisible();
-    expect(within(rows[index]).queryByRole("checkbox", { name: "加入日期提醒" })).not.toBeInTheDocument();
+    const row = within(table).getByRole("rowheader", { name: definition.name }).closest("tr")!;
+    expect(within(row).getByText("自動提醒")).toBeVisible();
+    expect(within(row).queryByRole("checkbox", { name: "加入日期提醒" })).not.toBeInTheDocument();
   }
   expect(state()).toBe(seeded);
   fireEvent.click(check("加入日期提醒"));
   expect(state().draft!.candidateRelease.additionalAttentionDefinitionIds).toEqual([redundantId, gateId]);
   expect(showPreview()).toHaveTextContent("加入日期提醒變更");
 });
+it("SSL/GL uses the existing definition with a noninteractive automatic reminder and presentation labels", () => {
+  const initial = draftState();
+  const state = setup(initial);
+  const table = screen.getByRole("table", { name: "公版里程碑與設定" });
+  const sslGl = within(table).getByRole("rowheader", { name: "SSL/GL" }).closest("tr")!;
+  expect(within(sslGl).getByText("自動提醒")).toBeVisible();
+  expect(within(sslGl).queryByRole("checkbox", { name: "加入日期提醒" })).not.toBeInTheDocument();
+  expect(within(table).queryByRole("rowheader", { name: "FCS" })).not.toBeInTheDocument();
+  expect(check("加入日期提醒", "MDRR")).not.toBeChecked();
+  expect(state()).toBe(initial);
+  expect(state().draft!.candidateRelease.additionalAttentionDefinitionIds).toEqual([]);
+  change("階段", "stage-ramp");
+  expect(within(screen.getByLabelText("插入位置")).getByRole("option", { name: "放在「SSL/GL」之後" })).toHaveValue("milestone-ramp-fcs");
+  expect(within(screen.getByLabelText("需確認的公版里程碑")).getByRole("option", { name: "SSL/GL｜RAMP-stage｜FCS" })).toHaveValue("milestone-ramp-fcs");
+  fireEvent.click(within(sslGl).getByRole("checkbox", { name: "顯示於總表" }));
+  const preview = showPreview();
+  expect(preview).toHaveTextContent("SSL/GL · 移除");
+  expect(preview).not.toHaveTextContent("FCS · 移除");
+  expect(state().draft!.candidateRelease.definitions).toEqual(initial.draft!.candidateRelease.definitions);
+});
+
 it("unknown_command_issues_use_safe_visible_fallback_without_raw_message_code_or_ids", () => {
   setup(undefined, [{ code: "unknown-secret-code", domain: "governance", source: "data", severity: "blocking", message: "failure runtime-secret-uuid", target: { section: "definitions", entityId: "runtime-secret-uuid" } }]);
   const alert = screen.getByRole("alert");

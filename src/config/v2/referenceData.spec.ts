@@ -271,7 +271,7 @@ describe("authoritative V2 reference data", () => {
     it("keeps the four management attention types distinct by ID", () => {
       const keyTypeIds = milestoneTypeCatalog
         .filter((item) =>
-          ["G/O", "SMT", "Close", "MDRR"].includes(item.displayName),
+          ["G/O", "SMT", "Pre-build", "Close"].includes(item.displayName),
         )
         .map((item) => item.id);
 
@@ -294,7 +294,7 @@ describe("authoritative V2 reference data", () => {
           id: definition.id,
           stage: stageNameById.get(definition.stageGroupId),
           name: definition.name,
-          type: typeNameById.get(definition.milestoneTypeId),
+          type: definition.milestoneTypeId === null ? null : typeNameById.get(definition.milestoneTypeId),
           displayOrder: definition.displayOrder,
         })),
       ).toEqual([
@@ -422,8 +422,8 @@ describe("authoritative V2 reference data", () => {
       expect(dashboardAttentionMilestoneTypeIds).toEqual([
         "type-g-o",
         "type-smt",
+        "type-pre-build",
         "type-close",
-        "type-mdrr",
       ]);
     });
 
@@ -449,7 +449,7 @@ describe("authoritative V2 reference data", () => {
 
       for (const definition of milestoneDefinitions) {
         expect(stageIds.has(definition.stageGroupId)).toBe(true);
-        expect(typeIds.has(definition.milestoneTypeId)).toBe(true);
+        expect(definition.milestoneTypeId !== null && typeIds.has(definition.milestoneTypeId)).toBe(true);
       }
     });
   });

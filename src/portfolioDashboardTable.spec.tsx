@@ -40,7 +40,7 @@ function leaf(key: string) { return renderedRow().querySelector<HTMLTableCellEle
 describe("PortfolioDashboardTable", () => {
   it("renders separately published legacy/prefix-collision dates and resizes each definition independently", () => {
     const legacy = initialGovernanceContext().definitionsForHistoricalResolution.find(definition => definition.id === "milestone-design-kickoff")!;
-    const additions = ["design:kickoff", "definition:design:kickoff", "definition:definition:design:kickoff"].map((id, index) => ({ ...legacy, id: toMilestoneDefinitionId(id), name: `Separate kickoff ${index + 1}` }));
+    const additions = ["design:kickoff", "definition:design:kickoff", "definition:definition:design:kickoff"].map((id, index) => ({ ...legacy, id: toMilestoneDefinitionId(id), name: `Separate kickoff ${index + 1}`, milestoneTypeId: null }));
     const definitions = [legacy, ...additions];
     const context = publishPortfolioDefinitionsForTest(additions, definitions.map(definition => definition.id));
     const schema = createPortfolioVisibleSchema(context);

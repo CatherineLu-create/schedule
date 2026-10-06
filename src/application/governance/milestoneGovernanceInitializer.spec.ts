@@ -64,7 +64,7 @@ describe("initial milestone governance runtime", () => {
     const release = createInitialMilestoneGovernanceRuntimeState().releases[0];
 
     expect(dashboardAttentionMilestoneTypeIds).toEqual([
-      "type-g-o", "type-smt", "type-close", "type-mdrr",
+      "type-g-o", "type-smt", "type-pre-build", "type-close",
     ]);
     expect(release.additionalAttentionDefinitionIds).toEqual([]);
     expect(release.newProjectRequirementDefinitionIds).toEqual([]);
