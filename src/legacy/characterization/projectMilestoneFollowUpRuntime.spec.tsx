@@ -94,7 +94,7 @@ it.each(["applicable", "notApplicable"] as const)("only Current Published %s com
   fireEvent.click(screen.getByRole("button", { name: "Edit" }));
   const schedule = screen.getByRole("region", { name: "Schedule" });
   expect(followUp()).toHaveTextContent("Pending public milestones: Kickoff");
-  expect(within(schedule).queryByText(/simulation|mapping|governance/i)).not.toBeInTheDocument();
+  expect(within(schedule).queryByText(/simulation|mapping|governance|模擬|匯入審核|對應公版|審核紀錄|公版管理/i)).not.toBeInTheDocument();
   fireEvent.change(screen.getByRole("combobox", { name: "Milestone definition" }), { target: { value: definitionId } });
   fireEvent.click(screen.getByRole("button", { name: "Add Milestone" }));
   if (applicability === "applicable") {
@@ -164,4 +164,4 @@ it("preserves all four session catalogs through governance start, preview, disca
   action("建立草稿並載入");
   expect(screen.getByRole("region", { name: "匯入審核" })).toBeVisible();
   checkCatalogs();
-});
+}, 30000); // Measured 6.48s for this bounded multi-navigation flow; default 5s was insufficient.

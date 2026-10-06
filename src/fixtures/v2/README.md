@@ -131,12 +131,15 @@ repeated history without synthesizing missing active definitions. Users add
 absent active definitions through Select Milestone / Add Milestone. Canonical
 and User Trial Demo Published snapshots remain intentionally sparse.
 
-The active Portfolio Schedule schema is fixed at 30 exact-definition columns.
+The bundled Portfolio Schedule schema starts with 30 exact-definition columns;
+runtime membership comes from the current published Governance release.
 C1/C2 reuse their stable Main Build definition IDs with the `System Build`
 presentation and `type-system-build`; RAMP Main Build remains
-`type-main-build`. Attention remains type-driven by only G/O, SMT, Close, and
-MDRR, including RAMP G/O and RAMP SMT, while its UI displays each concrete
-definition name. No runtime parser/resolver or persistence change is introduced.
+`type-main-build`. Automatic Attention uses G/O, SMT, Pre-Build and Close Type
+IDs plus the exact `milestone-ramp-fcs` system definition (stored name FCS,
+display SSL/GL), unioned with released additional Attention definition IDs.
+MDRR is not automatically eligible. Draft governance changes do not affect
+these consumers. No real Kevin parser or persistence is implemented.
 
 MDRR is an additional valid Milestone Catalog item with:
 
@@ -149,22 +152,25 @@ not inferred from legacy fixture data. The User Trial Portfolio explicitly
 projects this definition into its already-existing MDRR column from Current
 Published Schedule while retaining `showInPortfolio = false` as historical
 catalog metadata. This presentation exception does not change catalog or
-Schedule authority. Its stable Milestone Type ID continues to participate in
-Dashboard Upcoming and Overdue derivation through the unchanged attention
-selector.
+Schedule authority. Its stable `type-mdrr` identity remains resolvable for
+history; MDRR enters Dashboard Upcoming and Overdue only when its exact
+definition ID is included in released additional Attention membership.
 
-Workspace Add selects an existing PIP `MilestoneDefinitionId`; it does not
-create a definition. The future input boundary is:
+Workspace Add selects a released public or confirmed same-Project local
+`MilestoneDefinitionId` and explicitly adds an occurrence. The separate English
+Project-specific editor creates only a local definition, using a currently
+selectable released Stage and optional Type (null means No Type). Stage/Type
+Add and Retire are governed; legacy classifications remain resolvable.
 
-```text
-Weekly Report / PPT -> Kevin parser JSON -> mapping/resolution
-                    -> existing canonical PIP MilestoneDefinitionId
-```
-
-This future flow requires mapping/resolution into PIP IDs and cannot silently
-create, rename, or replace definitions. Unresolved input belongs to a future
-Import/Evidence design boundary; this fixture contract proposes no parser,
-mapping, or import API.
+Governance provides explicit local-to-public mapping and four independent
+built-in simulation scenarios through `governanceSimulationFixtures.ts`:
+`basic-success`, `fixable-validation`, `retired-existing-update`, and
+`retired-no-reference-negative`. Evidence and review candidates remain
+unpublished until legal explicit confirmation and Schedule Publish. Mapping
+requires four equivalence assertions and never follows names automatically.
+The fixed disclosure is “模擬匯入資料｜供 PIP 流程驗收，非 Kevin 正式 JSON 格式”.
+Real Kevin format and import UX remain deferred until formal data is available;
+these fixtures make no file-ingress or format-compatibility claim.
 
 ## Applicability and candidate data
 

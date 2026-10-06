@@ -242,7 +242,7 @@ it("inserts_at_stage_end_front_bundled_anchor_and_runtime_anchor_without_renumbe
   ]);
   expect(definitions.slice(0, before.length)).toEqual(before);
   expect(definitions.slice(-4).map(item => item.displayOrder)).toEqual([180, 110, 125, 127.5]);
-});
+}, 30000); // Measured 11.92s for this bounded four-insertion flow; default 5s was insufficient.
 it("stage_change_refreshes_anchor_choices_and_resets_invalid_anchor_to_end", () => {
   setup(); change("階段", "stage-c1"); change("插入位置", "milestone-c1-close");
   change("階段", "stage-c2");

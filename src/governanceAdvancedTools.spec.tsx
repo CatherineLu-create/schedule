@@ -47,13 +47,13 @@ function changes() { return vi.mocked(prototypeReducer).mock.calls.map(([, actio
 
 it("UX06 PM never exposes advanced tools even with pending imported candidates", () => {
   mount(pendingDraft());
-  expect(screen.queryAllByText(/Simulated import data/)).toHaveLength(0);
-  expect(screen.queryByLabelText("Scenario")).not.toBeInTheDocument();
+  expect(screen.queryAllByText(/Simulated import data|模擬匯入資料/)).toHaveLength(0);
+  expect(screen.queryByLabelText(/Scenario|模擬情境/)).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Load simulated|載入模擬/ })).not.toBeInTheDocument();
   expect(screen.queryByRole("region", { name: /Import Review|匯入審核/ })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Map to Public|對應公版/ })).not.toBeInTheDocument();
   expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
-  expect(screen.queryByText(/Raw data|Parsed result|Review History/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Raw data|Parsed result|Review History|原始資料|系統解析|審核紀錄/)).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "Discard Draft" })).toBeEnabled();
   expect(screen.getByLabelText("Publish blockers")).toHaveTextContent("unresolved");
