@@ -109,3 +109,30 @@ it.each([false, true])("injected prepare failure in %s Create changes neither st
   expect(retained.requirementEnrollments.map(item => item.milestoneDefinitionId)).toEqual(requirements);
   expect(screen.getByRole("region", { name: "Project Header" })).toHaveTextContent("Independent session CPU");
 });
+
+it.each([false, true])("real enrollment allocation collision in %s Create is atomic and retries with the same Project identity", duplicate => {
+  const { governance, prototype, requirements } = fixture();
+  const before = structuredClone({ governance, prototype });
+  vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValueOnce(projectUuid)
+    .mockReturnValueOnce(enrollmentUuid1).mockReturnValueOnce(enrollmentUuid1)
+    .mockReturnValueOnce(enrollmentUuid1).mockReturnValueOnce(enrollmentUuid2);
+  openCreate(duplicate);
+  submit(duplicate);
+  expect(vi.mocked(prepareProjectCreationCommit).mock.results.at(-1)!.value).toMatchObject({ ok: false, code: "duplicate-enrollment-id" });
+  expect(screen.getByRole("dialog", { name: "Create Project" })).toHaveTextContent("Could not allocate a unique requirement ID.");
+  expect(screen.queryByRole("region", { name: "Project Header" })).not.toBeInTheDocument();
+  expect(screen.queryByText("GOV-CREATE")).not.toBeInTheDocument();
+  expect(vi.mocked(selectEffectiveMilestoneGovernanceContext).mock.calls.at(-1)![0]).toEqual(governance);
+  submit(duplicate);
+  const [retryPrototype, retryGovernance] = vi.mocked(prepareProjectCreationCommit).mock.calls.at(-1)!;
+  expect(retryPrototype).toEqual(prototype);
+  expect(retryGovernance).toEqual(governance);
+  expect(screen.getByRole("region", { name: "Project Header" })).toHaveAttribute("data-project-id", projectUuid);
+  expect(within(screen.getByRole("region", { name: "Current Schedule" })).getByText("-")).toBeInTheDocument();
+  expect(vi.mocked(selectEffectiveMilestoneGovernanceContext).mock.calls.at(-1)![0].requirementEnrollments).toEqual([
+    { id: enrollmentUuid1, projectId: projectUuid, milestoneDefinitionId: requirements[0], assignedByReleaseId: "runtime-creation-release", source: "new-project-at-creation" },
+    { id: enrollmentUuid2, projectId: projectUuid, milestoneDefinitionId: requirements[1], assignedByReleaseId: "runtime-creation-release", source: "new-project-at-creation" },
+  ]);
+  expect(screen.getByRole("region", { name: "Milestone Follow-up" })).toHaveTextContent("Pending public milestones: Kickoff, ID fix");
+  expect({ governance, prototype }).toEqual(before);
+});

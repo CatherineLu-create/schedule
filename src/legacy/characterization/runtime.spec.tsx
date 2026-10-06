@@ -72,15 +72,22 @@ vi.mock("xlsx", async (importOriginal) => {
   const actual = await importOriginal<typeof import("xlsx")>();
   return {
     ...actual,
-    utils: {
-      ...actual.utils,
-      json_to_sheet: vi.fn(actual.utils.json_to_sheet),
-    },
     writeFile: vi.fn(),
   };
 });
 
 const fixedUuid = "11111111-1111-4111-8111-111111111111";
+
+function exportedDashboardGrid(): string[][] {
+  const workbook = vi.mocked(XLSX.writeFile).mock.calls.at(-1)![0];
+  expect(workbook.SheetNames).toEqual(["All Projects"]);
+  return XLSX.utils.sheet_to_json<string[]>(workbook.Sheets["All Projects"]!, { header: 1, defval: "" });
+}
+
+function exportedDashboardRows(): Record<string, string>[] {
+  const [headers, ...rows] = exportedDashboardGrid();
+  return rows.map(row => Object.fromEntries(headers!.map((header, index) => [header, row[index]!] )));
+}
 
 function dateOnly(value: string): DateOnly {
   const parsed = parseDateOnly(value);
@@ -1696,7 +1703,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(within(coverLeverage).queryByRole("table")).not.toBeInTheDocument();
   });
 
-  it("shows canonical-safe attention and exports all canonical rows despite active filters", () => {
+  it("shows canonical-safe attention and exports only the current filtered canonical rows", () => {
     render(<App />);
     expect(screen.queryByText("No items requiring attention.")).not.toBeInTheDocument();
     for (const legacyName of [
@@ -1709,20 +1716,32 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(dashboardRows()).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: "Export to Excel" }));
 
-    const exportedRows = vi.mocked(XLSX.utils.json_to_sheet).mock.calls[0]![0] as Array<Record<string, string>>;
-    expect(exportedRows).toHaveLength(5);
-    expect(exportedRows.map((row) => row["Project Name"])).toEqual([
-      "Manta", "Nautilus", "Orca", "Beluga", "Marlin",
+    const exportedRows = exportedDashboardRows();
+    expect(exportedRows).toHaveLength(2);
+    expect(exportedRows.map((row) => row["STN Project Name"])).toEqual([
+      "Manta", "Marlin",
     ]);
     expect(vi.mocked(XLSX.writeFile)).toHaveBeenCalledWith(
       expect.anything(),
       "Project_Portfolio_Summary.xlsx",
     );
-    expect(exportedRows.every((row) => row["Current Stage"] === "-" && row.MDRR === "-")).toBe(true);
-    // Detects widening the export to Schedule/Team or dropping reviewed Master fields.
-    for (const row of exportedRows) expect(Object.keys(row)).toEqual([
-      "Year", "Customer", "Product Line", "Project Name", "QCI Model Name", "Acer Model Name", "Acer Marketing Name", "Panel Size", "CPU", "GPU", "SSID", "RMN", "Project Status", "Current Stage", "MDRR",
-    ]);
+    expect(exportedRows.every((row) => row.MDRR === "")).toBe(true);
+    const headers = exportedDashboardGrid()[0]!;
+    expect(headers).toHaveLength(48);
+    expect(headers.slice(0, 11)).toEqual(["Status", "Year", "STN Project Name", "QCI Model Name", "Customer", "Category", "Product Line", "Panel Size", "CPU", "GPU", "PCB#"]);
+    expect(headers.slice(-9)).toEqual(["SSL/GL", "MDRR", "QCI PM", "QCI PjM", "Acer PM", "ME Owner", "EE Owner", "Thermal Owner", "BIOS Owner"]);
+    expect(headers).toEqual([...dashboardTable().querySelectorAll('th[scope="col"] span')].map(leaf => leaf.textContent));
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Manta" } });
+    fireEvent.click(screen.getByRole("button", { name: "Export to Excel" }));
+    expect(exportedDashboardRows()).toEqual([exportedRows[0]]);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "not-a-project" } });
+    fireEvent.click(screen.getByRole("button", { name: "Export to Excel" }));
+    expect(exportedDashboardRows()).toEqual([]);
+    expect(exportedDashboardGrid()).toEqual([headers]);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export to Excel" }));
+    expect(exportedDashboardRows()).toHaveLength(5);
   });
 
   it("keeps real XLSX workbook parsing available beside Project export spies", () => {
@@ -1889,10 +1908,8 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     expect(screen.getByText("No projects match the current search and filters")).toBeVisible();
     fireEvent.change(search, { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: "Export to Excel" }));
-    const exportedRows = vi.mocked(XLSX.utils.json_to_sheet).mock.calls.at(-1)?.[0] as
-      | Array<Record<string, string>>
-      | undefined;
-    expect(exportedRows?.find((row) => row["Project Name"] === "Runtime Catalog Project"))
+    const exportedRows = exportedDashboardRows();
+    expect(exportedRows.find((row) => row["STN Project Name"] === "Runtime Catalog Project"))
       .toMatchObject({
         "Product Line": "Runtime Line Label",
         "Panel Size": "Runtime Panel Label",

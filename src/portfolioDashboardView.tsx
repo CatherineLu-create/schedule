@@ -15,13 +15,16 @@ import {
   type PortfolioDashboardFilterKey,
 } from "./portfolioDashboardFilters";
 import { PortfolioDashboardTable } from "./portfolioDashboardTable";
+import { ProjectMilestoneFollowUpPanel } from "./projectMilestoneFollowUpPanel";
+import type { ProjectMilestoneFollowUpGroup } from "./application/selectors/projectMilestoneFollowUp";
 
 export interface PortfolioDashboardViewProps {
   readonly schema: PortfolioVisibleSchema;
   readonly attention: DashboardAttentionRead;
   readonly rows: readonly PortfolioDashboardRow[];
+  readonly followUpGroups?: readonly ProjectMilestoneFollowUpGroup[];
   readonly onCreateProject: () => void;
-  readonly onExport: () => void;
+  readonly onExport: (rows: readonly PortfolioDashboardRow[], schema: PortfolioVisibleSchema) => void;
   readonly onOpenProject: (projectId: ProjectId) => void;
 }
 
@@ -78,7 +81,7 @@ function attentionProjectPresentations(
   });
 }
 
-export function PortfolioDashboardView({ attention, rows, schema, onCreateProject, onExport, onOpenProject }: PortfolioDashboardViewProps): React.ReactElement {
+export function PortfolioDashboardView({ attention, rows, schema, followUpGroups = [], onCreateProject, onExport, onOpenProject }: PortfolioDashboardViewProps): React.ReactElement {
   const [searchTerm, setSearchTerm] = React.useState("");
   const [filters, setFilters] = React.useState(emptyPortfolioDashboardFilters);
   const id = React.useId();
@@ -114,7 +117,7 @@ export function PortfolioDashboardView({ attention, rows, schema, onCreateProjec
         <p className="mt-1 text-sm text-slate-500">Dashboard</p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={() => onExport()} className={`rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 ${focus}`}>Export to Excel</button>
+        <button type="button" onClick={() => onExport(filteredRows, schema)} className={`rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 ${focus}`}>Export to Excel</button>
         <button type="button" aria-label="Create Project" onClick={() => onCreateProject()} className={`rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-700 ${focus}`}>+ Create Project</button>
       </div>
     </header>
@@ -147,6 +150,8 @@ export function PortfolioDashboardView({ attention, rows, schema, onCreateProjec
         </div>)}
       </div>
     </section>
+
+    <ProjectMilestoneFollowUpPanel groups={followUpGroups} onOpenProject={onOpenProject} />
 
     <section aria-labelledby={`${id}-filters`} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
       <h2 id={`${id}-filters`} className="text-base font-semibold text-slate-900">Search / Filters</h2>

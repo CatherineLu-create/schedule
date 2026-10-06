@@ -3,9 +3,10 @@ import type { PortfolioCurrentPublishedRead, PortfolioDashboardRow } from "./app
 import type { ProjectId } from "./domain/shared/ids";
 import {
   portfolioStickyColumnKeys, resizePortfolioColumnWidth,
-  type PortfolioColumn, type PortfolioColumnKey, type PortfolioColumnWidths, type PortfolioProjectInfoColumnKey,
+  type PortfolioColumn, type PortfolioColumnKey, type PortfolioColumnWidths,
   type PortfolioScheduleColumnMapping, type PortfolioVisibleSchema,
 } from "./portfolioDashboardColumns";
+import { displayPortfolioText as display, portfolioDashboardScheduleOccurrences, portfolioDashboardTextValue } from "./portfolioDashboardCells";
 
 export interface PortfolioDashboardTableProps {
   readonly rows: readonly PortfolioDashboardRow[];
@@ -24,20 +25,6 @@ const hiddenBottomScrollerLayout: BottomScrollerLayout = {
   visible: false,
   width: 0,
 };
-const display = (value: string) => value === "-" ? "—" : value;
-const projectValues: Record<PortfolioProjectInfoColumnKey, (row: PortfolioDashboardRow) => string> = {
-  projectStatus: (row) => row.project.projectStatus,
-  year: (row) => row.project.year,
-  name: (row) => row.project.projectName,
-  qciProjectName: (row) => row.project.qciModelName,
-  customer: (row) => row.project.customer,
-  category: (row) => row.category,
-  productLine: (row) => row.project.productLine,
-  size: (row) => row.project.panelSize,
-  cpu: (row) => row.project.cpu,
-  gpu: (row) => row.project.gpu,
-  pcbNumber: (row) => row.pcbNumber,
-};
 
 function schedulePresentation(read: PortfolioCurrentPublishedRead, label: string) {
   if (read.kind === "unavailable") return { state: "unavailable", title: "Schedule data unavailable", tone: "bg-rose-50/70 text-rose-700" };
@@ -47,23 +34,17 @@ function schedulePresentation(read: PortfolioCurrentPublishedRead, label: string
 }
 
 function ScheduleValue({ read, mapping }: { read: PortfolioCurrentPublishedRead; mapping: PortfolioScheduleColumnMapping }) {
-  if (read.kind !== "published" || read.milestoneCount === 0 || mapping.valueMode === "placeholder") return <>—</>;
-  const occurrences = read.cells.find((cell) => cell.milestoneDefinitionId === mapping.milestoneDefinitionId)?.occurrences ?? [];
-  const displayableOccurrences = mapping.emptyWhenNotApplicableOrUndated
-    ? occurrences.filter((occurrence) =>
-        occurrence.applicability === "applicable"
-        && (occurrence.plan !== "-" || occurrence.actual !== "-"))
-    : occurrences;
+  const displayableOccurrences = portfolioDashboardScheduleOccurrences(read, mapping);
   if (displayableOccurrences.length === 0) return <>—</>;
   return <div className="space-y-2 whitespace-normal text-xs leading-5">
     {displayableOccurrences.map((occurrence) => <div key={occurrence.milestoneId} data-milestone-id={occurrence.milestoneId} className="border-b border-slate-100 pb-1 last:border-0 last:pb-0">
-      {occurrence.applicability === "notApplicable" ? (
+      {occurrence.kind === "notApplicable" ? (
         <div>N/A</div>
       ) : (
         <>
           <div className="text-[10px] font-medium text-slate-500">Applicable</div>
-          <div>P: {display(occurrence.plan)}</div>
-          <div>A: {display(occurrence.actual)}</div>
+          <div>P: {occurrence.plan}</div>
+          <div>A: {occurrence.actual}</div>
         </>
       )}
     </div>)}
@@ -218,11 +199,7 @@ export function PortfolioDashboardTable({ rows, schema, onOpenProject }: Portfol
             const schedule = mapping ? schedulePresentation(row.schedule, column.label) : undefined;
             const qciPmColumn = column.key === "team:qciPm";
             const pendingTeamColumn = column.domain === "team" && !qciPmColumn;
-            const value = column.domain === "project"
-              ? projectValues[column.key as PortfolioProjectInfoColumnKey](row)
-              : qciPmColumn
-                ? row.qciPm?.label ?? "-"
-                : "-";
+            const value = portfolioDashboardTextValue(row, column);
             return <td key={column.key} data-column-key={column.key} data-domain={column.domain} data-schedule-state={schedule?.state}
               title={schedule?.title ?? (pendingTeamColumn ? "Migration pending" : undefined)} style={stickyStyle(column)}
               className={`px-4 py-3.5 align-middle ${stickyClassName(column)} ${column.domain === "schedule" ? schedule?.tone : "whitespace-nowrap"} ${pendingTeamColumn ? "text-slate-400" : ""} ${offsets.has(column.key) ? "bg-white shadow-[1px_0_0_0_rgb(241_245_249)] group-hover:bg-slate-50 group-focus-within:bg-sky-50" : ""} ${index > 0 && schema.columns[index - 1].domain !== column.domain ? "border-l-4 border-l-slate-200" : ""}`}>

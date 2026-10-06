@@ -1,9 +1,11 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import * as XLSX from "xlsx";
+import { createPortfolioDashboardWorkbook } from "./portfolioDashboardExport";
 import { PortfolioDashboardView } from "./portfolioDashboardView";
 import { selectDashboardAttention } from "./application/selectors/dashboardAttention";
 import { selectPortfolioDashboardRows } from "./application/selectors/portfolioDashboardRows";
+import { selectProjectMilestoneFollowUp, type ProjectMilestoneFollowUpGroup } from "./application/selectors/projectMilestoneFollowUp";
 import { createInitialMilestoneGovernanceRuntimeState } from "./application/governance/milestoneGovernanceInitializer";
 import { prepareProjectCreationCommit } from "./application/governance/projectCreationGovernance";
 import { discardGovernanceDraft, previewGovernancePublish, publishGovernanceDraft, startGovernanceDraft, updateGovernanceDraft } from "./application/governance/milestoneGovernanceCommands";
@@ -46,7 +48,6 @@ import type { SaveProjectTeamResult } from "./application/commands/teamCommands"
 import type { TeamEditCandidate } from "./application/teamImport/teamCandidate";
 import {
   selectDashboardProjectRow,
-  selectDashboardProjectRows,
   type DashboardProjectRow,
 } from "./application/selectors/dashboardProjectRows";
 import {
@@ -179,35 +180,6 @@ function scheduleFailureMessages(
   return [messages[failure.reason]];
 }
 
-function dashboardExportRow(project: DashboardProjectRow) {
-  return {
-    Year: project.year,
-    Customer: project.customer,
-    "Product Line": project.productLine,
-    "Project Name": project.projectName,
-    "QCI Model Name": project.qciModelName,
-    "Acer Model Name": project.acerModelName,
-    "Acer Marketing Name": project.acerMarketingName,
-    "Panel Size": project.panelSize,
-    CPU: project.cpu,
-    GPU: project.gpu,
-    SSID: project.ssid,
-    RMN: project.rmn,
-    "Project Status": project.projectStatus,
-    "Current Stage": project.currentStage,
-    MDRR: project.mdrr,
-  };
-}
-
-function exportDashboardProjectListToExcel(projects: readonly DashboardProjectRow[]) {
-  const rows = projects.map(dashboardExportRow);
-  const worksheet = XLSX.utils.json_to_sheet(rows);
-  const workbook = XLSX.utils.book_new();
-
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Project List");
-  XLSX.writeFile(workbook, "Project_Portfolio_Summary.xlsx");
-}
-
 export interface AppProps {
   readonly createCatalogItemId?: () => CatalogItemId;
   readonly initialState?: PrototypeState;
@@ -306,8 +278,8 @@ export function App({
 
   const selectedCanonicalProject =
     selectedProjectId === null ? null : getProjectById(state, selectedProjectId);
-  const dashboardRows = selectDashboardProjectRows(state, selfServiceCatalogs);
   const portfolioDashboardRows = selectPortfolioDashboardRows(state, selfServiceCatalogs, governance);
+  const milestoneFollowUp = selectProjectMilestoneFollowUp(state, governanceState, governance);
   const dashboardAttention = selectDashboardAttention(
     state,
     dashboardReferenceDate,
@@ -822,8 +794,9 @@ export function App({
       {page === "dashboard" && (
         <PortfolioDashboardView
           attention={dashboardAttention}
+          followUpGroups={milestoneFollowUp}
           onCreateProject={openCreate}
-          onExport={() => exportDashboardProjectListToExcel(dashboardRows)}
+          onExport={(rows, schema) => XLSX.writeFile(createPortfolioDashboardWorkbook(rows, schema), "Project_Portfolio_Summary.xlsx")}
           onOpenProject={openProject}
           rows={portfolioDashboardRows}
           schema={portfolioSchema}
@@ -835,6 +808,7 @@ export function App({
           onViewProjectMaster={openProjectMasterDetail}
           project={selectedCanonicalProject}
           row={selectedDashboardRow}
+          milestoneFollowUp={milestoneFollowUp.find(group => group.projectId === selectedCanonicalProject.id)}
           scheduleWorkspaceProps={scheduleWorkspaceProps}
           teamMemberWorkspaceProps={teamMemberWorkspaceProps}
         />
@@ -1048,6 +1022,7 @@ export interface ProjectWorkspaceProps {
   readonly onViewProjectMaster: () => void;
   readonly project: Project;
   readonly row: DashboardProjectRow;
+  readonly milestoneFollowUp?: ProjectMilestoneFollowUpGroup;
   readonly scheduleWorkspaceProps: ScheduleWorkspaceProps;
   readonly teamMemberWorkspaceProps?: Omit<TeamMemberWorkspaceProps, "project" | "onBack">;
 }
@@ -1057,6 +1032,7 @@ export function ProjectWorkspace({
   onViewProjectMaster,
   project,
   row,
+  milestoneFollowUp,
   scheduleWorkspaceProps,
   teamMemberWorkspaceProps,
 }: ProjectWorkspaceProps): React.ReactElement {
@@ -1183,6 +1159,11 @@ export function ProjectWorkspace({
         </div>
       </section>
 
+      {milestoneFollowUp && <section aria-label="Milestone Follow-up" className="min-w-0 rounded-md border border-slate-200 bg-white p-4">
+        <h2 className="text-base font-semibold">Milestone Follow-up</h2>
+        <p className="mt-2 break-words text-sm text-slate-700">Pending public milestones: {milestoneFollowUp.pendingDefinitions.map(definition => definition.displayName).join(", ")}</p>
+        <p className="mt-1 text-xs text-slate-500">Complete by publishing the required Public Milestone or marking it N/A.</p>
+      </section>}
       <ScheduleWorkspace {...scheduleWorkspaceProps} />
     </div>
   );

@@ -299,15 +299,25 @@ describe("Portfolio Dashboard shell", () => {
     expect(screen.getByRole("columnheader", { name: "C2 System Build" })).toBeInTheDocument();
   });
 
-  it("exports through the owner callback without filtered rows and preserves Create and exact-ID opens", () => {
+  it("exports the current filtered Portfolio rows and schema and preserves Create and exact-ID opens", () => {
     const callbacks = setup();
     select("Status", "Pending");
     fireEvent.click(screen.getByRole("button", { name: "Export to Excel" }));
-    expect(callbacks.onExport.mock.calls).toEqual([[]]);
+    expect(callbacks.onExport.mock.calls).toEqual([[[rows[2]], createPortfolioVisibleSchema(initialGovernanceContext())]]);
     fireEvent.click(screen.getByRole("button", { name: "Create Project" }));
     expect(callbacks.onCreateProject.mock.calls).toEqual([[]]);
     fireEvent.click(screen.getByRole("button", { name: "Open Project Orca" }));
     fireEvent.click(screen.getByRole("table").querySelector('[data-project-id="dev-project-003"]')!);
     expect(callbacks.onOpenProject.mock.calls).toEqual([["dev-project-003"], ["dev-project-003"]]);
+  });
+
+  it("exports all Projects without filters and an empty set when search and filters match none", () => {
+    const callbacks = setup();
+    fireEvent.click(screen.getByRole("button", { name: "Export to Excel" }));
+    expect(callbacks.onExport).toHaveBeenLastCalledWith(rows, createPortfolioVisibleSchema(initialGovernanceContext()));
+    select("Status", "Pending");
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Manta" } });
+    fireEvent.click(screen.getByRole("button", { name: "Export to Excel" }));
+    expect(callbacks.onExport).toHaveBeenLastCalledWith([], createPortfolioVisibleSchema(initialGovernanceContext()));
   });
 });
