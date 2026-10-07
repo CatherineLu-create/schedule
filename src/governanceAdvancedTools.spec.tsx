@@ -39,7 +39,7 @@ function mount(first = createEmptyCanonicalProjectSchedule(devProject001.id), se
   return uuid;
 }
 function openAdvanced() {
-  fireEvent.click(screen.getByRole("button", { name: "公版管理" }));
+  fireEvent.click(screen.getByRole("button", { name: "Governance" }));
   fireEvent.click(screen.getByText("進階治理與試用工具"));
 }
 function selectOther() { fireEvent.change(screen.getByLabelText("工具操作專案"), { target: { value: other.id } }); }
@@ -62,7 +62,7 @@ it("UX06 PM never exposes advanced tools even with pending imported candidates",
 
 it("UX06 Governance starts collapsed and opening/selecting tools has no command or ID side effects", () => {
   const uuid = mount();
-  fireEvent.click(screen.getByRole("button", { name: "公版管理" }));
+  fireEvent.click(screen.getByRole("button", { name: "Governance" }));
   const summary = screen.getByText("進階治理與試用工具");
   expect(summary.closest("details")).not.toHaveAttribute("open");
   expect(screen.getByRole("button", { name: "載入模擬匯入資料" })).not.toBeVisible();

@@ -3,6 +3,8 @@ import ReactDOM from "react-dom/client";
 import * as XLSX from "xlsx";
 import { createPortfolioDashboardWorkbook } from "./portfolioDashboardExport";
 import { PortfolioDashboardView } from "./portfolioDashboardView";
+import { ProjectMasterReportView } from "./projectMasterReportView";
+import { createProjectMasterReportWorkbook, projectMasterReportFilename } from "./projectMasterReportExport";
 import { selectDashboardAttention } from "./application/selectors/dashboardAttention";
 import { selectPortfolioDashboardRows } from "./application/selectors/portfolioDashboardRows";
 import { selectProjectMilestoneFollowUp, type ProjectMilestoneFollowUpGroup } from "./application/selectors/projectMilestoneFollowUp";
@@ -132,7 +134,7 @@ import {
 } from "./teamMembers";
 import "./styles.css";
 
-type Page = "dashboard" | "workspace" | "projectMasterDetail" | "governance";
+type Page = "dashboard" | "workspace" | "projectMasterDetail" | "governance" | "reports";
 
 interface PendingDuplicateCreate {
   readonly input: CreateProjectInput;
@@ -197,6 +199,7 @@ export function App({
     initialSelectedProjectId === null ? "dashboard" : "workspace",
   );
   const [state, dispatch] = React.useReducer(prototypeReducer, initialState);
+  const [reportEntry, setReportEntry] = React.useState(0);
   const [governanceState, setGovernanceState] = React.useState(createInitialMilestoneGovernanceRuntimeState);
   const [governancePreviewSnapshot, setGovernancePreviewSnapshot] = React.useState<{
     readonly governance: MilestoneGovernanceRuntimeState;
@@ -769,9 +772,18 @@ export function App({
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-slate-100 text-slate-950">
-      <nav aria-label="PIP navigation" className="flex justify-end border-b border-slate-200 bg-white px-4 py-2 sm:px-6">
-        <button type="button" aria-current={page === "governance" ? "page" : undefined} className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50" onClick={() => setPage("governance")}>公版管理</button>
+      <nav aria-label="PIP navigation" className="flex items-center justify-end gap-2 border-b border-slate-200 bg-white px-4 py-2 sm:px-6">
+        <button type="button" aria-current={page === "reports" ? "page" : undefined} className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50" onClick={() => { setReportEntry(current => current + 1); setPage("reports"); }}>Reports</button>
+        <span aria-hidden="true" className="text-slate-300">|</span>
+        <button type="button" aria-current={page === "governance" ? "page" : undefined} className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50" onClick={() => setPage("governance")}>Governance</button>
       </nav>
+      {page === "reports" && <ProjectMasterReportView
+        key={reportEntry}
+        state={state}
+        rows={portfolioDashboardRows}
+        onBack={backToDashboard}
+        onExport={(rows, columns) => XLSX.writeFile(createProjectMasterReportWorkbook(state, rows, columns), projectMasterReportFilename())}
+      />}
       {page === "governance" && <GovernanceWorkspace
         state={governanceState}
         context={governance}

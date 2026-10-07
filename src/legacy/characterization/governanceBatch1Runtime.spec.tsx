@@ -74,7 +74,7 @@ function dashboard() {
 }
 function openProject(name = "Manta") { fireEvent.click(within(screen.getByRole("table", { name: "Projects" })).getByRole("button", { name: `Open Project ${name}` })); }
 function governance(start = false) {
-  click("公版管理");
+  click("Governance");
   if (start) click("建立公版草稿");
 }
 function release() { click("檢查並預覽發布"); click("發布公版"); }

@@ -59,7 +59,7 @@ function setup(governance?: MilestoneGovernanceRuntimeState, initialState = prot
 }
 const retained = () => vi.mocked(selectEffectiveMilestoneGovernanceContext).mock.calls.at(-1)![0];
 const governanceActionRegions: Readonly<Record<string, string>> = {
-  公版管理: "PIP navigation",
+  Governance: "PIP navigation",
   "建立公版草稿": "目前已發布公版",
   "加入公版草稿": "公版草稿",
   "加入已選專案": "既有專案需確認",
@@ -86,7 +86,7 @@ function click(name: string | RegExp) {
   fireEvent.click(action);
 }
 function openProject(name: RegExp = /^Open Project/) { fireEvent.click(within(screen.getByRole("region", { name: "All Projects" })).getByRole("button", { name })); }
-function open() { click("公版管理"); return namedRegion("公版管理"); }
+function open() { click("Governance"); return namedRegion("公版管理"); }
 function start() { open(); click("建立公版草稿"); }
 function editRow(name = "Kickoff") {
   return within(namedRegion("公版草稿")).getByText(name, { selector: "th", exact: true }).closest("tr")!;

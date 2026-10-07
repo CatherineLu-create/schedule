@@ -433,7 +433,7 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     });
     const before = official(initial);
     render(<App initialState={initial} initialSelectedProjectId={devProject001.id} referenceDate={dashboardReferenceDate} />);
-    fireEvent.click(screen.getByRole("button", { name: "公版管理" }));
+    fireEvent.click(screen.getByRole("button", { name: "Governance" }));
     fireEvent.click(screen.getByText("進階治理與試用工具"));
     fireEvent.change(screen.getByLabelText("模擬情境"), { target: { value: "fixable-validation" } });
     fireEvent.click(screen.getByRole("button", { name: "載入模擬匯入資料" }));

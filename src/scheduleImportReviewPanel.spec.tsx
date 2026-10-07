@@ -30,7 +30,7 @@ function latest(original: CanonicalProjectSchedule): CanonicalProjectSchedule {
 }
 function openTools() {
   if (screen.queryByLabelText("工具操作專案")) return;
-  fireEvent.click(screen.getByRole("button", { name: "公版管理" }));
+  fireEvent.click(screen.getByRole("button", { name: "Governance" }));
   fireEvent.click(screen.getByText("進階治理與試用工具"));
 }
 function returnToPM() {

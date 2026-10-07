@@ -136,7 +136,7 @@ it("preserves all four session catalogs through governance start, preview, disca
   const options = (form: HTMLElement) => labels.map(label => Array.from((within(form).getByLabelText(label) as HTMLSelectElement).options, option => [option.value, option.textContent]));
   const before = options(dialog);
   fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
-  const openGovernance = () => fireEvent.click(screen.getByRole("button", { name: "公版管理" }));
+  const openGovernance = () => fireEvent.click(screen.getByRole("button", { name: "Governance" }));
   const action = (name: string) => fireEvent.click(screen.getByText(name, { selector: "button", exact: true }));
   const checkCatalogs = () => {
     action("回到 Dashboard");

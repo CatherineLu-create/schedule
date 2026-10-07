@@ -1,3 +1,4 @@
+import { projectMasterMeasurement as measurement, projectMasterCoverDisplay as coverDisplay } from "./projectMasterDisplay";
 import React from "react";
 import type { DashboardProjectRow } from "./application/selectors/dashboardProjectRows";
 import type {
@@ -13,7 +14,6 @@ import {
   statusCatalog,
 } from "./config/v2/referenceData";
 import type { Project } from "./domain/project/project";
-import type { CatalogItemId } from "./domain/shared/ids";
 import type { ValidationIssue } from "./domain/validation/validationIssue";
 import {
   customerReferenceFixtures,
@@ -249,10 +249,6 @@ function BasicInformationEdit({
   );
 }
 
-function measurement(value: number | null, unit: "mm" | "g"): string {
-  return value === null ? "—" : `${value} ${unit}`;
-}
-
 function MechanicalRead({ project }: { readonly project: Project }): React.ReactElement {
   const { product, package: packageDimension } = project.master.mechanical;
   const groups = [
@@ -323,11 +319,6 @@ function MechanicalEdit({
       </fieldset>
     </div>
   );
-}
-
-function coverDisplay(id: CatalogItemId | null): string {
-  if (id === null) return "—";
-  return coverCatalog.find((item) => item.id === id)?.displayName ?? "—";
 }
 
 function CoverLeverageRead({
