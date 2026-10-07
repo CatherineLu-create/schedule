@@ -40,9 +40,9 @@ export function ProjectMasterReportView({ state, rows, onBack, onExport }: Proje
 
     <PortfolioSearchFilters id={id} searchTerm={searchTerm} onSearchChange={setSearchTerm} filters={filters} onFiltersChange={setFilters} options={portfolioDashboardFilterOptions(rows)} />
 
-    <fieldset className="rounded-xl border border-slate-200 bg-white px-4 pb-4 shadow-sm">
-      <legend className="px-1 text-base font-semibold text-slate-900">Export Contents</legend>
-      <div className="mt-2 flex flex-wrap gap-x-6 gap-y-3">
+    <fieldset aria-labelledby={`${id}-contents`} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <h2 id={`${id}-contents`} className="text-base font-semibold text-slate-900">Export Contents</h2>
+      <div className="mt-4 flex flex-wrap gap-x-8 gap-y-3">
         {projectMasterReportGroups.map(group => <label key={group.key} className="flex items-center gap-2 text-sm text-slate-700">
           <input type="checkbox" checked={selectedGroups.includes(group.key)} onChange={event => setSelectedGroups(current => event.target.checked ? [...current, group.key] : current.filter(key => key !== group.key))} className="h-4 w-4 accent-slate-900" />
           {group.label}
