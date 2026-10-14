@@ -7,7 +7,7 @@ import type {
 } from "../shared/ids";
 import type { ValidationIssue } from "../validation/validationIssue";
 import type { MilestoneDefinition } from "./milestoneCatalog";
-import type { MilestoneApplicability } from "./schedule";
+import type { MilestoneApplicability, ScheduleVersionNumber } from "./schedule";
 import type { ScheduleImportCandidate } from "./scheduleReview";
 
 export interface CanonicalScheduleWorkingDraftMilestone {
@@ -20,6 +20,8 @@ export interface CanonicalScheduleWorkingDraftMilestone {
 
 export interface CanonicalScheduleWorkingDraft {
   readonly workingDraftId: CanonicalScheduleWorkingDraftId;
+  /** Traceability only; undefined means an older Draft with unknown provenance. */
+  readonly basePublishedVersionNumber?: ScheduleVersionNumber | null;
   readonly milestones: readonly CanonicalScheduleWorkingDraftMilestone[];
   readonly reviewSessionIds: readonly ScheduleReviewSessionId[];
   readonly importCandidates: readonly ScheduleImportCandidate[];

@@ -1,6 +1,10 @@
 import type { CatalogItemId, ProjectId } from "../shared/ids";
 
+export type ProjectType = "new" | "regression";
+
 export interface ProjectMasterBasicInformation {
+  /** Missing/null is reserved for Projects created before this classification. */
+  readonly projectType?: ProjectType | null;
   readonly status: CatalogItemId | null;
   readonly year: number | null;
   readonly customer: CatalogItemId | null;

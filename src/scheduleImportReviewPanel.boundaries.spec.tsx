@@ -1,3 +1,4 @@
+import { parseDateOnly as testReferenceDate } from "./domain/shared/dateOnly";
 import React from "react";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
@@ -97,7 +98,7 @@ describe("GOV10 review action and exact target boundaries", () => {
   it("selects the exact retained historical row when two rows share one retired definition", () => {
     const retired = publishedRetirementFixture();
     const governance = value(selectEffectiveMilestoneGovernanceContext(retired.state));
-    const context = { governance, localDefinitions: [], retiredDraftOccurrenceGrants: [] };
+    const context = { referenceDate: testReferenceDate("2026-10-14")!, governance, localDefinitions: [], retiredDraftOccurrenceGrants: [] };
     const first = retired.schedule.workingDraft!.milestones[0], second = { ...first, milestoneId: toMilestoneId("retired-second"), plan: parseDateOnly("2026-09-01") };
     const published: CanonicalProjectSchedule = { ...createEmptyCanonicalProjectSchedule(devProject001.id), publishedVersions: [{ versionNumber: toScheduleVersionNumber(1), publishedAt: "2026-09-01T00:00:00Z", versionNote: null, milestones: [first, second] }] };
     const started = startScheduleWorkingDraft(published, { workingDraftId: toCanonicalScheduleWorkingDraftId("retired-clone") }, context);
@@ -114,7 +115,7 @@ describe("GOV10 review action and exact target boundaries", () => {
   it("removing a retired row or restarting the Draft never recreates the retired row or reuses its D1 grant", () => {
     const retired = publishedRetirementFixture();
     const governance = value(selectEffectiveMilestoneGovernanceContext(retired.state));
-    const context = { governance, localDefinitions: [], retiredDraftOccurrenceGrants: value(selectEffectiveRetiredDraftOccurrenceGrants(retired.state)) };
+    const context = { referenceDate: testReferenceDate("2026-10-14")!, governance, localDefinitions: [], retiredDraftOccurrenceGrants: value(selectEffectiveRetiredDraftOccurrenceGrants(retired.state)) };
     const loaded = loadRetired(retired.schedule, context); const harness = show(loaded, context);
     harness.replace({ ...loaded, workingDraft: { ...loaded.workingDraft!, milestones: [] } });
     expect(screen.getByText("已停用｜此專案無合法引用，無法新增")).toBeVisible();
@@ -145,4 +146,20 @@ describe("GOV10 review action and exact target boundaries", () => {
     expect(screen.getByRole("button", { name: "確認對應" })).toBeDisabled(); expect(harness.current()).toEqual(schedule);
     expect(screen.getByText(/目標目前不可新增/)).toBeVisible();
   });
+});
+
+it("retains raw FCS evidence next to resolved SSL/GL system metadata", () => {
+ const { schedule, context } = fixture({ presence: "present", raw: "2026-10-10" }, { presence: "present", raw: "" }, false);
+ const definition = context.governance.definitionsForHistoricalResolution.find(item => item.id === "milestone-ramp-fcs")!;
+ const evidence = { ...schedule.evidenceLedger[0]!, rawValues: { ...schedule.evidenceLedger[0]!.rawValues,
+  milestoneName: { presence: "present" as const, raw: "FCS" },
+  stage: { presence: "present" as const, raw: definition.stageGroupId },
+  milestoneType: { presence: "present" as const, raw: "type-fcs" } } };
+ const candidate = createScheduleImportCandidate(evidence, schedule.workingDraft!.importCandidates[0]!.id, definition.id);
+ const input = { ...schedule, evidenceLedger: [evidence], workingDraft: { ...schedule.workingDraft!, importCandidates: [candidate] } };
+ const harness = show(input, context);
+ expect(document.body.textContent).toContain("SSL/GL");
+ expect(document.body.textContent).toContain("FCS");
+ expect(harness.current().evidenceLedger).toEqual([evidence]);
+ expect(screen.queryByRole("option", { name: /^FCS/ })).toBeNull();
 });

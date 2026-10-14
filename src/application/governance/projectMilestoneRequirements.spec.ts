@@ -1,3 +1,4 @@
+import { parseDateOnly as testReferenceDate } from "../../domain/shared/dateOnly";
 import { describe, expect, it } from "vitest";
 import type { CommandResult, MilestoneGovernanceRuntimeState } from "../../domain/governance/milestoneGovernance";
 import { createEmptyCanonicalProjectSchedule, type CanonicalProjectSchedule, type CanonicalPublishedScheduleMilestone } from "../../domain/schedule/officialSchedule";
@@ -153,11 +154,11 @@ describe("effective Project requirements from release history and Current Publis
     expect(selectDashboardAttention(input, parseDateOnly("2026-10-01")!, context)).toMatchObject({
       kind: "available", due: { projectCount: 0, matches: [] }, overdue: { projectCount: 0, matches: [] },
     });
-    const commandContext = { governance: context, localDefinitions: [], retiredDraftOccurrenceGrants: [] };
+    const commandContext = { referenceDate: testReferenceDate("2026-10-14")!, governance: context, localDefinitions: [], retiredDraftOccurrenceGrants: [] };
     const started = startScheduleWorkingDraft(schedule, { workingDraftId: toCanonicalScheduleWorkingDraftId("next") }, commandContext);
     expect(started.ok).toBe(true);
     if (!started.ok) throw new Error(JSON.stringify(started));
-    const published = publishScheduleWorkingDraft(started.schedule, { publishedAt: "2026-10-01T00:00:00Z" }, commandContext);
+    const published = publishScheduleWorkingDraft(started.schedule, { versionNote: "Schedule update", publishedAt: "2026-10-01T00:00:00Z" }, commandContext);
     expect(published).toMatchObject({ ok: true, version: { versionNumber: 4, milestones: [] } });
     expect(input).toEqual(before);
   });

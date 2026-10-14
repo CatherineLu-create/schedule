@@ -21,6 +21,17 @@ function publishedVersion(
 }
 
 describe("OfficialScheduleView", () => {
+  it("labels historical snapshots read-only and displays missing note and legacy timestamp safely", () => {
+    const { versionNote: _note, ...legacy } = publishedVersion(8);
+    render(<OfficialScheduleView historical read={{ kind: "published", version: legacy, versionLabel: "Published v08", milestoneRows: [] }} />);
+    expect(screen.getByRole("heading", { name: "Historical Schedule" })).toBeVisible();
+    expect(screen.getByText("Read-only")).toBeVisible();
+    expect(screen.getByText("No note")).toBeVisible();
+    expect(screen.getByText("published-8")).toBeVisible();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByText("Current Schedule")).not.toBeInTheDocument();
+  });
   it("renders Schedule integrity failure as unavailable", () => {
     render(
       <OfficialScheduleView

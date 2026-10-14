@@ -275,9 +275,9 @@ describe("Portfolio Dashboard shell", () => {
     const filters = screen.getByRole("region", { name: "Search / Filters" });
     expect(within(filters).getAllByRole("searchbox")).toHaveLength(1);
     expect(within(filters).getByRole("searchbox")).toHaveAttribute("placeholder", "Search STN Project Name, QCI Model Name, Product Line, Customer, CPU, GPU");
-    const labels = ["Year", "Customer", "Status", "Category", "Product Line", "Panel Size", "CPU", "GPU", "QCI PM"];
+    const labels = ["Year", "Project Type", "Customer", "Status", "Category", "Product Line", "Panel Size", "CPU", "GPU", "QCI PM"];
     const controls = within(filters).getAllByRole("combobox");
-    expect(controls).toHaveLength(9);
+    expect(controls).toHaveLength(10);
     labels.forEach((label, index) => {
       expect(controls[index]).toHaveAccessibleName(label);
       expect(controls[index]).toBeEnabled();

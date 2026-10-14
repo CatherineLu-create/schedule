@@ -16,6 +16,7 @@ const baseRow: PortfolioDashboardRow = {
   projectId: toProjectId("local-project-id"),
   project: {
     projectId: toProjectId("local-project-id"),
+    projectType: "-",
     year: "2029", customer: "Canonical customer", productLine: "Canonical product line",
     projectName: "Canonical STN name", qciModelName: "Canonical QCI model", acerModelName: "Hidden Acer model",
     acerMarketingName: "Hidden marketing name", panelSize: "Canonical panel size", cpu: "Canonical CPU", gpu: "Canonical GPU",
@@ -100,7 +101,7 @@ describe("PortfolioDashboardTable", () => {
     expect(table.querySelectorAll("thead tr")).toHaveLength(3);
     expect(table.querySelector("thead")).toHaveClass("sticky", "top-0");
     const dynamicColumnIndex = [...table.querySelectorAll("thead tr:last-child th")].indexOf(screen.getByRole("button", { name: "Resize Dynamic readiness column" }).closest("th")!);
-    expect(dynamicColumnIndex).toBe(11);
+    expect(dynamicColumnIndex).toBe(12);
     expect(table.querySelectorAll("col")[dynamicColumnIndex]).toHaveStyle({ width: "118px" });
     expect(table.querySelectorAll("thead tr")[0].children[1]).toHaveAttribute("colspan", "31");
     fireEvent.keyDown(screen.getByRole("button", { name: "Resize Dynamic readiness column" }), { key: "ArrowRight" });
@@ -120,14 +121,14 @@ describe("PortfolioDashboardTable", () => {
     const headerRows = table.querySelectorAll("thead tr");
     expect(headerRows).toHaveLength(3);
     expect([...headerRows[0].children].map((header) => [header.textContent, header.getAttribute("colspan")])).toEqual([
-      ["PROJECT INFORMATION", "11"], ["SCHEDULE", "30"], ["TEAM MEMBER", "7"],
+      ["PROJECT INFORMATION", "12"], ["SCHEDULE", "30"], ["TEAM MEMBER", "7"],
     ]);
     expect([...headerRows[1].children].map((header) => header.textContent)).toEqual([
       "Core fields", "Design", "ME Portion", "Thermal", "A1", "C1-stage", "C2-stage", "RAMP-stage", "MDRR", "Project Roles", "Standard Function Owners",
     ]);
     const headers = [...headerRows[2].querySelectorAll("th")];
-    expect(headers).toHaveLength(48);
-    expect(headers.slice(0, 11).map((header) => header.textContent)).toEqual(["Status", "Year", "STN Project Name", "QCI Model Name", "Customer", "Category", "Product Line", "Panel Size", "CPU", "GPU", "PCB#"]);
+    expect(headers).toHaveLength(49);
+    expect(headers.slice(0, 12).map((header) => header.textContent)).toEqual(["Status", "Year", "STN Project Name", "QCI Model Name", "Project Type", "Customer", "Category", "Product Line", "Panel Size", "CPU", "GPU", "PCB#"]);
     expect(headers.filter((header) => header.dataset.columnKey?.startsWith("schedule:"))).toHaveLength(30);
     expect(headers.some((header) => header.dataset.columnKey?.startsWith("schedule:a-a2-stage:"))).toBe(false);
     expect(screen.getByRole("columnheader", { name: "A1" })).toHaveAttribute("colspan", "4");
@@ -437,7 +438,7 @@ describe("PortfolioDashboardTable", () => {
     render(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[baseRow]} onOpenProject={() => {}} />);
     const expectedCells = [
       ["projectStatus", "Canonical status"], ["year", "2029"], ["name", "Canonical STN name"],
-      ["qciProjectName", "Canonical QCI model"], ["customer", "Canonical customer"], ["category", "Canonical category"],
+      ["qciProjectName", "Canonical QCI model"], ["projectType", "—"], ["customer", "Canonical customer"], ["category", "Canonical category"],
       ["productLine", "Canonical product line"], ["size", "Canonical panel size"], ["cpu", "Canonical CPU"],
       ["gpu", "Canonical GPU"], ["pcbNumber", "PCB-77"],
     ];
@@ -522,8 +523,8 @@ describe("PortfolioDashboardTable", () => {
   });
 
   // Mutation: removing the table schema or showing a misleading blank when filters return no rows.
-  it("renders an explicit empty result across the fixed 48 columns", () => {
+  it("renders an explicit empty result across the fixed 49 columns", () => {
     render(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[]} onOpenProject={() => {}} />);
-    expect(screen.getByText("No projects match the current search and filters")).toHaveAttribute("colspan", "48");
+    expect(screen.getByText("No projects match the current search and filters")).toHaveAttribute("colspan", "49");
   });
 });

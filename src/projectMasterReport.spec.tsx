@@ -102,10 +102,11 @@ describe("Project Master Report canonical values and workbook", () => {
 });
 
 describe("Reports selection parity", () => {
-  it.each(portfolioDashboardFilterKeys)("uses Dashboard options and predicate for %s, with AND search, chips and Clear all", (key) => {
+  it.each(portfolioDashboardFilterKeys.filter(key => key !== "projectType"))("uses Dashboard options and predicate for %s, with AND search, chips and Clear all", (key) => {
     const onExport = vi.fn();
     render(<ProjectMasterReportView state={state} rows={rows} onBack={vi.fn()} onExport={onExport} />);
-    const keyIndex = portfolioDashboardFilterKeys.indexOf(key);
+    expect(screen.queryByRole("combobox", { name: "Project Type" })).toBeNull();
+    const keyIndex = portfolioDashboardFilterKeys.filter(key => key !== "projectType").indexOf(key);
     const select = screen.getAllByRole("combobox")[keyIndex];
     const expectedOptions = portfolioDashboardFilterOptions(rows)[key];
     expect(within(select).getAllByRole("option").map(option => option.textContent)).toEqual(["All", ...expectedOptions.map(option => option.label)]);

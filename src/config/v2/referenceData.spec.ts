@@ -25,6 +25,7 @@ function expectUniqueIds(items: readonly { readonly id: string }[]): void {
 
 function expectActiveReviewedItems(
   items: readonly {
+    readonly id: string;
     readonly active: boolean;
     readonly aliases: readonly string[];
     readonly reviewStatus: string;
@@ -33,7 +34,7 @@ function expectActiveReviewedItems(
   for (const item of items) {
     expect(item).toMatchObject({
       active: true,
-      aliases: [],
+      aliases: item.id === "type-fcs" ? ["SSL/GL"] : [],
       reviewStatus: "reviewed",
     });
   }

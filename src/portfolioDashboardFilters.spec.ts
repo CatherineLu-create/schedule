@@ -22,6 +22,7 @@ const rows = selectPortfolioDashboardRows({
 
 const valueByKey = {
 	year: (row) => row.project.year,
+	projectType: (row) => row.project.projectType,
 	customer: (row) => row.project.customer,
 	status: (row) => row.project.projectStatus,
 	category: (row) => row.category,
@@ -46,6 +47,7 @@ describe("canonical Portfolio Dashboard filters", () => {
 	it("exposes the nine approved filter keys in visual order", () => {
 		expect(portfolioDashboardFilterKeys).toEqual([
 			"year",
+			"projectType",
 			"customer",
 			"status",
 			"category",
@@ -58,6 +60,7 @@ describe("canonical Portfolio Dashboard filters", () => {
 		expect(Object.keys(emptyPortfolioDashboardFilters)).toEqual(portfolioDashboardFilterKeys);
 		expect(emptyPortfolioDashboardFilters).toEqual({
 			year: "",
+			projectType: "",
 			customer: "",
 			status: "",
 			category: "",
@@ -91,7 +94,7 @@ describe("canonical Portfolio Dashboard filters", () => {
 					seen.push({ value, label });
 				}
 			}
-			expect(options[key]).toEqual(seen);
+			expect(options[key]).toEqual(key === "projectType" ? [{ value: "New", label: "New" }, { value: "Regression", label: "Regression" }] : seen);
 			expect(new Set(options[key].map(({ value }) => value)).size).toBe(options[key].length);
 			expect(options[key].every(({ value, label }) => value !== "" && value !== "-" && label !== "")).toBe(true);
 		}
@@ -113,6 +116,7 @@ describe("canonical Portfolio Dashboard filters", () => {
 		}));
 
 		expect(portfolioDashboardFilterOptions(suppliedRows)).toEqual({
+      projectType: [{ value: "New", label: "New" }, { value: "Regression", label: "Regression" }],
 			year: [{ value: "2031", label: "2031" }, { value: "2030", label: "2030" }],
 			customer: [{ value: "Zeta Customer", label: "Zeta Customer" }, { value: "Alpha Customer", label: "Alpha Customer" }],
 			status: [{ value: "Synthetic Active", label: "Synthetic Active" }, { value: "Synthetic Draft", label: "Synthetic Draft" }],

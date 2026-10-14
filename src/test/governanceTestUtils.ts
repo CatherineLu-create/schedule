@@ -18,7 +18,7 @@ export function initialGovernanceContext(): EffectiveMilestoneGovernanceContext 
 }
 
 export function initialScheduleCommandContext(): CanonicalScheduleCommandContext {
-  return { governance: initialGovernanceContext(), localDefinitions: [], retiredDraftOccurrenceGrants: [] };
+  return { referenceDate: parseDateOnly("2026-10-14")!, governance: initialGovernanceContext(), localDefinitions: [], retiredDraftOccurrenceGrants: [] };
 }
 
 /** Real D1 issuance, followed by non-retiring and future retirement releases. */

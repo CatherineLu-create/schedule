@@ -1,7 +1,7 @@
 import { toMilestoneDefinitionId, type MilestoneDefinitionId } from "./domain/shared/ids";
 import type { EffectiveMilestoneGovernanceContext } from "./application/governance/effectiveMilestoneGovernanceContext";
 import { orderMilestoneDefinitions } from "./application/milestoneDefinitionOrdering";
-import { milestoneDefinitionDisplayName } from "./application/milestoneDefinitionPresentation";
+import { milestoneDefinitionDisplayName, milestoneClassificationDisplayName } from "./application/milestoneDefinitionPresentation";
 
 export type PortfolioColumnDomain = "project" | "schedule" | "team";
 export interface PortfolioScheduleColumnMapping {
@@ -71,7 +71,7 @@ export const portfolioScheduleColumnMappings = [
   scheduleMapping("schedule:ramp-stage:ramp-smt", "ramp-stage", "RAMP-stage", "RAMP SMT", "milestone-ramp-smt"),
   scheduleMapping("schedule:ramp-stage:ramp-pre-build", "ramp-stage", "RAMP-stage", "RAMP Pre-build", "milestone-ramp-pre-build"),
   scheduleMapping("schedule:ramp-stage:ramp-main-build", "ramp-stage", "RAMP-stage", "RAMP Main build", "milestone-ramp-main-build"),
-  scheduleMapping("schedule:ramp-stage:fcs", "ramp-stage", "RAMP-stage", "FCS", "milestone-ramp-fcs"),
+  scheduleMapping("schedule:ramp-stage:fcs", "ramp-stage", "RAMP-stage", "SSL/GL", "milestone-ramp-fcs"),
   scheduleMapping(
     "schedule:mdrr:mdrr",
     "mdrr",
@@ -86,7 +86,7 @@ export const portfolioScheduleColumnMappings = [
   ),
 ] as const satisfies readonly PortfolioScheduleColumnMapping[];
 export type PortfolioScheduleColumnKey = `schedule:${string}`;
-export type PortfolioProjectInfoColumnKey = "projectStatus" | "year" | "name" | "qciProjectName" | "customer" | "category" | "productLine" | "size" | "cpu" | "gpu" | "pcbNumber";
+export type PortfolioProjectInfoColumnKey = "projectStatus" | "year" | "name" | "qciProjectName" | "projectType" | "customer" | "category" | "productLine" | "size" | "cpu" | "gpu" | "pcbNumber";
 export type PortfolioTeamColumnKey = "team:qciPm" | "team:qciPjm" | "team:acerPm" | "team:meOwner" | "team:eeOwner" | "team:thermalOwner" | "team:biosOwner";
 export type PortfolioColumnKey = PortfolioProjectInfoColumnKey | PortfolioScheduleColumnKey | PortfolioTeamColumnKey;
 export interface PortfolioColumn {
@@ -104,7 +104,7 @@ export interface PortfolioColumnGroup {
 }
 export const portfolioProjectInfoColumns: readonly PortfolioColumn[] = [
   ["projectStatus", "Status", 100, 92], ["year", "Year", 76, 68], ["name", "STN Project Name", 215, 190],
-  ["qciProjectName", "QCI Model Name", 170, 150], ["customer", "Customer", 118, 105], ["category", "Category", 125, 110],
+  ["qciProjectName", "QCI Model Name", 170, 150], ["projectType", "Project Type", 118, 105], ["customer", "Customer", 118, 105], ["category", "Category", 125, 110],
   ["productLine", "Product Line", 145, 130], ["size", "Panel Size", 90, 82], ["cpu", "CPU", 200, 175], ["gpu", "GPU", 135, 120], ["pcbNumber", "PCB#", 92, 82],
 ].map(([key, label, defaultWidth, minWidth]) => ({
   key: key as PortfolioProjectInfoColumnKey, label: String(label), defaultWidth: Number(defaultWidth), minWidth: Number(minWidth), domain: "project", subgroup: "core-fields",
@@ -161,7 +161,7 @@ export function createPortfolioVisibleSchema(
     // its bundled columns are absent from the current release.
     const stagePresentation = portfolioScheduleColumnMappings.find(mapping =>
       context.definitionsForHistoricalResolution.find(item => item.id === mapping.milestoneDefinitionId)?.stageGroupId === stage.id);
-    return { key: newDefinitionColumnKey(definition.id), groupKey: stagePresentation?.groupKey ?? stage.id, groupLabel: stagePresentation?.groupLabel ?? stage.displayName,
+    return { key: newDefinitionColumnKey(definition.id), groupKey: stagePresentation?.groupKey ?? stage.id, groupLabel: stagePresentation?.groupLabel ?? milestoneClassificationDisplayName(stage)!,
       label: milestoneDefinitionDisplayName(definition), milestoneDefinitionId: definition.id, portfolioVisible: true, valueMode: "planActual" };
   });
   const scheduleGroups = scheduleColumnGroups(scheduleMappings);

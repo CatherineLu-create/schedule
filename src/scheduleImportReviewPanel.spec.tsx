@@ -70,7 +70,9 @@ describe("GOV10 real Schedule App review", () => {
     fireEvent.click(screen.getByRole("button", { name: "對應公版里程碑" }));
     const dialog = within(screen.getByRole("dialog", { name: "對應公版里程碑" }));
     const option = within(dialog.getByLabelText("公版里程碑")).getAllByRole("option").find(item => item.getAttribute("value") === "milestone-ramp-fcs")!;
-    expect(option).toHaveTextContent("SSL/GL | RAMP-stage / FCS");
+    expect(option).toHaveTextContent("SSL/GL | RAMP-stage / SSL/GL");
+    expect(dialog.getByRole("option", { name: "SSL/GL | RAMP-stage / SSL/GL" })).toHaveValue("milestone-ramp-fcs");
+    expect(dialog.queryByRole("option", { name: /FCS/ })).toBeNull();
     fireEvent.change(dialog.getByLabelText("公版里程碑"), { target: { value: "milestone-ramp-fcs" } });
     dialog.getAllByRole("checkbox").forEach(box => fireEvent.click(box));
     fireEvent.click(dialog.getByRole("button", { name: "確認對應" }));
@@ -300,6 +302,7 @@ describe("GOV10 real Schedule App review", () => {
       fireEvent.click(within(screen.getByRole("dialog", { name: "Discard Working Draft" })).getByRole("button", { name: "Discard Draft" }));
     } else {
       fireEvent.click(schedule.getByRole("button", { name: "Publish" }));
+      fireEvent.change(screen.getByLabelText("Publish Note"), { target: { value: "Reviewed schedule import" } });
       fireEvent.click(within(screen.getByRole("dialog", { name: "Publish Working Draft" })).getByRole("button", { name: "Publish" }));
     }
     expect(screen.queryByRole("region", { name: "審核紀錄" })).not.toBeInTheDocument();

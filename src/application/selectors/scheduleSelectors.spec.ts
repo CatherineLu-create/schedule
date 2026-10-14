@@ -1,9 +1,19 @@
+import { parseDateOnly as testReferenceDate } from "../../domain/shared/dateOnly";
 import { initialGovernanceContext } from "../../test/governanceTestUtils";
 import { confirmProjectLocalMilestoneDefinition } from "../commands/scheduleReviewCommands";
 import { cancelScheduleWorkingDraft, publishScheduleWorkingDraft, removeScheduleWorkingDraftMilestone, startScheduleWorkingDraft, updateScheduleWorkingDraftMilestone } from "../commands/canonicalScheduleCommands";
 import { resolveScheduleDefinitions } from "../governance/scheduleDefinitionResolution";
 import { toMilestoneTypeId, toStageGroupId } from "../../domain/shared/ids";
 import { describe, expect, expectTypeOf, it } from "vitest";
+import * as XLSX from "xlsx";
+import { selectPortfolioDashboardRows } from "./portfolioDashboardRows";
+import { selectDashboardAttention } from "./dashboardAttention";
+import { selectProjectMilestoneFollowUp } from "./projectMilestoneFollowUp";
+import { createInitialMilestoneGovernanceRuntimeState } from "../governance/milestoneGovernanceInitializer";
+import { createInitialSelfServiceReferenceCatalogs } from "../reference-data/selfServiceCatalogs";
+import { createPortfolioDashboardWorkbook } from "../../portfolioDashboardExport";
+import { createPortfolioVisibleSchema } from "../../portfolioDashboardColumns";
+import { toRequirementEnrollmentId } from "../../domain/shared/ids";
 
 import type { Project } from "../../domain/project/project";
 import type { ProjectMaster } from "../../domain/project/projectMaster";
@@ -40,6 +50,8 @@ import type { PrototypeState } from "../state/prototypeState";
 import {
   resolveCanonicalScheduleOwner,
   selectCurrentPublishedSchedule,
+  selectPublishedScheduleHistory,
+  selectPublishedScheduleVersion,
   selectScheduleWorkingDraft,
   validateCanonicalScheduleState,
   type CurrentPublishedScheduleRead,
@@ -47,6 +59,60 @@ import {
   type ScheduleWorkingDraftMilestoneRow,
   type ScheduleWorkingDraftRead,
 } from "./scheduleSelectors";
+
+describe("Published version history", () => {
+  it("keeps Portfolio, Attention, Follow-up and export on v10 until a historical Draft successfully publishes v11", () => {
+    const context = initialGovernanceContext();
+    const initial = createInitialMilestoneGovernanceRuntimeState();
+    const definitionId = toMilestoneDefinitionId("milestone-a1-a-g-o");
+    const governance = { ...initial, requirementEnrollments: [{ id: toRequirementEnrollmentId("history-requirement"), projectId: devProject001.id, milestoneDefinitionId: definitionId, assignedByReleaseId: initial.currentReleaseId, source: "explicit-existing-project" as const }] };
+    const item = schedule(devProject001.id, [version(8), version(10, [milestone("current-due", definitionId, { plan: dateOnly("2026-10-15") })])]);
+    const before = structuredClone(item);
+    const state = (value: CanonicalProjectSchedule) => ({ projects: [devProject001], schedules: [value] });
+    const official = (value: CanonicalProjectSchedule) => {
+      const prototype = state(value);
+      const rows = selectPortfolioDashboardRows(prototype, createInitialSelfServiceReferenceCatalogs(), context);
+      const workbook = createPortfolioDashboardWorkbook(rows, createPortfolioVisibleSchema(context));
+      expect(workbook.SheetNames).toEqual(["All Projects"]);
+      return { rows, attention: selectDashboardAttention(prototype, dateOnly("2026-10-14"), context), followUp: selectProjectMilestoneFollowUp(prototype, governance, context), cells: XLSX.utils.sheet_to_json(workbook.Sheets["All Projects"], { header: 1 }) };
+    };
+    const current = official(item);
+    expect(current.attention).toMatchObject({ kind: "available", due: { projectCount: 1 } });
+    expect(current.followUp).toEqual([]);
+    expect(JSON.stringify(current.cells)).toContain("2026/10/15");
+    expect(selectPublishedScheduleVersion(state(item), devProject001.id, toScheduleVersionNumber(8), context)).toMatchObject({ kind: "published", milestoneRows: [] });
+    expect(official(item)).toEqual(current);
+    const commandContext = { referenceDate: dateOnly("2026-10-14"), governance: context, localDefinitions: [], retiredDraftOccurrenceGrants: [] };
+    const started = startScheduleWorkingDraft(item, { workingDraftId: toCanonicalScheduleWorkingDraftId("history-official"), basePublishedVersionNumber: toScheduleVersionNumber(8) }, commandContext);
+    if (!started.ok) throw new Error("Expected history Draft");
+    expect(official(started.schedule)).toEqual(current);
+    expect(publishScheduleWorkingDraft(started.schedule, { publishedAt: "now", versionNote: " " }, commandContext).ok).toBe(false);
+    expect(official(started.schedule)).toEqual(current);
+    const published = publishScheduleWorkingDraft(started.schedule, { publishedAt: "now", versionNote: "Restore v08" }, commandContext);
+    if (!published.ok) throw new Error("Expected Publish");
+    const after = official(published.schedule);
+    expect(after.rows[0].schedule).toMatchObject({ kind: "published", versionLabel: "Published v11" });
+    expect(after.attention).toMatchObject({ kind: "available", due: { projectCount: 0 } });
+    expect(after.followUp[0].pendingDefinitions).toEqual([{ milestoneDefinitionId: definitionId, displayName: "A1 G/O" }]);
+    expect(JSON.stringify(after.cells)).not.toContain("2026/10/15");
+    expect(item).toEqual(before);
+  });
+  it("lists descending history and reads an exact legacy snapshot without changing Current", () => {
+    const owner = project("history");
+    const { versionNote: _note, ...old } = version(8, [milestone("old", "milestone-ramp-fcs")]);
+    const state = { projects: [owner], schedules: [schedule(owner.id, [old, version(10), version(9)])] };
+    const before = structuredClone(state);
+    const history = selectPublishedScheduleHistory(state, owner.id, initialGovernanceContext());
+    expect(history).toMatchObject({ kind: "history", versions: [
+      { versionNumber: 10, isCurrent: true }, { versionNumber: 9, isCurrent: false }, { versionNumber: 8, isCurrent: false, versionNote: null },
+    ] });
+    const selected = selectPublishedScheduleVersion(state, owner.id, toScheduleVersionNumber(8), initialGovernanceContext());
+    expect(selected).toMatchObject({ kind: "published", version: old, isCurrent: false, milestoneRows: [{ milestone: "SSL/GL" }] });
+    expect(selectCurrentPublishedSchedule(state, owner.id, initialGovernanceContext())).toMatchObject({ kind: "published", version: { versionNumber: 10 } });
+    expect(selectPublishedScheduleVersion(state, owner.id, toScheduleVersionNumber(7), initialGovernanceContext())).toEqual({ kind: "versionNotFound" });
+    expect(state).toEqual(before);
+  });
+});
 
 function dateOnly(value: string): DateOnly {
   const parsed = parseDateOnly(value);
@@ -121,7 +187,7 @@ describe("command-confirmed local definition resolution and history", () => {
     return result.value;
   }
   function context(value: CanonicalProjectSchedule) {
-    return { governance, localDefinitions: value.localDefinitions, retiredDraftOccurrenceGrants: [] };
+    return { referenceDate: testReferenceDate("2026-10-14")!, governance, localDefinitions: value.localDefinitions, retiredDraftOccurrenceGrants: [] };
   }
   function withOccurrence(value: CanonicalProjectSchedule) {
     const started = startScheduleWorkingDraft(value, { workingDraftId: toCanonicalScheduleWorkingDraftId("local-history-draft") }, context(value));
@@ -130,7 +196,7 @@ describe("command-confirmed local definition resolution and history", () => {
     return { ...started.schedule, workingDraft: { ...started.draft, milestones: [draftMilestone("local-history-row", localId, { plan: dateOnly("2026-10-15") })] } };
   }
   function published(value: CanonicalProjectSchedule) {
-    const result = publishScheduleWorkingDraft(value, { publishedAt: "2026-10-01T00:00:00Z" }, context(value));
+    const result = publishScheduleWorkingDraft(value, { versionNote: "Schedule update", publishedAt: "2026-10-01T00:00:00Z" }, context(value));
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(JSON.stringify(result));
     return result.schedule;

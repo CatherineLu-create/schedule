@@ -252,7 +252,7 @@ it("applies Publish as one appended-version-plus-null-Draft state", () => {
   const withDraft = applySuccessfulReplacement(initial, devProject003.id, started);
   const published = publishScheduleWorkingDraft(
     withDraft.schedules[0]!,
-    { publishedAt: "2030-01-15T00:00:00Z" },
+    { versionNote: "Schedule update", publishedAt: "2030-01-15T00:00:00Z" },
     context,
   );
   expect(published.ok).toBe(true);
@@ -271,7 +271,7 @@ it("applies Publish as one appended-version-plus-null-Draft state", () => {
   const beforeSecond = next;
   expect(publishScheduleWorkingDraft(
     next.schedules[0]!,
-    { publishedAt: "2030-01-16T00:00:00Z" },
+    { versionNote: "Schedule update", publishedAt: "2030-01-16T00:00:00Z" },
     context,
   )).toEqual({ ok: false, reason: "no-working-draft", issues: [] });
   expect(next).toBe(beforeSecond);
@@ -317,7 +317,7 @@ it("publishes an empty no-Published Draft as v1 through one replacement", () => 
   const withDraft = applySuccessfulReplacement(initial, devProject003.id, started);
   const published = publishScheduleWorkingDraft(
     withDraft.schedules[0]!,
-    { publishedAt: "first-publication" },
+    { versionNote: "Schedule update", publishedAt: "first-publication" },
     context,
   );
   expect(published.ok).toBe(true);
@@ -326,7 +326,7 @@ it("publishes an empty no-Published Draft as v1 through one replacement", () => 
   expect(next.schedules[0]!.publishedVersions).toHaveLength(1);
   expect(next.schedules[0]!.publishedVersions[0]).toEqual({
     versionNumber: 1,
-    versionNote: null,
+    versionNote: "Schedule update",
     publishedAt: "first-publication",
     milestones: started.draft.milestones,
   });
@@ -386,7 +386,7 @@ it("keeps invalid Publish results out of state and still discards malformed Draf
   };
   const failed = publishScheduleWorkingDraft(
     malformed,
-    { publishedAt: "must-not-publish" },
+    { versionNote: "Schedule update", publishedAt: "must-not-publish" },
     context,
   );
   expect(failed.ok).toBe(false);
@@ -418,7 +418,7 @@ it("keeps overflow Publish failure out of state", () => {
   };
   expect(publishScheduleWorkingDraft(
     overflow,
-    { publishedAt: "overflow-attempt" },
+    { versionNote: "Schedule update", publishedAt: "overflow-attempt" },
     context,
   )).toEqual({ ok: false, reason: "next-version-unavailable", issues: [] });
   expect(current.schedules[0]).toBe(overflow);

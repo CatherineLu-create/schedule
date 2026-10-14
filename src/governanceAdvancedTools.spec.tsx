@@ -1,6 +1,6 @@
 import React from "react";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { App } from "./main";
 import { prototypeReducer } from "./application/state/prototypeReducer";
 import { startScheduleWorkingDraft } from "./application/commands/canonicalScheduleCommands";
@@ -15,7 +15,8 @@ vi.mock("./application/state/prototypeReducer", async original => {
   const actual = await original<typeof import("./application/state/prototypeReducer")>();
   return { ...actual, prototypeReducer: vi.fn(actual.prototypeReducer) };
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.clearAllMocks(); });
+beforeEach(() => { vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date(2026, 9, 20, 12)); });
+afterEach(() => { vi.useRealTimers(); cleanup(); vi.restoreAllMocks(); vi.clearAllMocks(); });
 const other = { ...devProject001, id: toProjectId("ux06-other-project"), master: { ...devProject001.master, basicInformation: { ...devProject001.master.basicInformation, stnProjectName: "Second actual Project", qciModelName: "UX06 Model" } } };
 function draft(projectId = devProject001.id) {
   const result = startScheduleWorkingDraft(createEmptyCanonicalProjectSchedule(projectId), { workingDraftId: toCanonicalScheduleWorkingDraftId(`draft-${projectId}`) }, initialScheduleCommandContext());
@@ -116,6 +117,8 @@ it("UX06 Governance publishes only its selected real Draft and PM reads the resu
   const uuid = mount(first, second); openAdvanced(); selectOther();
   fireEvent.click(screen.getByRole("button", { name: "發布此專案草稿" }));
   expect(changes()).toEqual([]);
+  expect(within(screen.getByRole("dialog", { name: "發布此專案 Working Draft" })).getByRole("button", { name: "確認發布" })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText("Publish Note"), { target: { value: "  Governance publication  " } });
   fireEvent.click(within(screen.getByRole("dialog", { name: "發布此專案 Working Draft" })).getByRole("button", { name: "確認發布" }));
   expect(changes()).toHaveLength(1);
   expect(changes()[0].projectId).toBe(other.id);

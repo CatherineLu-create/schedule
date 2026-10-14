@@ -377,7 +377,7 @@ export const milestoneTypeCatalog: readonly CatalogItem<MilestoneTypeId>[] = [
   {
     id: milestoneTypeIds.fcs,
     displayName: "FCS",
-    aliases: [],
+    aliases: ["SSL/GL"],
     active: true,
     reviewStatus: "reviewed",
   },

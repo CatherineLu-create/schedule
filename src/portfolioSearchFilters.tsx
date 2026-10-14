@@ -3,6 +3,7 @@ import { emptyPortfolioDashboardFilters, portfolioDashboardFilterChips, type Por
 
 const controls: readonly { readonly key: PortfolioDashboardFilterKey; readonly label: string }[] = [
   { key: "year", label: "Year" },
+  { key: "projectType", label: "Project Type" },
   { key: "customer", label: "Customer" },
   { key: "status", label: "Status" },
   { key: "category", label: "Category" },
@@ -15,6 +16,7 @@ const controls: readonly { readonly key: PortfolioDashboardFilterKey; readonly l
 const focus = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600";
 
 interface PortfolioSearchFiltersProps {
+  readonly showProjectTypeFilter?: boolean;
   readonly id: string;
   readonly searchTerm: string;
   readonly onSearchChange: (value: string) => void;
@@ -23,7 +25,7 @@ interface PortfolioSearchFiltersProps {
   readonly options: PortfolioDashboardFilterOptions;
 }
 
-export function PortfolioSearchFilters({ id, searchTerm, onSearchChange, filters, onFiltersChange, options }: PortfolioSearchFiltersProps): React.ReactElement {
+export function PortfolioSearchFilters({ id, searchTerm, onSearchChange, filters, onFiltersChange, options, showProjectTypeFilter = false }: PortfolioSearchFiltersProps): React.ReactElement {
   const chips = portfolioDashboardFilterChips(filters, options);
   return (
     <section aria-labelledby={`${id}-filters`} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
@@ -31,7 +33,7 @@ export function PortfolioSearchFilters({ id, searchTerm, onSearchChange, filters
       <label className="mt-4 block text-xs font-medium text-slate-600" htmlFor={`${id}-search`}>Search</label>
       <input id={`${id}-search`} type="search" value={searchTerm} onChange={(event) => onSearchChange(event.target.value)} placeholder="Search STN Project Name, QCI Model Name, Product Line, Customer, CPU, GPU" className={`mt-1 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm ${focus}`} />
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        {controls.map((control) => <div key={control.key} className="min-w-0">
+        {controls.filter(control => control.key !== "projectType" || showProjectTypeFilter).map((control) => <div key={control.key} className="min-w-0">
           <label htmlFor={`${id}-${control.key}`} className="block text-xs font-medium text-slate-600">{control.label}</label>
           <select id={`${id}-${control.key}`} value={filters[control.key]} onChange={(event) => onFiltersChange((current) => ({ ...current, [control.key]: event.target.value }))} className={`mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm ${focus}`}>
             <option value="">All</option>

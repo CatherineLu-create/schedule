@@ -118,7 +118,7 @@ describe("effective governance context", () => {
     const renamedPresentation = createPortfolioVisibleSchema({ ...context, portfolioColumnDefinitions: [{ ...extra, name: "Display-only alternate label" }] });
     expect(renamedPresentation.scheduleMappings[0].key).toBe("schedule:released-extra-test");
     expect(renamedPresentation.scheduleMappings[0].label).toBe("Display-only alternate label");
-    expect(createPortfolioVisibleSchema({ ...initial, portfolioColumnDefinitions: [] }).domainGroups.map(group => group.colSpan)).toEqual([11, 7]);
+    expect(createPortfolioVisibleSchema({ ...initial, portfolioColumnDefinitions: [] }).domainGroups.map(group => group.colSpan)).toEqual([12, 7]);
   });
   it("keeps formal consumers unchanged until a real successful publish then shares released membership", () => {
     const before = structuredClone({ prototype, catalogs });

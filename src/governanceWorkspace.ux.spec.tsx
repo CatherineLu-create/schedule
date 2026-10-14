@@ -313,7 +313,7 @@ it("SSL/GL uses the existing definition with a noninteractive automatic reminder
   expect(state().draft!.candidateRelease.additionalAttentionDefinitionIds).toEqual([]);
   change("階段", "stage-ramp");
   expect(within(screen.getByLabelText("插入位置")).getByRole("option", { name: "放在「SSL/GL」之後" })).toHaveValue("milestone-ramp-fcs");
-  expect(within(screen.getByLabelText("需確認的公版里程碑")).getByRole("option", { name: "SSL/GL｜RAMP-stage｜FCS" })).toHaveValue("milestone-ramp-fcs");
+  expect(within(screen.getByLabelText("需確認的公版里程碑")).getByRole("option", { name: "SSL/GL｜RAMP-stage｜SSL/GL" })).toHaveValue("milestone-ramp-fcs");
   fireEvent.click(within(sslGl).getByRole("checkbox", { name: "顯示於總表" }));
   const preview = showPreview();
   expect(preview).toHaveTextContent("SSL/GL · 移除");
@@ -355,4 +355,26 @@ it.each([true, false])("history_labels_exact_pair_reassignment_across_releases_%
   expect(latest).toHaveTextContent(sameDefinition ? "試用發布 #3" : "試用發布 #2");
   expect(history).toHaveTextContent("撤回於 試用發布 #2");
   for (const secret of ["history-enrollment", "history-release", "history-withdrawal", "picker-project", "milestone-design"]) expect(history).not.toHaveTextContent(secret);
+});
+
+it("renders historical nonselectable Type metadata without canonical FCS leakage", () => {
+ const state = setup();
+ expect(document.body.textContent).not.toMatch(/FCS/i);
+ expect(screen.getAllByText("SSL/GL").length).toBeGreaterThan(0);
+ const types = within(screen.getByRole("region", { name: "類型管理" }));
+ expect(types.getByText("SSL/GL", { exact: true })).toBeVisible();
+ expect(types.queryByRole("button", { name: /停用類型 (FCS|SSL\/GL)/ })).toBeNull();
+ expect(within(screen.getByLabelText("類型", { exact: true })).queryByRole("option", { name: /FCS|SSL\/GL/ })).toBeNull();
+ expect(state().releases[0].milestoneTypes.find(type => type.id === "type-fcs")?.displayName).toBe("FCS");
+ fireEvent.click(screen.getByText(/已發布里程碑 ·/, { selector: "summary" }));
+ const historical = screen.getByText(/已發布里程碑 ·/, { selector: "summary" }).parentElement!;
+ expect(within(historical).getByText(/SSL\/GL · RAMP-stage · SSL\/GL/)).toBeVisible();
+});
+
+it("uses SSL/GL in the custom Stage action accessibility label without rewriting its stored label", () => {
+ const state = setup();
+ change("新階段名稱", "FCS"); click("新增階段");
+ expect(screen.getByRole("button", { name: "停用階段 SSL/GL" })).toBeVisible();
+ expect(screen.queryByRole("button", { name: /停用(階段|類型) FCS/ })).toBeNull();
+ expect(state().draft!.candidateRelease.stageGroups.at(-1)?.displayName).toBe("FCS");
 });

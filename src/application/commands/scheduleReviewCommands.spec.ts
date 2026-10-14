@@ -1,3 +1,4 @@
+import { parseDateOnly as testReferenceDate } from "../../domain/shared/dateOnly";
 import { describe, expect, it } from "vitest";
 import { milestoneDefinitions, milestoneTypeCatalog, stageGroupCatalog } from "../../config/v2/referenceData";
 import type { CommandResult } from "../../domain/governance/milestoneGovernance";
@@ -141,7 +142,7 @@ describe("confirmProjectLocalMilestoneDefinition", () => {
     const local = value(confirmProjectLocalMilestoneDefinition(createEmptyCanonicalProjectSchedule(devProject001.id), input(), governance));
     expect(local.localDefinitions.map(definition => definition.id)).toEqual(["local-acceptance"]);
     for (const [schedule, allowed] of [[local, true], [createEmptyCanonicalProjectSchedule(devProject003.id), false]] as const) {
-      const context = { governance, localDefinitions: local.localDefinitions, retiredDraftOccurrenceGrants: [] };
+      const context = { referenceDate: testReferenceDate("2026-10-14")!, governance, localDefinitions: local.localDefinitions, retiredDraftOccurrenceGrants: [] };
       const started = startScheduleWorkingDraft(schedule, { workingDraftId: toCanonicalScheduleWorkingDraftId("explicit-local-add") }, context);
       if (!started.ok) throw new Error(JSON.stringify(started));
       const added = addScheduleWorkingDraftMilestone(started.schedule, { milestoneId: toMilestoneId("local-add"), milestoneDefinitionId: input().definitionId }, context);
@@ -180,7 +181,7 @@ describe("confirmProjectLocalMilestoneDefinition", () => {
   });
 
   it("command_failure_is_atomic_and_does_not_touch_published_or_draft_occurrences", () => {
-    const context = { governance: initialGovernanceContext(), localDefinitions: [], retiredDraftOccurrenceGrants: [] };
+    const context = { referenceDate: testReferenceDate("2026-10-14")!, governance: initialGovernanceContext(), localDefinitions: [], retiredDraftOccurrenceGrants: [] };
     const started = startScheduleWorkingDraft(structuredClone(devSchedule001), { workingDraftId: toCanonicalScheduleWorkingDraftId("atomic-draft") }, context);
     if (!started.ok) throw new Error(JSON.stringify(started));
     expect(started.draft.milestones.length).toBeGreaterThan(0);
@@ -188,7 +189,7 @@ describe("confirmProjectLocalMilestoneDefinition", () => {
   });
 
   it("confirmed_local_definition_does_not_create_occurrence_implicitly", () => {
-    const context = { governance: initialGovernanceContext(), localDefinitions: [], retiredDraftOccurrenceGrants: [] };
+    const context = { referenceDate: testReferenceDate("2026-10-14")!, governance: initialGovernanceContext(), localDefinitions: [], retiredDraftOccurrenceGrants: [] };
     const started = startScheduleWorkingDraft(structuredClone(devSchedule001), { workingDraftId: toCanonicalScheduleWorkingDraftId("untouched-draft") }, context);
     if (!started.ok) throw new Error(JSON.stringify(started));
     const before = freeze(started.schedule);
@@ -230,7 +231,7 @@ function reviewIds(prefix = "review", count = 3): ScheduleReviewIdBundle {
     candidateIds: Array.from({ length: count }, (_, i) => toScheduleImportCandidateId(`${prefix}-c${i}`)) };
 }
 function reviewContext(schedule: CanonicalProjectSchedule, governance = initialGovernanceContext()): CanonicalScheduleCommandContext {
-  return { governance, localDefinitions: schedule.localDefinitions, retiredDraftOccurrenceGrants: [] };
+  return { referenceDate: testReferenceDate("2026-10-14")!, governance, localDefinitions: schedule.localDefinitions, retiredDraftOccurrenceGrants: [] };
 }
 function reviewDraft(base = createEmptyCanonicalProjectSchedule(devProject001.id), context = reviewContext(base)) {
   const started = startScheduleWorkingDraft(base, { workingDraftId: toCanonicalScheduleWorkingDraftId("review-draft") }, context);
@@ -530,7 +531,7 @@ describe("GOV-07 candidate-scoped review commands", () => {
 describe("GOV-07 exact retired occurrence eligibility", () => {
   function retiredReview() {
     const fixture = publishedRetirementFixture();
-    const context = { governance: value(selectEffectiveMilestoneGovernanceContext(fixture.state)), localDefinitions: [], retiredDraftOccurrenceGrants: value(selectEffectiveRetiredDraftOccurrenceGrants(fixture.state)) };
+    const context = { referenceDate: testReferenceDate("2026-10-14")!, governance: value(selectEffectiveMilestoneGovernanceContext(fixture.state)), localDefinitions: [], retiredDraftOccurrenceGrants: value(selectEffectiveRetiredDraftOccurrenceGrants(fixture.state)) };
     return { fixture, context, schedule: loadReview(fixture.schedule, "retired-existing-update", "retired", context) };
   }
   it("requires an actual retired-existing prerequisite and never manufactures its occurrence", () => {
@@ -597,7 +598,7 @@ describe("GOV-07 exact retired occurrence eligibility", () => {
 
 describe("GOV-08 real Publish gate and review closures", () => {
   const publish = (schedule: CanonicalProjectSchedule, context = reviewContext(schedule)) =>
-    publishScheduleWorkingDraft(schedule, { publishedAt: "2026-10-01T03:00:00Z" }, context);
+    publishScheduleWorkingDraft(schedule, { versionNote: "Schedule update", publishedAt: "2026-10-01T03:00:00Z" }, context);
   function reviewed() {
     let schedule = loadReview();
     for (let i = 0; i < 3; i++) schedule = value(confirmReview(schedule, requestFor(schedule, i), reviewContext(schedule), `decision-${i}`));
@@ -863,7 +864,7 @@ describe("GOV-08 explicit local to public mapping", () => {
   it("mapping_then_publish_preserves_local_registry_and_older_published_and_discard_closes_manual_session", () => {
     const { schedule, request } = mappingFixture();
     const mapped = value(mapDraftLocalOccurrenceToPublic(schedule, request, reviewContext(schedule)));
-    const published = publishScheduleWorkingDraft(mapped, { publishedAt: "2026-10-01T03:00:00Z" }, reviewContext(mapped));
+    const published = publishScheduleWorkingDraft(mapped, { versionNote: "Schedule update", publishedAt: "2026-10-16T03:00:00Z" }, { ...reviewContext(mapped), referenceDate: parseDateOnly("2026-10-16")! });
     expect(published.ok).toBe(true);
     if (!published.ok) throw new Error(JSON.stringify(published));
     expect(published.schedule.reviewClosures).toEqual([{ sessionId: "mapping-session", kind: "published", versionNumber: 2 }]);
@@ -877,4 +878,39 @@ describe("GOV-08 explicit local to public mapping", () => {
     expect(discarded.schedule.localDefinitions).toBe(schedule.localDefinitions);
     expect(discarded.schedule.publishedVersions).toBe(schedule.publishedVersions);
   });
+});
+
+
+describe("future import Actual", () => {
+  it("allows Draft confirmation but exposes a Publish blocker and retains raw evidence", () => {
+    let loaded = loadReview();
+    // Resolve all other candidates so only the future Actual can block Publish.
+    for (const index of [1, 2]) {
+      loaded = value(confirmReview(loaded, requestFor(loaded, index), reviewContext(loaded), `other-${index}`));
+    }
+    const context = { ...reviewContext(loaded), referenceDate: parseDateOnly("2026-10-14")! };
+    const request = { ...requestFor(loaded), actual: { kind: "set" as const, value: parseDateOnly("2026-10-15")! } };
+    const evidence = structuredClone(loaded.evidenceLedger);
+    const preview = value(previewScheduleImportDecision(loaded, request, context));
+    expect(preview.operationBlockingFindings).toEqual([]);
+    expect(preview.remainingPublishBlockingFindings).toContainEqual(expect.objectContaining({ code: "schedule.data.future-actual", severity: "blocking" }));
+    expect(preview.remainingPublishBlockingFindings.map(issue => issue.code)).toEqual(["schedule.data.future-actual"]);
+    const confirmed = value(confirmReview(loaded, request, context));
+    expect(confirmed.workingDraft!.milestones.some(row => row.actual === "2026-10-15")).toBe(true);
+    expect(confirmed.evidenceLedger).toEqual(evidence);
+    expect(publishScheduleWorkingDraft(confirmed, { versionNote: "Schedule update", publishedAt: "audit" }, context)).toMatchObject({ ok: false, issues: [expect.objectContaining({ code: "schedule.data.future-actual", message: "Actual date cannot be later than today." })] });
+  });
+});
+
+it.each(["FCS", "SSL/GL"])("recognizes historical Type input %s without rewriting raw evidence", rawType => {
+ const loaded = loadReview();
+ const evidence = { ...loaded.evidenceLedger[0]!, rawValues: { ...loaded.evidenceLedger[0]!.rawValues, milestoneType: { presence: "present" as const, raw: rawType } } };
+ const originalCandidate = loaded.workingDraft!.importCandidates[0]!;
+ const candidate = createScheduleImportCandidate(evidence, originalCandidate.id, originalCandidate.sourceDefinitionId);
+ const schedule = { ...loaded, evidenceLedger: [evidence, ...loaded.evidenceLedger.slice(1)], workingDraft: { ...loaded.workingDraft!, importCandidates: [candidate, ...loaded.workingDraft!.importCandidates.slice(1)] } };
+ const request = requestFor(schedule);
+ expect(value(previewScheduleImportDecision(schedule, request, reviewContext(schedule))).operationBlockingFindings).toEqual([]);
+ const confirmed = value(confirmReview(schedule, request));
+ expect(confirmed.evidenceLedger).toEqual(schedule.evidenceLedger);
+ expect(confirmed.evidenceLedger[0].rawValues.milestoneType).toEqual({ presence: "present", raw: rawType });
 });

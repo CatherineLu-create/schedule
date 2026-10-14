@@ -50,6 +50,7 @@ function fixture() {
 function openCreate(duplicate: boolean) {
   fireEvent.click(screen.getByRole("button", { name: "Create Project" }));
   const dialog = screen.getByRole("dialog", { name: "Create Project" });
+  fireEvent.change(within(dialog).getByLabelText("Project Type"), { target: { value: "new" } });
   fireEvent.change(within(dialog).getByLabelText("Year"), { target: { value: "2027" } });
   fireEvent.change(within(dialog).getByLabelText("Product Line"), { target: { value: "demo-product-line-aspire-refresh-id" } });
   fireEvent.change(within(dialog).getByLabelText("STN Project Name"), { target: { value: duplicate ? "Manta" : "Governance Creation" } });

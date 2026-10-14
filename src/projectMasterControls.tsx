@@ -377,3 +377,22 @@ export function ProjectReferencePicker({
     </div>
   );
 }
+
+export function ProjectTypeSelect({ value, onChange, error, required = false }: {
+  readonly value: import("./domain/project/projectMaster").ProjectType | "";
+  readonly onChange: (value: import("./domain/project/projectMaster").ProjectType | "") => void;
+  readonly error?: string;
+  readonly required?: boolean;
+}): React.ReactElement {
+  return <label className="grid gap-1 text-sm md:grid-cols-[180px_minmax(0,1fr)] md:items-center">
+    <span>Project Type</span><span className="grid min-w-0 gap-1">
+      <select aria-label="Project Type" aria-required={required} value={value}
+        className="min-w-0 rounded-md border border-slate-300 px-3 py-2"
+        onChange={event => onChange(event.target.value as typeof value)}>
+        <option value="">{required ? "Select Project Type" : "\u2014"}</option>
+        <option value="new">New</option><option value="regression">Regression</option>
+      </select>
+      {error && <span className="text-xs text-rose-700">{error}</span>}
+    </span>
+  </label>;
+}

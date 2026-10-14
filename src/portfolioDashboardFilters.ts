@@ -2,6 +2,7 @@ import type { PortfolioDashboardRow } from "./application/selectors/portfolioDas
 
 export const portfolioDashboardFilterKeys = [
 	"year",
+	"projectType",
 	"customer",
 	"status",
 	"category",
@@ -18,6 +19,7 @@ export type PortfolioDashboardFilters = Readonly<Record<PortfolioDashboardFilter
 
 export const emptyPortfolioDashboardFilters: PortfolioDashboardFilters = {
 	year: "",
+	projectType: "",
 	customer: "",
 	status: "",
 	category: "",
@@ -46,6 +48,7 @@ export interface PortfolioDashboardFilterChip {
 
 const portfolioDashboardFilterFields: Readonly<Record<PortfolioDashboardFilterKey, string>> = {
 	year: "Year",
+	projectType: "Project Type",
 	customer: "Customer",
 	status: "Status",
 	category: "Category",
@@ -58,6 +61,7 @@ const portfolioDashboardFilterFields: Readonly<Record<PortfolioDashboardFilterKe
 
 const portfolioDashboardFilterGetters: Readonly<Record<PortfolioDashboardFilterKey, (row: PortfolioDashboardRow) => string>> = {
 	year: (row) => row.project.year,
+	projectType: (row) => row.project.projectType,
 	customer: (row) => row.project.customer,
 	status: (row) => row.project.projectStatus,
 	category: (row) => row.category,
@@ -82,6 +86,7 @@ export function portfolioDashboardFilterOptions(
 ): PortfolioDashboardFilterOptions {
 	const options = {} as Record<PortfolioDashboardFilterKey, readonly PortfolioDashboardFilterOption[]>;
 	for (const key of portfolioDashboardFilterKeys) {
+		if (key === "projectType") { options[key] = ["New", "Regression"].map(value => ({ value, label: value })); continue; }
 		const byValue = new Map<string, PortfolioDashboardFilterOption>();
 		for (const row of rows) {
 			const value = portfolioDashboardFilterGetters[key](row);

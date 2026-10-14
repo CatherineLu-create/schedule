@@ -1,4 +1,5 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
+import { confirmCreateProjectAnyway } from "../workflow/workflowInterpretation";
 
 import { coverCatalog, statusCatalog } from "../../config/v2/referenceData";
 import {
@@ -50,6 +51,7 @@ const qciPm: ProjectRoleAssignment = {
 
 const fullMasterInput: CreateProjectMasterInput = {
 	basicInformation: {
+    projectType: "new",
 		status: statusCatalog[2]!.id,
 		year: 2029,
 		customer: customerReferenceFixtures[1]!.id,
@@ -183,6 +185,7 @@ describe("Create Project command", () => {
 	it("creates when only Year, Product Line, and STN Project Name have business values", () => {
 		const minimalMaster: CreateProjectMasterInput = {
 			basicInformation: {
+				projectType: "new",
 				year: 2030,
 				category: null,
 				productLine: productLineAlphaId,
@@ -246,6 +249,7 @@ describe("Create Project command", () => {
 		expect(result.project.master).toEqual({
 			basicInformation: {
 				status: rfqStatusId,
+				projectType: "new",
 				year: 2030,
 				customer: acerCustomerId,
 				category: null,
@@ -572,7 +576,7 @@ describe("Project Master update command", () => {
 		const result = updateProjectMaster(devProject002, {
 			master: nextMaster,
 			completenessFields: [],
-		});
+		}, { existingProjects: [] });
 
 		expect(result.project.id).toBe(devProject002.id);
 		expect(result.project.master).toBe(nextMaster);
@@ -604,7 +608,7 @@ describe("Project Master update command", () => {
 		const result = updateProjectMaster(devProject002, {
 			master: nextMaster,
 			completenessFields: [],
-		});
+		}, { existingProjects: [] });
 
 		expect(result.project.identityAliases).toEqual([]);
 		expect(result.project.master.basicInformation.stnProjectName).toBe(
@@ -634,7 +638,7 @@ describe("Project Master update command", () => {
 		const result = updateProjectMaster(punctuationProject, {
 			master: nextMaster,
 			completenessFields: [],
-		});
+		}, { existingProjects: [] });
 
 		expect(result.project.identityAliases).toContainEqual({
 			kind: "stnProjectName",
@@ -661,7 +665,7 @@ describe("Project Master update command", () => {
 					label: "QCI Model Name",
 				},
 			],
-		});
+		}, { existingProjects: [] });
 
 		expect(result.project.master).toBe(nextMaster);
 		expect(result.issues).toEqual([
@@ -671,4 +675,85 @@ describe("Project Master update command", () => {
 			}),
 		]);
 	});
+});
+
+
+describe("Feedback Batch 2 Project Type", () => {
+  function typedInput(projectType: "new" | "regression" | null | undefined, name = "Manta") {
+    return validInput({ master: { ...fullMasterInput, basicInformation: { ...fullMasterInput.basicInformation, projectType, stnProjectName: name } } });
+  }
+  const existing = { ...devProject002, master: { ...devProject002.master, basicInformation: { ...devProject002.master.basicInformation, stnProjectName: "Manta", projectType: null } } };
+  it.each([null, undefined])("requires explicit Type for new creation (%s)", projectType => {
+    expect(createProject(typedInput(projectType), context)).toMatchObject({ status: "rejected", reason: "requiredFields", missingFields: ["projectType"] });
+  });
+  it("blocks Regression without another same-name Project even with Create Anyway", () => {
+    expect(createProject(typedInput("regression"), { ...context, allowBusinessIdentityDuplicate: true })).toMatchObject({ status: "rejected", reason: "projectTypeValidation" });
+  });
+  it.each(["Manta", " manta ", "MANTA"])("allows Regression %s across years and product lines", name => {
+    const result = createProject(typedInput("regression", name), { ...context, existingProjects: [existing] });
+    expect(result.status).toBe("created");
+  });
+  it.each(["Manta 14", "Man", "Manta  14"])("does not fuzzy match Regression %s", name => {
+    expect(createProject(typedInput("regression", name), { ...context, existingProjects: [existing] }).status).toBe("rejected");
+  });
+  it("warns for New across years, and explicit confirmation retains New", () => {
+    const request = typedInput("new");
+    expect(createProject(request, { ...context, existingProjects: [existing] })).toMatchObject({ status: "reviewRequired", matchingProjectIds: [existing.id] });
+    expect(createProject(request, { ...context, existingProjects: [existing], allowBusinessIdentityDuplicate: true })).toMatchObject({ status: "created", project: { master: { basicInformation: { projectType: "new" } } } });
+  });
+  it("preserves prior composite duplicate review even when exact-name matching differs", () => {
+    const request = typedInput("new", "Manta  14");
+    const prior = { ...existing, master: { ...existing.master, basicInformation: { ...existing.master.basicInformation, ...request.master.basicInformation, stnProjectName: "Manta 14" } } };
+    expect(createProject(request, { ...context, existingProjects: [prior] })).toMatchObject({ status: "reviewRequired", issues: expect.arrayContaining([expect.objectContaining({ code: "projectMaster.data.duplicate-business-identity" })]) });
+  });
+  it("keeps valid Regression eligibility separate from legacy duplicate review and acknowledgment", () => {
+    const request = typedInput("regression");
+    const counterpart = { ...existing, master: { ...existing.master, basicInformation: { ...existing.master.basicInformation, ...request.master.basicInformation } } };
+    const current = { ...context, existingProjects: [counterpart] };
+    expect(createProject(request, current)).toMatchObject({ status: "reviewRequired", issues: [expect.objectContaining({ code: "projectMaster.data.duplicate-business-identity", severity: "advisory" })] });
+    expect(confirmCreateProjectAnyway(request, current)).toMatchObject({ kind: "completed", result: { project: { master: { basicInformation: { projectType: "regression" } } } } });
+    const renamed = { ...counterpart, master: { ...counterpart.master, basicInformation: { ...counterpart.master.basicInformation, stnProjectName: "Renamed counterpart" } } };
+    expect(confirmCreateProjectAnyway(request, { ...current, existingProjects: [renamed] })).toMatchObject({ kind: "rejected", result: { reason: "projectTypeValidation" } });
+    expect(confirmCreateProjectAnyway(typedInput("regression", "Changed candidate"), current)).toMatchObject({ kind: "rejected", result: { reason: "projectTypeValidation" } });
+  });
+  it("rejects an invalid Edit enum without changing canonical data or aliases", () => {
+    const before = structuredClone(existing);
+    const master = { ...existing.master, basicInformation: { ...existing.master.basicInformation, projectType: "invalid" as "new", stnProjectName: "Changed" } };
+    const result = updateProjectMaster(existing, { master }, { existingProjects: [existing] });
+    expect(result.project).toBe(existing);
+    expect(result.issues).toContainEqual(expect.objectContaining({ code: "projectMaster.data.invalid-project-type", severity: "blocking" }));
+    expect(existing).toEqual(before);
+  });
+  it("does not cascade eligibility when a counterpart is renamed and allows unchanged Regression fields", () => {
+    const regression = { ...existing, master: { ...existing.master, basicInformation: { ...existing.master.basicInformation, projectType: "regression" as const } } };
+    const counterpart = { ...existing, id: toProjectId("counterpart") };
+    const before = structuredClone(regression);
+    const renamed = updateProjectMaster(counterpart, { master: { ...counterpart.master, basicInformation: { ...counterpart.master.basicInformation, stnProjectName: "Renamed" } } }, { existingProjects: [regression, counterpart] });
+    expect(renamed.issues).toEqual([]);
+    expect(regression).toEqual(before);
+    const master = { ...regression.master, other: { remark: "Unrelated save after counterpart rename" } };
+    expect(updateProjectMaster(regression, { master }, { existingProjects: [regression, renamed.project] })).toMatchObject({ issues: [], project: { master } });
+  });
+  it("excludes self and blocks relevant edits without mutating Project or aliases", () => {
+    const master = { ...existing.master, basicInformation: { ...existing.master.basicInformation, projectType: "regression" as const } };
+    const result = updateProjectMaster(existing, { master }, { existingProjects: [existing] });
+    expect(result.project).toBe(existing);
+    expect(result.issues).toContainEqual(expect.objectContaining({ severity: "blocking", code: "projectMaster.data.regression-requires-same-name" }));
+  });
+  it("accepts a relevant Regression edit with another exact-name Project and preserves null legacy edits", () => {
+    const other = { ...existing, id: toProjectId("other-counterpart") };
+    const master = { ...existing.master, basicInformation: { ...existing.master.basicInformation, stnProjectName: " MANTA ", projectType: "regression" as const } };
+    expect(updateProjectMaster(existing, { master }, { existingProjects: [existing, other] })).toMatchObject({ issues: [], project: { master } });
+    expect(updateProjectMaster(existing, { master: existing.master }, { existingProjects: [existing] }).project.master.basicInformation.projectType).toBeNull();
+  });
+  it("rejects an unknown runtime enum without allowing duplicate acknowledgment to bypass it", () => {
+    expect(createProject(typedInput("other" as "new"), { ...context, allowBusinessIdentityDuplicate: true })).toMatchObject({ status: "rejected", reason: "projectTypeValidation" });
+  });
+  it("allows unrelated edits to an orphaned Regression but rechecks its changed name", () => {
+    const orphan = { ...existing, master: { ...existing.master, basicInformation: { ...existing.master.basicInformation, projectType: "regression" as const } } };
+    const master = { ...orphan.master, other: { remark: "Unrelated edit" } };
+    expect(updateProjectMaster(orphan, { master }, { existingProjects: [orphan] }).issues).toEqual([]);
+    const renamed = { ...master, basicInformation: { ...master.basicInformation, stnProjectName: "New unmatched name" } };
+    expect(updateProjectMaster(orphan, { master: renamed }, { existingProjects: [orphan] }).project).toBe(orphan);
+  });
 });

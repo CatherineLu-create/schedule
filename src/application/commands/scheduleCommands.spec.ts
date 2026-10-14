@@ -189,31 +189,14 @@ describe("Schedule Publish predecessor command", () => {
     expect(schedule.workingDraft).toBe(blockedDraft);
   });
 
-  it("publishes an Advisory-only first Draft as v1 and clears Draft", () => {
+  it("blocks a future Actual in the predecessor lifecycle and retains its Draft", () => {
     const schedule = scheduleWithDraft([], futureActualDraftCandidate);
-
     const result = publishProjectSchedule(schedule, {
-      versionId: toScheduleVersionId("predecessor-first-version"),
-      versionNote: "DEV first schedule",
-      publishedAt: "2026-09-15T08:00:00.000Z",
-      referenceDate,
+      versionId: toScheduleVersionId("predecessor-first-version"), versionNote: null,
+      publishedAt: "2026-09-15T08:00:00.000Z", referenceDate,
     });
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.issues).toContainEqual(
-      expect.objectContaining({
-        code: "schedule.data.future-actual",
-        severity: "advisory",
-      }),
-    );
-    expect(result.version).toMatchObject({
-      id: "predecessor-first-version",
-      versionNumber: 1,
-      versionNote: "DEV first schedule",
-    });
-    expect(result.schedule.publishedVersions).toEqual([result.version]);
-    expect(result.schedule.workingDraft).toBeNull();
+    expect(result).toMatchObject({ ok: false, reason: "validation", issues: [expect.objectContaining({ code: "schedule.data.future-actual", severity: "blocking" })] });
+    expect(schedule.publishedVersions).toEqual([]);
     expect(schedule.workingDraft).toBe(futureActualDraftCandidate);
   });
 

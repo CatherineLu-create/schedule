@@ -19,7 +19,7 @@ vi.mock("./application/governance/milestoneGovernanceInitializer", async importO
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
-const projectHeaders = ["Status", "Year", "STN Project Name", "QCI Model Name", "Customer", "Category", "Product Line", "Panel Size", "CPU", "GPU", "PCB#"];
+const projectHeaders = ["Status", "Year", "STN Project Name", "QCI Model Name", "Project Type", "Customer", "Category", "Product Line", "Panel Size", "CPU", "GPU", "PCB#"];
 const scheduleHeaders = ["Kickoff", "ID fix", "ME drawing", "Mockup & DFM", "Tooling start + T1", "ME material for C", "Thermal module for C", "A1 G/O", "A1 SMT", "A1 Test", "A1 Close", "C1 G/O", "C1 SMT", "C1 Pre-Build", "C1 System Build", "C1 Test", "C1 Close", "C2 G/O", "C2 SMT", "C2 Pre-Build", "C2 System Build", "C2 Test", "C2 Close", "RAMP G/O", "ME signoff", "RAMP SMT", "RAMP Pre-build", "RAMP Main build", "SSL/GL", "MDRR"];
 const teamHeaders = ["QCI PM", "QCI PjM", "Acer PM", "ME Owner", "EE Owner", "Thermal Owner", "BIOS Owner"];
 const allHeaders = [...projectHeaders, ...scheduleHeaders, ...teamHeaders];
@@ -47,11 +47,11 @@ describe("All Projects workbook output from App", () => {
     expect(grid[0]).toEqual([...screen.getByRole("table", { name: "Projects" }).querySelectorAll('th[scope="col"] span')].map(leaf => leaf.textContent));
     expect(grid).toHaveLength(6);
     expect(grid.slice(1).map(row => row[2])).toEqual(["Manta", "Nautilus", "Orca", "Beluga", "Marlin"]);
-    expect(grid[1]![41]).toBe("");
-    expect(grid[2]![41]).toBe("DEV QCI PM");
-    for (const row of grid.slice(1)) expect(row.slice(42)).toEqual(["", "", "", "", "", ""]);
-    expect(grid[1]![18]).toContain("P: 2026/10/15");
-    expect(grid[1]![18]).toContain("A: —");
+    expect(grid[1]![42]).toBe("");
+    expect(grid[2]![42]).toBe("DEV QCI PM");
+    for (const row of grid.slice(1)) expect(row.slice(43)).toEqual(["", "", "", "", "", ""]);
+    expect(grid[1]![19]).toContain("P: 2026/10/15");
+    expect(grid[1]![19]).toContain("A: —");
   });
 
   it("exports the exact Search AND filters result and retains headers with zero matches", () => {
@@ -126,9 +126,9 @@ describe("All Projects workbook output from App", () => {
     expect(kickoff).toHaveTextContent("A: —");
     expect(table.querySelector('tbody [data-column-key="team:qciPm"]')).toHaveTextContent("Saved export PM");
     const output = exportGrid();
-    expect(output[1]![11]).toBe("Applicable\nP: 2026/11/01\nA: —");
-    expect(output[1]![41]).toBe("Saved export PM");
-    expect(output[1]!.slice(42)).toEqual(["", "", "", "", "", ""]);
+    expect(output[1]![12]).toBe("Applicable\nP: 2026/11/01\nA: —");
+    expect(output[1]![42]).toBe("Saved export PM");
+    expect(output[1]!.slice(43)).toEqual(["", "", "", "", "", ""]);
     expect(JSON.stringify(output)).not.toContain("2099/12/31");
     expect(JSON.stringify(output)).not.toContain("2026/09/18");
   });

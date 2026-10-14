@@ -127,6 +127,7 @@ function assignedState() {
 function creation(name = "Created after Governance") {
   click("回到 Dashboard"); click("Create Project");
   const dialog = screen.getByRole("dialog", { name: "Create Project" });
+  fireEvent.change(within(dialog).getByLabelText("Project Type"), { target: { value: "new" } });
   fireEvent.change(within(dialog).getByLabelText("Year"), { target: { value: "2027" } });
   fireEvent.change(within(dialog).getByLabelText("Product Line"), { target: { value: "demo-product-line-aspire-refresh-id" } });
   fireEvent.change(within(dialog).getByLabelText("STN Project Name"), { target: { value: name } });

@@ -25,30 +25,30 @@ describe("schema-driven All Projects serialization", () => {
     const input = [rows[4]!, rows[0]!];
     const before = structuredClone({ input, schema });
     const output = grid(input);
-    expect(output[0]).toHaveLength(48);
+    expect(output[0]).toHaveLength(49);
     expect(output[0]).toEqual(schema.columns.map(column => column.label));
     expect(output.slice(1).map(row => row[2])).toEqual(["Marlin", "Manta"]);
-    expect(output[2]!.slice(0, 11)).toEqual(["RFQ", "2027", "Manta", "ZMT", "Acer", "Aspire", "Aspire (Refresh ID)", "16\"", "Intel Novalake HX 28C/24C", "GN22-X2/X4", ""]);
+    expect(output[2]!.slice(0, 12)).toEqual(["RFQ", "2027", "Manta", "ZMT", "", "Acer", "Aspire", "Aspire (Refresh ID)", "16\"", "Intel Novalake HX 28C/24C", "GN22-X2/X4", ""]);
     expect({ input, schema }).toEqual(before);
   });
 
-  it("keeps 48 headers and no Project rows when results are empty", () => {
+  it("keeps 49 headers and no Project rows when results are empty", () => {
     const output = grid([]);
     expect(output).toHaveLength(1);
-    expect(output[0]).toHaveLength(48);
+    expect(output[0]).toHaveLength(49);
     expect(output[0]!.slice(-7)).toEqual(["QCI PM", "QCI PjM", "Acer PM", "ME Owner", "EE Owner", "Thermal Owner", "BIOS Owner"]);
   });
 
   it("keeps duplicate human leaf labels as independent cells in their schema positions", () => {
     const renamed = { ...schema, columns: schema.columns.map(column => ({ ...column, label: "Same label" })) };
     const output = grid([rows[0]!], renamed);
-    expect(output[0]).toEqual(Array(48).fill("Same label"));
-    expect(output[1]).toHaveLength(48);
+    expect(output[0]).toEqual(Array(49).fill("Same label"));
+    expect(output[1]).toHaveLength(49);
     expect(output[1]![0]).toBe("RFQ");
     expect(output[1]![1]).toBe("2027");
-    expect(output[1]![11]).toBe("Applicable\nP: 2026/09/18\nA: 2026/09/19");
-    expect(output[1]![41]).toBe("");
-    expect(output[1]![47]).toBe("");
+    expect(output[1]![12]).toBe("Applicable\nP: 2026/09/18\nA: 2026/09/19");
+    expect(output[1]![42]).toBe("");
+    expect(output[1]![48]).toBe("");
   });
 
   it("keeps repeated Schedule occurrences inside one cell in Published display order and masks N/A dates", () => {
@@ -67,9 +67,9 @@ describe("schema-driven All Projects serialization", () => {
     ] };
     const output = grid([{ ...rows[0]!, schedule }]);
     expect(output).toHaveLength(2);
-    expect(output[1]![28]).toBe("N/A\n\nApplicable\nP: —\nA: —\n\nApplicable\nP: 2026/10/07\nA: 2026/10/08");
-    expect(output[1]![40]).toBe("Applicable\nP: 2099/02/01\nA: —\n\nApplicable\nP: 2099/03/01\nA: 2099/03/02");
-    expect(output[1]![22]).toBe("");
+    expect(output[1]![29]).toBe("N/A\n\nApplicable\nP: —\nA: —\n\nApplicable\nP: 2026/10/07\nA: 2026/10/08");
+    expect(output[1]![41]).toBe("Applicable\nP: 2099/02/01\nA: —\n\nApplicable\nP: 2099/03/01\nA: 2099/03/02");
+    expect(output[1]![23]).toBe("");
   });
 
   it.each([
@@ -78,7 +78,7 @@ describe("schema-driven All Projects serialization", () => {
     { occurrences: [occurrence("undated", "applicable", "-", "-")] },
   ])("leaves missing, N/A, or entirely undated MDRR blank ($occurrences)", ({ occurrences }) => {
     const schedule: PortfolioCurrentPublishedRead = { kind: "published", versionLabel: "Published v01", milestoneCount: 1, cells: [{ milestoneDefinitionId: toMilestoneDefinitionId("milestone-mdrr"), occurrences }] };
-    expect(grid([{ ...rows[0]!, schedule }])[1]![40]).toBe("");
+    expect(grid([{ ...rows[0]!, schedule }])[1]![41]).toBe("");
   });
 
   it.each<PortfolioCurrentPublishedRead>([
@@ -86,7 +86,7 @@ describe("schema-driven All Projects serialization", () => {
     { kind: "published", versionLabel: "Published v01", milestoneCount: 0, cells: [] },
   ])("retains blank Schedule and Team columns for $kind reads", schedule => {
     const output = grid([{ ...rows[0]!, qciPm: null, schedule }]);
-    expect(output[0]!.slice(39)).toEqual(["SSL/GL", "MDRR", "QCI PM", "QCI PjM", "Acer PM", "ME Owner", "EE Owner", "Thermal Owner", "BIOS Owner"]);
-    expect(output[1]!.slice(11)).toEqual(Array(37).fill(""));
+    expect(output[0]!.slice(40)).toEqual(["SSL/GL", "MDRR", "QCI PM", "QCI PjM", "Acer PM", "ME Owner", "EE Owner", "Thermal Owner", "BIOS Owner"]);
+    expect(output[1]!.slice(12)).toEqual(Array(37).fill(""));
   });
 });

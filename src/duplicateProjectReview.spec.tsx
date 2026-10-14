@@ -14,6 +14,7 @@ function projectRow(
 ): DashboardProjectRow {
   return {
     projectId: toProjectId(id),
+    projectType: "-",
     year: "2027",
     customer: "Acer",
     productLine: "DEV Line Alpha",

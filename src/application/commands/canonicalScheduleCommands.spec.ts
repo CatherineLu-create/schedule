@@ -112,7 +112,88 @@ function invalidVersion(versionNumber: number): CanonicalPublishedScheduleVersio
   return { ...version(1), versionNumber: versionNumber as ScheduleVersionNumber };
 }
 
+describe("version history and publication metadata", () => {
+  const draftId = toCanonicalScheduleWorkingDraftId("history-draft");
+  const publishInput = { publishedAt: "2026-10-14T00:00:00Z", versionNote: "  Restore schedule based on v08  " };
+  it("records empty/current/historical bases and clones exactly without touching history", () => {
+    const old = version(8, [publishedMilestone("old")]);
+    const item = freezeScheduleGraph(schedule([version(10), old, version(9)]));
+    for (const [source, base, expected] of [[schedule(), undefined, null], [item, undefined, 10], [item, toScheduleVersionNumber(8), 8]] as const) {
+      const result = startScheduleWorkingDraft(source, { workingDraftId: draftId, basePublishedVersionNumber: base }, context);
+      expect(result).toMatchObject({ ok: true, draft: { basePublishedVersionNumber: expected } });
+      if (!result.ok) throw new Error("Expected Draft");
+      expect(result.schedule.publishedVersions).toBe(source.publishedVersions);
+      expect(result.draft.milestones).toEqual(expected === 8 ? old.milestones : []);
+      if (expected === 8) expect(result.draft.milestones[0]).not.toBe(old.milestones[0]);
+      expect(result.draft.reviewSessionIds).toEqual([]);
+      expect(result.draft.importCandidates).toEqual([]);
+      expect(result.schedule.evidenceLedger).toBe(source.evidenceLedger);
+    }
+  });
+  it("rejects a missing base and explicit replacement while preserving implicit idempotence", () => {
+    expect(startScheduleWorkingDraft(schedule(), { workingDraftId: draftId, basePublishedVersionNumber: toScheduleVersionNumber(8) }, context))
+      .toMatchObject({ ok: false, reason: "published-version-not-found" });
+    const item = freezeScheduleGraph(scheduleWithDraft([], [version(8)]));
+    expect(startScheduleWorkingDraft(item, { workingDraftId: draftId, basePublishedVersionNumber: toScheduleVersionNumber(8) }, context))
+      .toMatchObject({ ok: false, reason: "working-draft-exists" });
+    expect(startScheduleWorkingDraft(item, { workingDraftId: draftId }, context)).toMatchObject({ ok: true, status: "existing", schedule: item });
+  });
+  it.each([8, 10])("publishes base v%s against unordered/gapped history as v11 with trimmed note", base => {
+    const { versionNote: _note, ...legacy } = version(8);
+    const item = freezeScheduleGraph(schedule([version(10), legacy]));
+    const started = startScheduleWorkingDraft(item, { workingDraftId: draftId, basePublishedVersionNumber: toScheduleVersionNumber(base) }, context);
+    if (!started.ok) throw new Error("Expected Draft");
+    const result = publishScheduleWorkingDraft(started.schedule, publishInput, context);
+    expect(result).toMatchObject({ ok: true, version: { versionNumber: 11, versionNote: "Restore schedule based on v08" }, schedule: { workingDraft: null } });
+    if (!result.ok) throw new Error("Expected Publish");
+    expect(result.schedule.publishedVersions.slice(0, 2)).toEqual(item.publishedVersions);
+    expect(result.schedule.publishedVersions[1]).toBe(legacy);
+    expect(Object.isFrozen(result.version)).toBe(true);
+  });
+  it.each([undefined, null, 42, "", " \t\n", "x".repeat(201)])("rejects invalid Publish Note %j without mutation", value => {
+    const item = freezeScheduleGraph(scheduleWithDraft([], [version(10)]));
+    const before = structuredClone(item);
+    const result = publishScheduleWorkingDraft(item, { ...publishInput, versionNote: value as string }, context);
+    expect(result).toMatchObject({ ok: false, reason: "validation-failed", issues: [expect.objectContaining({ code: typeof value === "string" && value.length > 200 ? "schedule.publish.note-too-long" : "schedule.publish.note-required" })] });
+    expect(result).not.toHaveProperty("schedule");
+    expect(item).toEqual(before);
+  });
+  it("accepts exactly 200 trimmed characters on first Publish", () => {
+    expect(publishScheduleWorkingDraft(scheduleWithDraft([]), { ...publishInput, versionNote: `  ${"x".repeat(200)}  ` }, context))
+      .toMatchObject({ ok: true, version: { versionNumber: 1, versionNote: "x".repeat(200) } });
+  });
+  it("aggregates missing note and exact future Actual blocker independently", () => {
+    const item = scheduleWithDraft([draftMilestone("future", definitionA.id, { actual: dateOnly("2026-10-15") })]);
+    const result = publishScheduleWorkingDraft(item, { ...publishInput, versionNote: " " }, context);
+    expect(result).toMatchObject({ ok: false, issues: expect.arrayContaining([
+      expect.objectContaining({ code: "schedule.publish.note-required" }),
+      expect.objectContaining({ code: "schedule.data.future-actual", message: "Actual date cannot be later than today." }),
+    ]) });
+  });
+  it("faithfully inherits retired occurrences, permits removal only, then publishes cleanup", () => {
+    const rows = [publishedMilestone("retired-a", legacyDefinition.id), publishedMilestone("retired-b", legacyDefinition.id)];
+    const item = freezeScheduleGraph(schedule([version(8, rows), version(10)]));
+    const started = startScheduleWorkingDraft(item, { workingDraftId: draftId, basePublishedVersionNumber: toScheduleVersionNumber(8) }, context);
+    if (!started.ok) throw new Error("Expected Draft");
+    expect(started.draft.milestones).toEqual(rows);
+    expect(publishScheduleWorkingDraft(started.schedule, publishInput, context)).toMatchObject({ ok: false, issues: expect.arrayContaining([expect.objectContaining({ code: "schedule.import.retired-definition-not-retained" })]) });
+    expect(updateScheduleWorkingDraftMilestone(started.schedule, { milestoneId: rows[0].milestoneId, field: "plan", value: null }, context).ok).toBe(false);
+    let cleaned = started.schedule;
+    for (const row of rows) {
+      const result = removeScheduleWorkingDraftMilestone(cleaned, { milestoneId: row.milestoneId }, context);
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error("Expected removal cleanup");
+      cleaned = result.schedule;
+    }
+    expect(addScheduleWorkingDraftMilestone(cleaned, { milestoneId: rows[0].milestoneId, milestoneDefinitionId: legacyDefinition.id }, context).ok).toBe(false);
+    expect(publishScheduleWorkingDraft(cleaned, publishInput, context)).toMatchObject({ ok: true, version: { versionNumber: 11, milestones: [] } });
+    expect(item.publishedVersions[0].milestones).toEqual(rows);
+    expect(cleaned.publishedVersions).toBe(item.publishedVersions);
+  });
+});
+
 const context: CanonicalScheduleCommandContext = {
+  referenceDate: parseDateOnly("2026-10-14")!,
   governance: { ...initialGovernanceContext(), definitionsForHistoricalResolution: definitions, addablePublicDefinitions: [definitionA, definitionB, definitionC] },
   localDefinitions: [],
   retiredDraftOccurrenceGrants: [],
@@ -166,7 +247,7 @@ function releaseBackedCommandContext(state: MilestoneGovernanceRuntimeState): Ca
   const governance = selectEffectiveMilestoneGovernanceContext(state);
   const grants = selectEffectiveRetiredDraftOccurrenceGrants(state);
   if (!governance.ok || !grants.ok) throw new Error("Expected valid released command authority");
-  return { governance: governance.value, localDefinitions: [], retiredDraftOccurrenceGrants: grants.value };
+  return { referenceDate: parseDateOnly("2026-10-14")!, governance: governance.value, localDefinitions: [], retiredDraftOccurrenceGrants: grants.value };
 }
 
 function confirmedLocalSchedule(original = scheduleWithDraft([])) {
@@ -377,7 +458,7 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
     const malformed = { ...scheduleWithDraft([draftMilestone("unretained", legacyDefinition.id)]), localDefinitions: [local] };
     const malformedContext = { ...context, localDefinitions: [local] };
     expect(updateScheduleWorkingDraftMilestone(malformed, { milestoneId: toMilestoneId("unretained"), field: "plan", value: null }, malformedContext).ok).toBe(false);
-    expect(publishScheduleWorkingDraft(malformed, { publishedAt: "now" }, malformedContext).ok).toBe(false);
+    expect(publishScheduleWorkingDraft(malformed, { versionNote: "Schedule update", publishedAt: "now" }, malformedContext).ok).toBe(false);
   });
   it("resolves only legal same-Project local IDs for edit and Publish", () => {
     const local: ProjectLocalMilestoneDefinition = { id: toMilestoneDefinitionId("confirmed-local"), name: "Confirmed local", stageGroupId: toStageGroupId("stage-a1"), milestoneTypeId: toMilestoneTypeId("type-smt"), displayOrder: 1, source: "manual", confirmation: "confirmed", evidenceIds: [] };
@@ -387,14 +468,14 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
     const updated = updateScheduleWorkingDraftMilestone(item, input, localContext);
     expect(updated.ok).toBe(true);
     if (!updated.ok) throw new Error("Expected local edit");
-    const published = publishScheduleWorkingDraft(updated.schedule, { publishedAt: "now" }, localContext);
+    const published = publishScheduleWorkingDraft(updated.schedule, { versionNote: "Schedule update", publishedAt: "now" }, localContext);
     expect(published.ok).toBe(true);
     if (!published.ok) throw new Error("Expected local Publish");
     expect(published.version.milestones[0]).toMatchObject({ milestoneId: "local-row", milestoneDefinitionId: "confirmed-local", plan: "2026-10-02" });
     expect(updateScheduleWorkingDraftMilestone({ ...item, localDefinitions: [] }, input, localContext).ok).toBe(false);
     expect(updateScheduleWorkingDraftMilestone(item, input, context).ok).toBe(false);
     const invalid = { ...local, milestoneTypeId: toMilestoneTypeId("unknown-type") };
-    expect(publishScheduleWorkingDraft({ ...item, localDefinitions: [invalid] }, { publishedAt: "now" }, { ...context, localDefinitions: [invalid] }).ok).toBe(false);
+    expect(publishScheduleWorkingDraft({ ...item, localDefinitions: [invalid] }, { versionNote: "Schedule update", publishedAt: "now" }, { ...context, localDefinitions: [invalid] }).ok).toBe(false);
   });
   it("D1 permits exact same-Draft edits and Publish but does not permit Add or leak identities", () => {
     const fixture = publishedRetirementFixture();
@@ -406,14 +487,14 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
     const updated = updateScheduleWorkingDraftMilestone(item, input, granted);
     expect(updated.ok).toBe(true);
     if (!updated.ok) throw new Error("Expected D1 edit");
-    const published = publishScheduleWorkingDraft(updated.schedule, { publishedAt: "now" }, granted);
+    const published = publishScheduleWorkingDraft(updated.schedule, { versionNote: "Schedule update", publishedAt: "now" }, granted);
     expect(published.ok).toBe(true);
     if (!published.ok) throw new Error("Expected D1 Publish");
     const withoutGrant = { ...granted, retiredDraftOccurrenceGrants: [] };
     const cloned = startScheduleWorkingDraft(published.schedule, { workingDraftId: toCanonicalScheduleWorkingDraftId("after-publish") }, withoutGrant);
     if (!cloned.ok) throw new Error("Expected retained clone");
     expect(updateScheduleWorkingDraftMilestone(cloned.schedule, input, withoutGrant).ok).toBe(true);
-    expect(publishScheduleWorkingDraft(cloned.schedule, { publishedAt: "later" }, withoutGrant).ok).toBe(true);
+    expect(publishScheduleWorkingDraft(cloned.schedule, { versionNote: "Schedule update", publishedAt: "later" }, withoutGrant).ok).toBe(true);
     for (const invalidGrant of [
       { ...grant, projectId: toProjectId("other") },
       { ...grant, workingDraftId: toCanonicalScheduleWorkingDraftId("other") },
@@ -422,7 +503,7 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
     ]) {
       const invalidContext = { ...granted, retiredDraftOccurrenceGrants: [invalidGrant] };
       expect(updateScheduleWorkingDraftMilestone(item, input, invalidContext).ok).toBe(false);
-      expect(publishScheduleWorkingDraft(item, { publishedAt: "now" }, invalidContext).ok).toBe(false);
+      expect(publishScheduleWorkingDraft(item, { versionNote: "Schedule update", publishedAt: "now" }, invalidContext).ok).toBe(false);
     }
     const removed = removeScheduleWorkingDraftMilestone(item, { milestoneId: grant.milestoneId }, granted);
     if (!removed.ok) throw new Error("Expected remove");
@@ -443,7 +524,7 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
     expect(derived.retiredDraftOccurrenceGrants).toEqual([]);
     for (const [result, code] of [
       [updateScheduleWorkingDraftMilestone(item, { milestoneId: fixture.grant.milestoneId, field: "plan", value: dateOnly("2026-10-02") }, derived), "schedule.draft.definition-not-addable-or-retained"],
-      [publishScheduleWorkingDraft(item, { publishedAt: "2026-10-01T03:00:00Z" }, derived), "schedule.import.retired-definition-not-retained"],
+      [publishScheduleWorkingDraft(item, { versionNote: "Schedule update", publishedAt: "2026-10-01T03:00:00Z" }, derived), "schedule.import.retired-definition-not-retained"],
     ] as const) {
       expect(result).toMatchObject({ ok: false, reason: "validation-failed", issues: [expect.objectContaining({ code })] });
       expect(result).not.toHaveProperty("schedule");
@@ -455,11 +536,11 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
     const first = publishedMilestone("retained-1", legacyDefinition.id);
     const second = publishedMilestone("retained-2", legacyDefinition.id);
     const retained = scheduleWithDraft([first, second], [version(1, [first, second])]);
-    expect(publishScheduleWorkingDraft(retained, { publishedAt: "now" }, context).ok).toBe(true);
+    expect(publishScheduleWorkingDraft(retained, { versionNote: "Schedule update", publishedAt: "now" }, context).ok).toBe(true);
     const olderOnly = scheduleWithDraft([first], [version(1, [first]), version(2, [])]);
-    expect(publishScheduleWorkingDraft(olderOnly, { publishedAt: "now" }, context).ok).toBe(false);
+    expect(publishScheduleWorkingDraft(olderOnly, { versionNote: "Schedule update", publishedAt: "now" }, context).ok).toBe(false);
     const wrongOccurrence = scheduleWithDraft([{ ...first, milestoneId: toMilestoneId("recreated") }], retained.publishedVersions);
-    expect(publishScheduleWorkingDraft(wrongOccurrence, { publishedAt: "now" }, context).ok).toBe(false);
+    expect(publishScheduleWorkingDraft(wrongOccurrence, { versionNote: "Schedule update", publishedAt: "now" }, context).ok).toBe(false);
     expect(addScheduleWorkingDraftMilestone(scheduleWithDraft([draftMilestone("present")]), { milestoneId: toMilestoneId("duplicate-definition"), milestoneDefinitionId: definitionA.id }, context).ok).toBe(false);
   });
   it("starts_empty_draft_without_published_schedule_and_uses_injected_working_draft_id", () => {
@@ -469,6 +550,7 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
     if (!result.ok) throw new Error("Expected created Draft");
     expect(result.status).toBe("created");
     expect(result.draft).toEqual({
+      basePublishedVersionNumber: null,
       workingDraftId: id,
       milestones: [],
       reviewSessionIds: [],
@@ -678,7 +760,7 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
     expectTypeOf<keyof AddScheduleWorkingDraftMilestoneInput>()
       .toEqualTypeOf<"milestoneId" | "milestoneDefinitionId">();
     expectTypeOf<keyof PublishScheduleWorkingDraftInput>()
-      .toEqualTypeOf<"publishedAt">();
+      .toEqualTypeOf<"publishedAt" | "versionNote">();
   });
 
   it("adds a caller-identified catalog milestone with canonical defaults", () => {
@@ -895,7 +977,7 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
   ])("real Publish rejects current Draft date blockers without import candidates: $label", ({ values, code }) => {
     const original = freezeScheduleGraph(scheduleWithDraft([draftMilestone("invalid-current-date", definitionA.id, values)], [version(1)]));
     const before = structuredClone(original);
-    const result = publishScheduleWorkingDraft(original, { publishedAt: "must-not-publish" }, context);
+    const result = publishScheduleWorkingDraft(original, { versionNote: "Schedule update", publishedAt: "must-not-publish" }, context);
     expect(result).toMatchObject({ ok: false, reason: "validation-failed", issues: expect.arrayContaining([expect.objectContaining({ code })]) });
     expect(result).not.toHaveProperty("schedule");
     expect(result).not.toHaveProperty("version");
@@ -916,12 +998,12 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
     const v3 = history[0];
     const v1 = history[1];
     const result = publishScheduleWorkingDraft(
-      original, { publishedAt: "2026-09-11T12:00:00Z" }, context,
+      original, { versionNote: "Schedule update", publishedAt: "2026-09-11T12:00:00Z" }, { ...context, referenceDate: dateOnly("2030-01-16") },
     );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("Expected Publish success");
     expect(result.version.versionNumber).toBe(4);
-    expect(result.version.versionNote).toBeNull();
+    expect(result.version.versionNote).toBe("Schedule update");
     expect(result.version.publishedAt).toBe("2026-09-11T12:00:00Z");
     expect(result.schedule.publishedVersions).not.toBe(history);
     expect(result.schedule.publishedVersions[0]).toBe(v3);
@@ -940,13 +1022,13 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
     const empty = freezeScheduleGraph(scheduleWithDraft([]));
     const emptyDraft = empty.workingDraft;
     const published = publishScheduleWorkingDraft(
-      empty, { publishedAt: "first-publication" }, context,
+      empty, { versionNote: "Schedule update", publishedAt: "first-publication" }, context,
     );
     expect(published.ok).toBe(true);
     if (!published.ok) throw new Error("Expected first Publish success");
     expect(published.version.versionNumber).toBe(1);
     expect(published.version.milestones).toEqual([]);
-    expect(published.version.versionNote).toBeNull();
+    expect(published.version.versionNote).toBe("Schedule update");
     expect(published.version.publishedAt).toBe("first-publication");
     expect(empty.workingDraft).toBe(emptyDraft);
     expect(empty.publishedVersions).toHaveLength(0);
@@ -957,7 +1039,7 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
     const overflowDraft = overflow.workingDraft;
     const overflowHistory = overflow.publishedVersions;
     expect(publishScheduleWorkingDraft(
-      overflow, { publishedAt: "overflow-attempt" }, context,
+      overflow, { versionNote: "Schedule update", publishedAt: "overflow-attempt" }, context,
     )).toEqual({ ok: false, reason: "next-version-unavailable", issues: [] });
     expect(overflow.workingDraft).toBe(overflowDraft);
     expect(overflow.publishedVersions).toBe(overflowHistory);
@@ -970,7 +1052,7 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
       workingDraft: null,
     });
     const history = input.publishedVersions;
-    expect(publishScheduleWorkingDraft(input, { publishedAt: "published-now" }, context))
+    expect(publishScheduleWorkingDraft(input, { versionNote: "Schedule update", publishedAt: "published-now" }, context))
       .toEqual({ ok: false, reason: "no-working-draft", issues: [] });
     expect(input.publishedVersions).toBe(history);
   });
@@ -987,7 +1069,7 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
     const oldVersion = history[0];
     const oldRows = draft?.milestones;
     const result = publishScheduleWorkingDraft(
-      input, { publishedAt: "published-now" }, context,
+      input, { versionNote: "Schedule update", publishedAt: "published-now" }, context,
     );
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("Expected Publish failure");
@@ -1016,7 +1098,7 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
     const oldVersion = history[0];
     const oldRows = draft?.milestones;
     const result = publishScheduleWorkingDraft(
-      original, { publishedAt: "rejected" }, context,
+      original, { versionNote: "Schedule update", publishedAt: "rejected" }, context,
     );
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("Expected Publish failure");
@@ -1043,7 +1125,7 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
     const oldVersion = history[0];
     const oldRows = draft?.milestones;
     const result = publishScheduleWorkingDraft(
-      original, { publishedAt: "rejected-publication" }, context,
+      original, { versionNote: "Schedule update", publishedAt: "rejected-publication" }, context,
     );
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("Expected Publish failure");
@@ -1063,7 +1145,7 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
   it("does not create another version on a second Publish", () => {
     const first = publishScheduleWorkingDraft(
       freezeScheduleGraph(scheduleWithDraft([draftMilestone("lineage")])),
-      { publishedAt: "first" }, context,
+      { versionNote: "Schedule update", publishedAt: "first" }, context,
     );
     expect(first.ok).toBe(true);
     if (!first.ok) throw new Error("Expected first Publish");
@@ -1072,11 +1154,56 @@ describe("canonical Schedule Working Draft lifecycle commands", () => {
     const firstVersion = firstHistory[0];
     const firstRows = firstVersion?.milestones;
     expect(publishScheduleWorkingDraft(
-      secondInput, { publishedAt: "second" }, context,
+      secondInput, { versionNote: "Schedule update", publishedAt: "second" }, context,
     )).toEqual({ ok: false, reason: "no-working-draft", issues: [] });
     expect(secondInput.publishedVersions).toBe(firstHistory);
     expect(secondInput.publishedVersions[0]).toBe(firstVersion);
     expect(secondInput.publishedVersions[0]?.milestones).toBe(firstRows);
     expect(secondInput.publishedVersions).toHaveLength(1);
+  });
+});
+
+
+describe("future Actual publication boundary", () => {
+  const today = dateOnly("2026-10-14");
+  const datedContext = { ...context, referenceDate: today };
+  it("reports the exact future-Actual blocker even for an N/A occurrence", () => {
+    const schedule = scheduleWithDraft([draftMilestone("na-future", definitionA.id, {
+      applicability: "notApplicable", plan: null, actual: dateOnly("2026-10-15"),
+    })], [version(1)]);
+    const before = structuredClone(schedule);
+    const result = publishScheduleWorkingDraft(schedule, { versionNote: "Schedule update", publishedAt: "audit" }, datedContext);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected blocked publication");
+    expect(result.issues).toContainEqual(expect.objectContaining({ code: "schedule.data.future-actual", severity: "blocking", message: "Actual date cannot be later than today." }));
+    expect(schedule).toEqual(before);
+  });
+  it.each([["2026-10-31", "2026-11-01"], ["2026-12-31", "2027-01-01"]])(
+    "blocks across %s to %s until the local calendar day advances", (previous, next) => {
+      const schedule = scheduleWithDraft([draftMilestone("rollover", definitionA.id, { actual: dateOnly(next) })], [version(1)]);
+      const before = structuredClone(schedule);
+      const blocked = publishScheduleWorkingDraft(schedule, { versionNote: "Schedule update", publishedAt: "2027-01-02T00:00:00Z" }, { ...context, referenceDate: dateOnly(previous) });
+      expect(blocked).toMatchObject({ ok: false, issues: expect.arrayContaining([expect.objectContaining({ code: "schedule.data.future-actual", message: "Actual date cannot be later than today." })]) });
+      expect(schedule).toEqual(before);
+      const allowed = publishScheduleWorkingDraft(schedule, { versionNote: "Schedule update", publishedAt: "2026-01-01T00:00:00Z" }, { ...context, referenceDate: dateOnly(next) });
+      expect(allowed).toMatchObject({ ok: true, version: { versionNumber: 2 } });
+    });
+  it.each(["2026-10-13", "2026-10-14"])("allows Actual %s", actual => {
+    const item = scheduleWithDraft([draftMilestone("actual", definitionA.id, { actual: dateOnly(actual) })]);
+    expect(publishScheduleWorkingDraft(item, { versionNote: "Schedule update", publishedAt: "audit-timestamp" }, datedContext).ok).toBe(true);
+  });
+  it("retains tomorrow in Draft, blocks Publish without mutation, then permits correction", () => {
+    const original = scheduleWithDraft([draftMilestone("actual")], [version(1)]);
+    const edit = updateScheduleWorkingDraftMilestone(original, { milestoneId: toMilestoneId("actual"), field: "actual", value: dateOnly("2026-10-15") }, datedContext);
+    expect(edit.ok).toBe(true);
+    if (!edit.ok) throw new Error("edit failed");
+    const before = structuredClone(edit.schedule);
+    const blocked = publishScheduleWorkingDraft(edit.schedule, { versionNote: "Schedule update", publishedAt: "audit-timestamp" }, datedContext);
+    expect(blocked).toMatchObject({ ok: false, reason: "validation-failed", issues: [expect.objectContaining({ code: "schedule.data.future-actual", severity: "blocking", message: "Actual date cannot be later than today." })] });
+    expect(edit.schedule).toEqual(before);
+    expect(edit.schedule.publishedVersions).toBe(original.publishedVersions);
+    const fixed = updateScheduleWorkingDraftMilestone(edit.schedule, { milestoneId: toMilestoneId("actual"), field: "actual", value: today }, datedContext);
+    if (!fixed.ok) throw new Error("correction failed");
+    expect(publishScheduleWorkingDraft(fixed.schedule, { versionNote: "Schedule update", publishedAt: "audit-timestamp" }, datedContext).ok).toBe(true);
   });
 });

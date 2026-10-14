@@ -8,6 +8,7 @@ const projectValues: Record<PortfolioProjectInfoColumnKey, (row: PortfolioDashbo
   year: row => row.project.year,
   name: row => row.project.projectName,
   qciProjectName: row => row.project.qciModelName,
+  projectType: row => row.project.projectType,
   customer: row => row.project.customer,
   category: row => row.category,
   productLine: row => row.project.productLine,

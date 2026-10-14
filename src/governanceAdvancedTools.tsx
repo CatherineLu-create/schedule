@@ -1,4 +1,5 @@
 import React from "react";
+import { HistoricalDraftWarning, SchedulePublishConfirmation } from "./schedulePublishConfirmation";
 import type { Project } from "./domain/project/project";
 import type { ProjectId } from "./domain/shared/ids";
 import { collectSchedulePublishBlockingFindings } from "./application/commands/scheduleReviewCommands";
@@ -7,7 +8,7 @@ import { LocalOccurrenceMapping, ScheduleImportReviewPanel, ScheduleReviewHistor
 export interface GovernanceScheduleToolsBindings {
   readonly review: ScheduleReviewBindings;
   readonly feedback: readonly string[];
-  readonly onPublish: () => void;
+  readonly onPublish: (versionNote: string) => void;
   readonly onDiscard: () => void;
   readonly onClearFeedback: () => void;
 }
@@ -33,18 +34,16 @@ function SelectedProjectTools({ bindings }: { bindings: GovernanceScheduleToolsB
     {feedback.map((message, index) => <p role="status" key={`${index}:${message}`}>{message}</p>)}
     {draft !== null && <section className="mt-4 space-y-3" aria-label="此專案真實草稿">
       <h3 className="font-semibold">此專案的真實 Working Draft</h3>
+      <HistoricalDraftWarning schedule={review.schedule} />
       <p>以下操作會發布或捨棄所選專案的實際排程草稿。</p>
       {blockers.length > 0 && <p>發布前仍有待處理項目，請完成日期、適用性與逐筆確認。</p>}
       <button type="button" className={button} disabled={blockers.length > 0} onClick={() => setConfirmation("publish")}>發布此專案草稿</button>{" "}
       <button type="button" className={button} onClick={() => setConfirmation("discard")}>捨棄此專案草稿</button>
-      {confirmation !== null && <div role="dialog" aria-label={confirmation === "publish" ? "發布此專案 Working Draft" : "捨棄此專案 Working Draft"} className="space-y-2 rounded border p-3">
-        <p>{confirmation === "publish" ? "確認發布此專案草稿？將建立不可編輯的正式排程版本。" : "確認捨棄此專案草稿？所有未發布的排程變更將移除，已發布版本不受影響。"}</p>
+      {confirmation === "publish" && <SchedulePublishConfirmation schedule={review.schedule} blockers={blockers} language="zh" onCancel={() => setConfirmation(null)} onPublish={onPublish} />}
+      {confirmation === "discard" && <div role="dialog" aria-label="捨棄此專案 Working Draft" className="space-y-2 rounded border p-3">
+        <p>確認捨棄此專案草稿？所有未發布的排程變更將移除，已發布版本不受影響。</p>
         <button type="button" className={button} onClick={() => setConfirmation(null)}>取消</button>{" "}
-        <button type="button" className={button} disabled={confirmation === "publish" && blockers.length > 0} onClick={() => {
-          if (confirmation === "publish" && blockers.length > 0) return;
-          setConfirmation(null);
-          if (confirmation === "publish") onPublish(); else onDiscard();
-        }}>{confirmation === "publish" ? "確認發布" : "確認捨棄"}</button>
+        <button type="button" className={button} onClick={() => { setConfirmation(null); onDiscard(); }}>確認捨棄</button>
       </div>}
     </section>}
     <ScheduleReviewHistory review={review} />

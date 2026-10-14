@@ -1,3 +1,4 @@
+import { projectTypeLabel } from "../../projectMasterDisplay";
 import { statusCatalog } from "../../config/v2/referenceData";
 import type { CatalogItem } from "../../domain/reference-data/catalog";
 import type { CatalogItemId, ProjectId } from "../../domain/shared/ids";
@@ -16,6 +17,7 @@ const defaultSelfServiceReferenceCatalogs =
 
 export interface DashboardProjectRow {
 	readonly projectId: ProjectId;
+	readonly projectType: string;
 	readonly year: string;
 	readonly customer: string;
 	readonly productLine: string;
@@ -70,6 +72,7 @@ export function selectDashboardProjectRow(
 	return {
 		projectId,
 		year: displayYear(basic.year),
+		projectType: projectTypeLabel(basic.projectType) ?? "-",
 		customer: resolveCatalogDisplay(basic.customer, customerReferenceFixtures),
 		productLine: resolveCatalogDisplay(
 			basic.productLine,

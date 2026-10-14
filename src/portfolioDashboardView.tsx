@@ -145,7 +145,7 @@ export function PortfolioDashboardView({ attention, rows, schema, followUpGroups
 
     <ProjectMilestoneFollowUpPanel groups={followUpGroups} onOpenProject={onOpenProject} />
 
-    <PortfolioSearchFilters id={id} searchTerm={searchTerm} onSearchChange={setSearchTerm} filters={filters} onFiltersChange={setFilters} options={options} />
+    <PortfolioSearchFilters showProjectTypeFilter id={id} searchTerm={searchTerm} onSearchChange={setSearchTerm} filters={filters} onFiltersChange={setFilters} options={options} />
 
     <section aria-labelledby={`${id}-projects`} className="min-w-0 rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2 p-4 sm:px-5">

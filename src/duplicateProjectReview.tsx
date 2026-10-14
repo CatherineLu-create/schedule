@@ -40,6 +40,12 @@ export function DuplicateProjectReview({
         ))}
       </div>
 
+      {matchingRows.length > 0 && <table aria-label="Matching Projects" className="text-left text-sm">
+        <thead><tr>{["Year", "Project Type", "STN Project Name", "QCI Model Name"].map(label => <th key={label} scope="col" className="p-2">{label}</th>)}</tr></thead>
+        <tbody>{matchingRows.map(row => <tr key={row.projectId}>
+          {[row.year, row.projectType, row.projectName, row.qciModelName].map((value, index) => <td key={index} className="p-2">{value === "-" ? "\u2014" : value}</td>)}
+        </tr>)}</tbody>
+      </table>}
       {showMatches && matchingRows.length === 0 && (
         <p className="text-sm text-slate-600">No matching Projects are currently available.</p>
       )}

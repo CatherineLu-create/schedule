@@ -77,6 +77,7 @@ describe("Dashboard Project row projection", () => {
 	it("projects current canonical Master values into the preserved Dashboard and export fields", () => {
 		expectTypeOf<DashboardProjectRow>().toEqualTypeOf<{
 			readonly projectId: ProjectId;
+			readonly projectType: string;
 			readonly year: string;
 			readonly customer: string;
 			readonly productLine: string;
@@ -113,6 +114,7 @@ describe("Dashboard Project row projection", () => {
 
 		expect(selectDashboardProjectRow(state, displayProject.id)).toEqual({
 			projectId: displayProject.id,
+      projectType: "-",
 			year: "2027",
 			customer: "Acer",
 			productLine: "Game pad",
@@ -167,6 +169,7 @@ describe("Dashboard Project row projection", () => {
 
 		expect(selectDashboardProjectRow(state, unresolvedProject.id)).toEqual({
 			projectId: unresolvedProject.id,
+      projectType: "-",
 			year: "-",
 			customer: "-",
 			productLine: "-",

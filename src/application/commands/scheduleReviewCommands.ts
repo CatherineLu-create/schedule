@@ -1,3 +1,4 @@
+import { validateFutureActualDate } from "../../domain/schedule/scheduleValidation";
 import type { CommandResult } from "../../domain/governance/milestoneGovernance";
 import { getCurrentPublishedVersion, type CanonicalProjectSchedule } from "../../domain/schedule/officialSchedule";
 import { createScheduleImportCandidate, type ConfirmProjectLocalMilestoneDefinitionInput, type ScheduleReviewFailureCode,
@@ -211,6 +212,9 @@ export function collectSchedulePublishBlockingFindings(schedule: CanonicalProjec
   const current = getCurrentPublishedVersion(schedule);
   for (const row of draft.milestones) {
     issues.push(...occurrenceDateIssues(row));
+    if (row.actual === null || parseDateOnly(row.actual) !== null) {
+      issues.push(...validateFutureActualDate(row.actual, context, { section: "schedule.workingDraft", entityId: row.milestoneId }));
+    }
     if (occurrenceEligibility(schedule, row, context) === "retired-definition-not-retained") {
       issues.push(importIssue("schedule.import.retired-definition-not-retained", row.milestoneId, "milestoneDefinitionId", "Retired definition requires exact current lineage or D1 grant."));
     }

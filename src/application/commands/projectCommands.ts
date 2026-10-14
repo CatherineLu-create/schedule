@@ -1,3 +1,4 @@
+import { findSameNameProjects } from "../identity/projectNameMatches";
 import type { Project } from "../../domain/project/project";
 import type { ProjectMaster } from "../../domain/project/projectMaster";
 import {
@@ -23,6 +24,7 @@ import {
 } from "../identity/projectIdentity";
 
 export type CreateProjectRequiredField =
+	| "projectType"
 	| "year"
 	| "productLine"
 	| "stnProjectName";
@@ -62,6 +64,7 @@ export interface CreateProjectContext {
 }
 
 export type CreateProjectResult =
+  | { readonly status: "rejected"; readonly reason: "projectTypeValidation"; readonly issues: readonly ValidationIssue[] }
 	| {
 			readonly status: "rejected";
 			readonly reason: "requiredFields";
@@ -89,6 +92,7 @@ function missingCreateFields(
 	const missing: CreateProjectRequiredField[] = [];
 	const basic = input.master.basicInformation;
 
+	if (basic.projectType == null) missing.push("projectType");
 	if (basic.year === null) missing.push("year");
 	if (basic.productLine === null) missing.push("productLine");
 	if (basic.stnProjectName?.trim().length === 0 || basic.stnProjectName === null) {
@@ -179,16 +183,24 @@ export function createProject(
 		return { status: "rejected", reason: "duplicateProjectId" };
 	}
 
+  const basic = input.master.basicInformation;
+  const typeIssues = projectTypeIssues(basic.projectType, basic.stnProjectName, context.existingProjects, input.projectId);
+  if (typeIssues.length) return { status: "rejected", reason: "projectTypeValidation", issues: typeIssues };
 	const project: Project = {
 		id: input.projectId,
 		master: createInitialProjectMaster(input.master, context.defaults),
 		identityAliases: [],
 		team: createInitialProjectTeam(input.qciPm, context.defaults.teamTemplate),
 	};
-	const matchingProjectIds = context.existingProjects
-		.filter((existing) => matchesBusinessIdentity(existing, input))
-		.map((existing) => existing.id);
-	const issues = matchingProjectIds.map(duplicateBusinessIdentityIssue);
+  const sameNameIds = new Set(basic.projectType === "new"
+    ? findSameNameProjects(context.existingProjects, basic.stnProjectName).map(item => item.id) : []);
+  // Preserve the existing composite duplicate review as well as the new exact-name warning.
+  const matchingProjects = context.existingProjects.filter(existing => matchesBusinessIdentity(existing, input) || sameNameIds.has(existing.id));
+  const matchingProjectIds = matchingProjects.map(existing => existing.id);
+  const issues = matchingProjects.map(existing => matchesBusinessIdentity(existing, input)
+    ? duplicateBusinessIdentityIssue(existing.id)
+    : { ...duplicateBusinessIdentityIssue(existing.id), code: "projectMaster.data.duplicate-stn-project-name",
+        message: "A Project with the same STN Project Name exists. You may continue creating this Project as New." });
 
 	if (
 		matchingProjectIds.length > 0 &&
@@ -218,9 +230,14 @@ export interface UpdateProjectMasterResult {
 export function updateProjectMaster(
 	project: Project,
 	input: UpdateProjectMasterInput,
+  context: { readonly existingProjects: readonly Project[] },
 ): UpdateProjectMasterResult {
 	const previousBasic = project.master.basicInformation;
 	const nextBasic = input.master.basicInformation;
+  const relevantChange = (previousBasic.projectType ?? null) !== (nextBasic.projectType ?? null)
+    || previousBasic.stnProjectName !== nextBasic.stnProjectName;
+  const typeIssues = projectTypeIssues(nextBasic.projectType, nextBasic.stnProjectName, context.existingProjects, project.id, relevantChange);
+  if (typeIssues.length) return { project, issues: typeIssues };
 	let aliases = capturePreviousIdentityAlias({
 		aliases: project.identityAliases,
 		kind: "stnProjectName",
@@ -251,4 +268,17 @@ export function updateProjectMaster(
 			identityAliases: aliases,
 		},
 	};
+}
+
+function projectTypeIssues(
+  type: ProjectMaster["basicInformation"]["projectType"], name: string | null,
+  projects: readonly Project[], projectId: ProjectId, checkRegression = true,
+): readonly ValidationIssue[] {
+  const invalid = type != null && type !== "new" && type !== "regression";
+  const missingCounterpart = checkRegression && type === "regression" && findSameNameProjects(projects, name, projectId).length === 0;
+  if (!invalid && !missingCounterpart) return [];
+  return [{ code: invalid ? "projectMaster.data.invalid-project-type" : "projectMaster.data.regression-requires-same-name",
+    domain: "projectMaster", source: "data", severity: "blocking",
+    message: invalid ? "Select New or Regression." : "Regression requires another Project with the same STN Project Name.",
+    target: { section: "projectMaster.basicInformation", entityId: projectId, field: "projectType" } }];
 }

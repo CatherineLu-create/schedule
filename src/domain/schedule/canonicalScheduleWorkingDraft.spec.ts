@@ -70,7 +70,7 @@ describe("canonical Schedule Working Draft", () => {
   };
   it("has only the approved readonly Draft keys", () => {
     expectTypeOf<keyof CanonicalScheduleWorkingDraft>()
-      .toEqualTypeOf<"workingDraftId" | "milestones" | "reviewSessionIds" | "importCandidates">();
+      .toEqualTypeOf<"workingDraftId" | "milestones" | "reviewSessionIds" | "importCandidates" | "basePublishedVersionNumber">();
     expectTypeOf<keyof CanonicalScheduleWorkingDraftMilestone>()
       .toEqualTypeOf<
         | "milestoneId"

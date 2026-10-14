@@ -1,11 +1,12 @@
 import type { CreateProjectMasterInput } from "./application/commands/projectCommands";
-import type { ProjectMaster } from "./domain/project/projectMaster";
+import type { ProjectMaster, ProjectType } from "./domain/project/projectMaster";
 import type { CatalogItemId, ProjectId } from "./domain/shared/ids";
 
 export type CatalogSelection = CatalogItemId | "";
 export type ProjectSelection = ProjectId | "";
 
 export interface ProjectMasterForm {
+  readonly projectType: ProjectType | "";
   readonly stnProjectName: string;
   readonly qciModelName: string;
   readonly acerModelName: string;
@@ -43,6 +44,7 @@ export type ProjectMasterFormErrors = Partial<
 >;
 
 export const emptyProjectMasterForm: ProjectMasterForm = {
+  projectType: "",
   stnProjectName: "",
   qciModelName: "",
   acerModelName: "",
@@ -134,6 +136,7 @@ export function validateProjectMasterMechanicalForm(
 
 export function toProjectMasterForm(master: ProjectMaster): ProjectMasterForm {
   return {
+    projectType: master.basicInformation.projectType ?? "",
     stnProjectName: displayText(master.basicInformation.stnProjectName),
     qciModelName: displayText(master.basicInformation.qciModelName),
     acerModelName: displayText(master.modelRegulatory.acerModelName),
@@ -172,6 +175,7 @@ export function toCreateProjectMasterInput(
 ): CreateProjectMasterInput {
   return {
     basicInformation: {
+      projectType: form.projectType || null,
       year: yearOrNull(form.year),
       category: null,
       productLine: catalogOrNull(form.productLineId),
@@ -232,6 +236,8 @@ export function overwriteProjectMasterFromForm(
     ...currentMaster,
     basicInformation: {
       ...currentMaster.basicInformation,
+      ...(form.projectType === "" && currentMaster.basicInformation.projectType === undefined
+        ? {} : { projectType: form.projectType || null }),
       status: catalogOrNull(form.statusId),
       year: yearOrNull(form.year),
       customer: catalogOrNull(form.customerId),

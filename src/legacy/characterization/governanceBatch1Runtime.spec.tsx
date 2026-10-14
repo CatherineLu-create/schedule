@@ -1,6 +1,7 @@
+import { parseDateOnly as testReferenceDate } from "../../domain/shared/dateOnly";
 import React from "react";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import * as XLSX from "xlsx";
 import { App } from "../../main";
 import { selectProjectMilestoneFollowUp } from "../../application/selectors/projectMilestoneFollowUp";
@@ -26,14 +27,15 @@ vi.mock("../../application/selectors/projectMilestoneFollowUp", async original =
   return { ...actual, selectProjectMilestoneFollowUp: vi.fn(actual.selectProjectMilestoneFollowUp) };
 });
 vi.mock("xlsx", async original => ({ ...await original<typeof import("xlsx")>(), writeFile: vi.fn() }));
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.clearAllMocks(); });
+beforeEach(() => { vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date(2026, 9, 20, 12)); });
+afterEach(() => { vi.useRealTimers(); cleanup(); vi.restoreAllMocks(); vi.clearAllMocks(); });
 
 const referenceDate = parseDateOnly("2026-10-01")!;
 const kickoff = "milestone-design-kickoff";
 const idFix = "milestone-design-id-fix";
 const mdrr = "milestone-mdrr";
 const initialTypeLabels = ["No Type", "G/O", "SMT", "Pre-Build", "Close", "Test", "Certification", "Preparation"];
-const projectHeaders = ["Status", "Year", "STN Project Name", "QCI Model Name", "Customer", "Category", "Product Line", "Panel Size", "CPU", "GPU", "PCB#"];
+const projectHeaders = ["Status", "Year", "STN Project Name", "QCI Model Name", "Project Type", "Customer", "Category", "Product Line", "Panel Size", "CPU", "GPU", "PCB#"];
 const scheduleHeaders = ["Kickoff", "ID fix", "ME drawing", "Mockup & DFM", "Tooling start + T1", "ME material for C", "Thermal module for C", "A1 G/O", "A1 SMT", "A1 Test", "A1 Close", "C1 G/O", "C1 SMT", "C1 Pre-Build", "C1 System Build", "C1 Test", "C1 Close", "C2 G/O", "C2 SMT", "C2 Pre-Build", "C2 System Build", "C2 Test", "C2 Close", "RAMP G/O", "ME signoff", "RAMP SMT", "RAMP Pre-build", "RAMP Main build", "SSL/GL", "MDRR"];
 const teamHeaders = ["QCI PM", "QCI PjM", "Acer PM", "ME Owner", "EE Owner", "Thermal Owner", "BIOS Owner"];
 
@@ -54,7 +56,7 @@ function schedule(projectId = devProject001.id) {
   return live().prototype.schedules.find(item => item.projectId === projectId)!;
 }
 function commandContext() {
-  return { governance: live().context, localDefinitions: schedule().localDefinitions, retiredDraftOccurrenceGrants: live().governance.retiredDraftOccurrenceGrants };
+  return { referenceDate: testReferenceDate("2026-10-14")!, governance: live().context, localDefinitions: schedule().localDefinitions, retiredDraftOccurrenceGrants: live().governance.retiredDraftOccurrenceGrants };
 }
 function mount(initialSchedule = createEmptyCanonicalProjectSchedule(devProject001.id), second = false) {
   const initialState: PrototypeState = {
@@ -91,13 +93,14 @@ function createLocal(name: string, stage = "stage-design", type = "") {
   return schedule().localDefinitions.at(-1)!.id;
 }
 function add(id: string) { change("Milestone definition", id); click("Add Milestone"); }
-function applyDate(name: string, date: string, field = "Plan") {
-  const input = screen.getByLabelText(new RegExp(`^${field} for ${name} occurrence`));
+function applyDate(name: string, date: string, field = "Plan", occurrence = 0) {
+  const input = screen.getAllByLabelText(new RegExp(`^${field} for ${name} occurrence`)).at(occurrence)!;
   fireEvent.change(input, { target: { value: date } });
   click(`Apply Date to ${input.getAttribute("aria-label")}`);
 }
 function publishSchedule() {
   click("Publish");
+  change("Publish Note", "Schedule update");
   fireEvent.click(within(screen.getByRole("dialog", { name: "Publish Working Draft" })).getByRole("button", { name: "Publish" }));
 }
 function advanced(pack?: string) {
@@ -110,7 +113,7 @@ function load(pack: string, consent = false) {
 }
 function candidate(index: number) { return screen.getByRole("article", { name: `匯入項目 ${index}` }); }
 function confirm(index: number) { fireEvent.click(within(candidate(index)).getByRole("button", { name: "確認" })); }
-function publishAdvanced() { click("發布此專案草稿"); click("確認發布"); }
+function publishAdvanced() { click("發布此專案草稿"); change("Publish Note", "Schedule update"); click("確認發布"); }
 function exportGrid(): string[][] {
   click("Export to Excel");
   const [workbook, filename] = vi.mocked(XLSX.writeFile).mock.calls.at(-1)!;
@@ -135,7 +138,7 @@ function seededSchedule(rows: readonly [string, string | null, string | null, "a
     }
     result = scheduleValue(updateScheduleWorkingDraftMilestone(result, { milestoneId, field: "applicability", value: applicability }, context));
   });
-  return scheduleValue(publishScheduleWorkingDraft(result, { publishedAt: "2026-09-30T00:00:00Z" }, context));
+  return scheduleValue(publishScheduleWorkingDraft(result, { versionNote: "Schedule update", publishedAt: "2026-09-30T00:00:00Z" }, context));
 }
 function assign(name = "Manta", definitionId = kickoff) {
   change("需確認的公版里程碑", definitionId);
@@ -144,6 +147,7 @@ function assign(name = "Manta", definitionId = kickoff) {
 function createProject(name: string) {
   click("Create Project");
   const dialog = screen.getByRole("dialog", { name: "Create Project" });
+  change("Project Type", "new", dialog);
   change("Year", "2027", dialog); change("Product Line", "demo-product-line-aspire-refresh-id", dialog);
   change("STN Project Name", name, dialog); change("QCI Model Name", `MODEL ${name}`, dialog);
   return dialog;
@@ -225,7 +229,8 @@ describe("Batch 1 integrated governance runtime", () => {
     expect(attention().overdue.matches.map(item => [item.milestoneDefinitionId, item.milestoneName, item.plan])).toEqual([["milestone-ramp-fcs", "SSL/GL", "2026-09-30"]]);
     expect(live().context.definitionsForHistoricalResolution.find(item => item.id === "milestone-ramp-fcs")?.name).toBe("FCS");
     openProject(); click("Edit");
-    const local = createLocal("FCS"); add(local); applyDate("FCS", "2026-10-04");
+    const local = createLocal("FCS"); add(local); applyDate("SSL/GL", "2026-10-04", "Plan", 0);
+    expect(schedule().workingDraft!.milestones.find(row => row.milestoneDefinitionId === local)?.plan).toBe("2026-10-04");
     applyDate("A1 G/O", "2026-10-20");
     expect(attention().due.matches.map(item => item.milestoneName)).toEqual(["A1 G/O", "C1 Pre-Build"]);
     publishSchedule(); dashboard();
@@ -428,12 +433,12 @@ describe("Batch 1 integrated governance runtime", () => {
     expect(schedule().workingDraft!.importCandidates.map(item => item.status)).toEqual(["confirmed", "confirmed", "pending"]);
     expect(screen.getByRole("button", { name: "發布此專案草稿" })).toBeDisabled();
     const beforeBlocked = structuredClone(schedule());
-    expect(publishScheduleWorkingDraft(schedule(), { publishedAt: "2026-10-01T00:00:00Z" }, commandContext())).toMatchObject({ ok: false, reason: "validation-failed" });
+    expect(publishScheduleWorkingDraft(schedule(), { versionNote: "Schedule update", publishedAt: "2026-10-01T00:00:00Z" }, commandContext())).toMatchObject({ ok: false, reason: "validation-failed" });
     expect(schedule()).toEqual(beforeBlocked);
     load("fixable-validation");
     expect(schedule()).toEqual(beforeBlocked); expect(schedule().workingDraft!.workingDraftId).toBe(draftId);
     dashboard();
-    expect(exportGrid()[1][11]).toBe("");
+    expect(exportGrid()[1][12]).toBe("");
     expect(attention().due.matches).toEqual([]);
     advanced();
     change("計畫處理方式", "set", candidate(3)); change("計畫日期", "2026-10-17", candidate(3)); confirm(3);
@@ -444,7 +449,7 @@ describe("Batch 1 integrated governance runtime", () => {
     expect(getCurrentPublishedVersion(schedule())!.milestones.slice(published ? 1 : 0).map(row => [row.milestoneDefinitionId, row.plan, row.actual])).toEqual([
       [kickoff, "2026-10-15", null], [idFix, "2026-10-16", null], ["milestone-me-portion-me-drawing", "2026-10-17", null],
     ]);
-    dashboard(); expect(exportGrid()[1][11]).toBe("Applicable\nP: 2026/10/15\nA: —");
+    dashboard(); expect(exportGrid()[1][12]).toBe("Applicable\nP: 2026/10/15\nA: —");
     openProject();
     expect(screen.queryByRole("region", { name: "匯入審核" })).not.toBeInTheDocument();
     expect(document.querySelector('input[type="file"], textarea')).toBeNull();
@@ -475,7 +480,7 @@ describe("Batch 1 integrated governance runtime", () => {
     expect(history).toHaveTextContent("Kickoff | 適用 | 計畫 2026-10-20");
     expect(history).toHaveTextContent("最終發布版本未保留此列");
     expect(history.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/i);
-    dashboard(); expect(exportGrid()[1][11]).toBe("Applicable\nP: 2026/10/20\nA: —");
+    dashboard(); expect(exportGrid()[1][12]).toBe("Applicable\nP: 2026/10/20\nA: —");
     advanced(); load("basic-success", true); confirm(1);
     const discardedSession = schedule().reviewSessions.at(-1)!.id;
     click("捨棄此專案草稿"); click("確認捨棄");
@@ -568,7 +573,7 @@ describe("Batch 1 integrated governance runtime", () => {
     const before = exportGrid();
     expect(before[0]).toEqual(headers); expect(before).toHaveLength(6);
     expect(before.slice(1).map(row => row[2])).toEqual(["Manta", "Nautilus", "Orca", "Beluga", "Marlin"]);
-    expect(before[2][41]).toBe("DEV QCI PM"); expect(before[2].slice(42)).toEqual(["", "", "", "", "", ""]);
+    expect(before[2][42]).toBe("DEV QCI PM"); expect(before[2].slice(43)).toEqual(["", "", "", "", "", ""]);
     const table = screen.getByTestId("portfolio-table-scroll"), proxy = screen.getByTestId("portfolio-bottom-scroll");
     table.scrollLeft = 1200; fireEvent.scroll(table); proxy.scrollLeft = 2400; fireEvent.scroll(proxy);
     const projectsTable = screen.getByRole("table", { name: "Projects" });
@@ -586,9 +591,9 @@ describe("Batch 1 integrated governance runtime", () => {
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "" } }); click("Clear all"); expect(exportGrid()).toEqual(before);
     openProject("Nautilus"); click("Open Team Member"); click("Edit Team");
     fireEvent.change(screen.getByDisplayValue("DEV QCI PM"), { target: { value: "Saved Batch PM" } }); click("Save Team"); click("Back"); dashboard();
-    expect(exportGrid()[2][41]).toBe("Saved Batch PM");
+    expect(exportGrid()[2][42]).toBe("Saved Batch PM");
     openProject(); click("Edit"); applyDate("Kickoff", "2026-10-20"); dashboard();
-    expect(exportGrid()[1][11]).toBe("Applicable\nP: 2026/09/18\nA: 2026/09/19");
+    expect(exportGrid()[1][12]).toBe("Applicable\nP: 2026/09/18\nA: 2026/09/19");
     governance(true); const definitionId = publicDefinition("Export gate"); setting("Export gate", "顯示於總表");
     click("檢查並預覽發布"); dashboard(); expect(exportGrid()[0]).toEqual(headers);
     governance(); release(); dashboard();
@@ -597,7 +602,7 @@ describe("Batch 1 integrated governance runtime", () => {
     expect(live().context.addablePublicDefinitions.map(item => item.id)).not.toContain(definitionId);
     expect(exportGrid()[2].slice(-7)).toEqual(["Saved Batch PM", "", "", "", "", "", ""]);
     openProject(); publishSchedule(); dashboard();
-    expect(exportGrid()[1][11]).toBe("Applicable\nP: 2026/10/20\nA: 2026/09/19");
+    expect(exportGrid()[1][12]).toBe("Applicable\nP: 2026/10/20\nA: 2026/09/19");
   }, 30000);
 
   // Catches catalog cancellation losing session choices, case/ID collisions mutating catalogs,
@@ -638,7 +643,7 @@ describe("Batch 1 integrated governance runtime", () => {
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Session Panel Size" } }); expect(exportGrid()).toHaveLength(1);
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "" } }); change("Panel Size", "Session Panel Size");
     const output = exportGrid(); expect(output).toHaveLength(2);
-    expect(output[1].slice(6, 10)).toEqual(["Session Product Line", "Session Panel Size", "Session CPU", "Session GPU"]);
+    expect(output[1].slice(7, 11)).toEqual(["Session Product Line", "Session Panel Size", "Session CPU", "Session GPU"]);
   }, 30000);
 
   // Catches remount retaining any governance, review, prototype or catalog session state.

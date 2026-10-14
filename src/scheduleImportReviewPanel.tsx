@@ -1,5 +1,5 @@
 import React from "react";
-import { milestoneDefinitionDisplayName } from "./application/milestoneDefinitionPresentation";
+import { milestoneDefinitionDisplayName, milestoneClassificationDisplayName } from "./application/milestoneDefinitionPresentation";
 import type { CanonicalScheduleCommandContext } from "./application/commands/canonicalScheduleCommands";
 import { collectSchedulePublishBlockingFindings, previewDraftLocalOccurrenceToPublic, previewScheduleImportDecision } from "./application/commands/scheduleReviewCommands";
 import { selectScheduleReviewTrace } from "./application/selectors/scheduleReviewTrace";
@@ -26,8 +26,8 @@ export interface ScheduleReviewBindings {
 const control = "rounded border border-slate-300 bg-white px-3 py-1.5 text-sm disabled:text-slate-400 disabled:cursor-not-allowed";
 const panel = "mt-4 rounded border border-slate-200 bg-slate-50 p-4 space-y-3";
 type DefinitionLabel = Pick<MilestoneDefinition, "id" | "name" | "stageGroupId" | "milestoneTypeId">;
-function stageName(id: string, review: ScheduleReviewBindings) { return review.context.governance.stageGroupsForHistoricalResolution.find(item => item.id === id)?.displayName ?? "未設定階段"; }
-function typeName(id: string | null, review: ScheduleReviewBindings) { return id === null ? "無類型" : review.context.governance.milestoneTypesForHistoricalResolution.find(item => item.id === id)?.displayName ?? "未設定類型"; }
+function stageName(id: string, review: ScheduleReviewBindings) { return milestoneClassificationDisplayName(review.context.governance.stageGroupsForHistoricalResolution.find(item => item.id === id)) ?? "未設定階段"; }
+function typeName(id: string | null, review: ScheduleReviewBindings) { return id === null ? "無類型" : milestoneClassificationDisplayName(review.context.governance.milestoneTypesForHistoricalResolution.find(item => item.id === id)) ?? "未設定類型"; }
 function definitionLabel(definition: DefinitionLabel, review: ScheduleReviewBindings) { return `${milestoneDefinitionDisplayName(definition)} | ${stageName(definition.stageGroupId, review)} / ${typeName(definition.milestoneTypeId, review)}`; }
 function allDefinitions(review: ScheduleReviewBindings) { return [...review.context.governance.definitionsForHistoricalResolution, ...review.schedule.localDefinitions]; }
 export function scheduleReviewFailureMessage(code: ScheduleReviewFailureCode, language: "en" | "zh" = "en"): string {
@@ -69,6 +69,7 @@ export function scheduleReviewFailureMessage(code: ScheduleReviewFailureCode, la
   return messages[code];
 }
 function findingText(issue: ValidationIssue): string {
+  if (issue.code === "schedule.data.future-actual") return issue.message;
   const suffix = issue.code.split(".").at(-1)!;
   if (suffix === "pending-decision") return "匯入項目仍須逐筆明確確認。";
   if (suffix === "ambiguous-date") return "來源日期有歧義，請明確選擇日期。";
@@ -85,7 +86,7 @@ function Findings({ issues }: { issues: readonly ValidationIssue[] }) {
 }
 export function SchedulePublishFindings({ review }: { review: ScheduleReviewBindings }) {
   const issues = collectSchedulePublishBlockingFindings(review.schedule, review.context);
-  return issues.length > 0 ? <div className="mt-3" aria-label="Publish blockers"><p>The Working Draft has unresolved items. Resolve them before publishing.</p></div> : null;
+  return issues.length > 0 ? <div className="mt-3" aria-label="Publish blockers"><p>The Working Draft has unresolved items. Resolve them before publishing.</p><Findings issues={issues} /></div> : null;
 }
 
 export function ProjectLocalDefinitionEditor({ governance, onCreate, onCancel }: { governance: EffectiveMilestoneGovernanceContext; onCreate: (input: LocalDefinitionFormInput) => void; onCancel: () => void }) {
@@ -96,8 +97,8 @@ export function ProjectLocalDefinitionEditor({ governance, onCreate, onCancel }:
   const typeIsSelectable = type === "" || governance.selectableMilestoneTypes.some(item => item.id === type);
   return <div className={panel} role="group" aria-label="Create Project-specific Milestone">
     <label className="block">Milestone Name <input className={control} value={name} onChange={event => setName(event.target.value)} /></label>
-    <label className="block">Stage <select className={control} value={stage} onChange={event => setStage(event.target.value)}><option value="">Select Stage</option>{governance.selectableStageGroups.map(item => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select></label>
-    <label className="block">Type (optional) <select className={control} value={type} onChange={event => setType(event.target.value)}><option value="">No Type</option>{governance.selectableMilestoneTypes.map(item => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select></label>
+    <label className="block">Stage <select className={control} value={stage} onChange={event => setStage(event.target.value)}><option value="">Select Stage</option>{governance.selectableStageGroups.map(item => <option key={item.id} value={item.id}>{milestoneClassificationDisplayName(item)}</option>)}</select></label>
+    <label className="block">Type (optional) <select className={control} value={type} onChange={event => setType(event.target.value)}><option value="">No Type</option>{governance.selectableMilestoneTypes.map(item => <option key={item.id} value={item.id}>{milestoneClassificationDisplayName(item)}</option>)}</select></label>
     <p className="text-sm">Choose a published Stage. Type is optional; choose No Type when none applies.</p>
     <button className={control} type="button" onClick={onCancel}>Cancel</button>{" "}
     <button className={control} type="button" disabled={!name.trim() || !stageIsSelectable || !typeIsSelectable} onClick={() => {

@@ -1,3 +1,4 @@
+import { parseDateOnly as testReferenceDate } from "../../domain/shared/dateOnly";
 import { describe, expect, it } from "vitest";
 import { milestoneDefinitions, milestoneTypeCatalog } from "../../config/v2/referenceData";
 import type { CommandResult, GovernanceDraftUpdate, MilestoneGovernanceRuntimeState } from "../../domain/governance/milestoneGovernance";
@@ -46,7 +47,7 @@ describe("UX05 one released classification authority", () => {
     }, context()));
     const state = update(update(draft(), { kind: "retire-stage", id: toStageGroupId("stage-a1") }), { kind: "retire-type", id: toMilestoneTypeId("type-test") });
     const effective = context(publish(state));
-    const commandContext = { governance: effective, localDefinitions: original.localDefinitions, retiredDraftOccurrenceGrants: [] };
+    const commandContext = { referenceDate: testReferenceDate("2026-10-14")!, governance: effective, localDefinitions: original.localDefinitions, retiredDraftOccurrenceGrants: [] };
     const started = startScheduleWorkingDraft(original, { workingDraftId: toCanonicalScheduleWorkingDraftId("retained-classification-draft") }, commandContext);
     expect(started.ok).toBe(true);
     if (!started.ok) throw new Error("Expected Draft");
@@ -105,7 +106,7 @@ describe("UX05 one released classification authority", () => {
       milestones: [definition, milestoneDefinitions[0]].map((item, index) => ({ milestoneId: toMilestoneId(`custom-stage-row-${index}`), milestoneDefinitionId: item.id, applicability: "notApplicable" as const, plan: null, actual: null })) }] };
     const before = structuredClone(schedule);
     expect(selectCurrentPublishedSchedule({ ...prototype, schedules: [schedule] }, devProject001.id, effective)).toMatchObject({ kind: "published", milestoneRows: [{ stage: "Design" }, { stage: "Certification Stage" }] });
-    const working = startScheduleWorkingDraft(schedule, { workingDraftId: toCanonicalScheduleWorkingDraftId("stage-order-draft") }, { governance: effective, localDefinitions: [], retiredDraftOccurrenceGrants: [] });
+    const working = startScheduleWorkingDraft(schedule, { workingDraftId: toCanonicalScheduleWorkingDraftId("stage-order-draft") }, { referenceDate: testReferenceDate("2026-10-14")!, governance: effective, localDefinitions: [], retiredDraftOccurrenceGrants: [] });
     expect(working.ok).toBe(true);
     if (!working.ok) throw new Error("Expected Draft");
     expect(selectScheduleWorkingDraft({ ...prototype, schedules: [working.schedule] }, devProject001.id, effective)).toMatchObject({ kind: "workingDraft", milestoneRows: [{ stage: "Design" }, { stage: "Certification Stage" }] });

@@ -1,3 +1,5 @@
+import type { ScheduleVersionNumber } from "./domain/schedule/schedule";
+import { getCurrentPublishedVersion } from "./domain/schedule/officialSchedule";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import * as XLSX from "xlsx";
@@ -55,6 +57,8 @@ import {
 import {
   resolveCanonicalScheduleOwner,
   selectCurrentPublishedSchedule,
+  selectPublishedScheduleHistory,
+  selectPublishedScheduleVersion,
   selectScheduleWorkingDraft,
 } from "./application/selectors/scheduleSelectors";
 import { getProjectById } from "./application/selectors/projectSelectors";
@@ -116,6 +120,7 @@ import {
 import {
   ProjectCatalogSelect,
   ProjectFieldInput,
+  ProjectTypeSelect,
   ProjectSelfServiceCatalogSelect,
   type ProjectSelfServiceCatalogAddResult,
 } from "./projectMasterControls";
@@ -172,6 +177,8 @@ function scheduleFailureMessages(
     return failure.issues.map(({ message }) => message);
   }
   const messages = {
+    "published-version-not-found": "The selected Published version is unavailable.",
+    "working-draft-exists": "Resolve the existing Working Draft first.",
     "no-working-draft": "No Working Draft is available.",
     "milestone-not-found": "The Working Draft milestone is unavailable.",
     "next-version-unavailable": "The next Published version is unavailable.",
@@ -198,6 +205,21 @@ export function App({
   const [page, setPage] = React.useState<Page>(
     initialSelectedProjectId === null ? "dashboard" : "workspace",
   );
+  // Publish-readiness is date-sensitive even while a Draft remains open overnight.
+  const [localDayRevision, refreshLocalDay] = React.useReducer((revision: number) => revision + 1, 0);
+  React.useEffect(() => {
+    const refresh = () => refreshLocalDay();
+    const now = new Date();
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const timer = window.setTimeout(refresh, Math.max(1, midnight.getTime() - now.getTime()));
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [localDayRevision]);
   const [state, dispatch] = React.useReducer(prototypeReducer, initialState);
   const [reportEntry, setReportEntry] = React.useState(0);
   const [governanceState, setGovernanceState] = React.useState(createInitialMilestoneGovernanceRuntimeState);
@@ -249,6 +271,7 @@ export function App({
   }, [governanceState]);
   const portfolioSchema = React.useMemo(() => createPortfolioVisibleSchema(governance), [governance]);
   const scheduleCommandContext = (schedule: CanonicalProjectSchedule): CanonicalScheduleCommandContext => ({
+    referenceDate: toLocalDateOnly(new Date()),
     governance, localDefinitions: schedule.localDefinitions,
     retiredDraftOccurrenceGrants,
   });
@@ -357,18 +380,18 @@ export function App({
     dispatch({ type: "scheduleReplaced", projectId, schedule: result.schedule });
   };
 
-  const startScheduleDraft = (): void => {
+  const startScheduleDraft = (basePublishedVersionNumber?: ScheduleVersionNumber): void => {
     if (selectedProjectId === null) return;
     const projectId = selectedProjectId;
-    const owner = resolveCanonicalScheduleOwner(state, projectId);
+    const owner = resolveCanonicalScheduleOwner(stateRef.current, projectId);
     if (owner.kind === "unavailable") {
       setScheduleFeedback(owner.issues.map(({ message }) => message));
       return;
     }
     const result = startScheduleWorkingDraft(
       owner.schedule,
-      { workingDraftId: toCanonicalScheduleWorkingDraftId(globalThis.crypto.randomUUID()) },
-      scheduleCommandContext(owner.schedule),
+      { workingDraftId: toCanonicalScheduleWorkingDraftId(globalThis.crypto.randomUUID()), basePublishedVersionNumber },
+      commandContextRef.current(owner.schedule),
     );
     if (!result.ok) {
       setScheduleFeedback(scheduleFailureMessages(result));
@@ -455,15 +478,19 @@ export function App({
     report([]);
   };
 
-  const publishScheduleDraft = (projectId: ProjectId, report: (messages: readonly string[]) => void = setScheduleFeedback): void => {
+  const publishScheduleDraft = (projectId: ProjectId, versionNote: string, expectedSchedule: CanonicalProjectSchedule, report: (messages: readonly string[]) => void = setScheduleFeedback): void => {
     const owner = resolveCanonicalScheduleOwner(stateRef.current, projectId);
     if (owner.kind === "unavailable") {
       report(owner.issues.map(({ message }) => message));
       return;
     }
+    if (owner.schedule.workingDraft !== expectedSchedule.workingDraft || getCurrentPublishedVersion(owner.schedule)?.versionNumber !== getCurrentPublishedVersion(expectedSchedule)?.versionNumber) {
+      report(["The Schedule changed. Review the current Draft and confirm Publish again."]);
+      return;
+    }
     const publishedAt = new Date().toISOString();
     const result = publishScheduleWorkingDraft(
-      owner.schedule, { publishedAt }, commandContextRef.current(owner.schedule),
+      owner.schedule, { publishedAt, versionNote }, commandContextRef.current(owner.schedule),
     );
     if (!result.ok) {
       report(scheduleFailureMessages(result));
@@ -541,7 +568,7 @@ export function App({
       },
       feedback: governanceScheduleFeedback?.projectId === projectId ? governanceScheduleFeedback.messages : [],
       onClearFeedback: () => setGovernanceScheduleFeedback(null),
-      onPublish: () => publishScheduleDraft(projectId, messages => reportGovernanceSchedule(projectId, messages.length ? ["此專案草稿尚無法發布，請檢查日期、適用性及待處理項目。"] : [])),
+      onPublish: versionNote => publishScheduleDraft(projectId, versionNote, owner.schedule, messages => reportGovernanceSchedule(projectId, messages)),
       onDiscard: () => cancelScheduleDraft(projectId, messages => reportGovernanceSchedule(projectId, messages.length ? ["此專案目前無法捨棄草稿，請重新檢查排程。"] : [])),
     };
   };
@@ -579,7 +606,9 @@ export function App({
           officialRead: selectedScheduleRead,
           onAddMilestone: addScheduleDraftMilestone,
           onCancelDraft: () => cancelScheduleDraft(selectedProjectId),
-          onPublishDraft: () => publishScheduleDraft(selectedProjectId),
+          onPublishDraft: versionNote => { if (selectedScheduleOwner?.kind === "available") publishScheduleDraft(selectedProjectId, versionNote, selectedScheduleOwner.schedule); },
+          history: selectPublishedScheduleHistory(state, selectedProjectId, governance),
+          readPublishedVersion: versionNumber => selectPublishedScheduleVersion(state, selectedProjectId, versionNumber, governance),
           onRemoveMilestone: removeScheduleDraftMilestone,
           onStartDraft: selectedScheduleOwner?.kind === "available"
             ? startScheduleDraft
@@ -670,9 +699,13 @@ export function App({
       return;
     }
 
+    // A fresh confirmation can invalidate an earlier duplicate decision.
+    // Return to the retained form so its current blocking feedback is visible.
+    setPendingDuplicateCreate(null);
     const result = interpretation.result;
     if (result.reason === "requiredFields") {
       const messages: Record<CreateProjectRequiredField, string> = {
+        projectType: "Project Type is required.",
         year: "Year is required.",
         productLine: "Product Line is required.",
         stnProjectName: "STN Project Name is required.",
@@ -680,6 +713,10 @@ export function App({
       setCreateFieldErrors(Object.fromEntries(
         result.missingFields.map((field) => [field, messages[field]]),
       ));
+      setCreateFeedback(null);
+    } else if (result.reason === "projectTypeValidation") {
+      setCreateFieldErrors({});
+      setCreateIssues(result.issues);
       setCreateFeedback(null);
     } else {
       setCreateFieldErrors({});
@@ -710,10 +747,10 @@ export function App({
     handleCreateInterpretation(
       confirmCreateProjectAnyway(
         pendingDuplicateCreate.input,
-        pendingDuplicateCreate.context,
+        { ...pendingDuplicateCreate.context, existingProjects: stateRef.current.projects },
       ),
       pendingDuplicateCreate.input,
-      pendingDuplicateCreate.context,
+      { ...pendingDuplicateCreate.context, existingProjects: stateRef.current.projects },
     );
   };
   const openEdit = () => {
@@ -735,7 +772,7 @@ export function App({
       editForm,
     );
     const interpretation = interpretUpdateProjectMasterResult(
-      updateProjectMaster(selectedCanonicalProject, { master: candidateMaster }),
+      updateProjectMaster(selectedCanonicalProject, { master: candidateMaster }, { existingProjects: stateRef.current.projects }),
     );
     setEditIssues(interpretation.result.issues);
     if (interpretation.kind === "blocked") return;
@@ -965,6 +1002,7 @@ function CreateProjectDialog(props: CreateProjectDialogProps) {
 
           <fieldset className="grid gap-3 rounded-md border border-slate-200 p-4">
             <legend className="px-1 text-sm font-semibold">Project Classification</legend>
+            <ProjectTypeSelect required error={fieldErrors.projectType} value={value.projectType} onChange={(nextValue) => updateForm("projectType", nextValue)} />
             <ProjectFieldInput error={fieldErrors.year} label="Year" value={value.year} onChange={(nextValue) => updateForm("year", nextValue)} />
             <ProjectCatalogSelect emptyLabel="Select Customer" label="Customer" options={customerReferenceFixtures} value={value.customerId} onChange={(nextValue) => updateForm("customerId", nextValue)} />
             <ProjectSelfServiceCatalogSelect error={fieldErrors.productLine} emptyLabel="Select Product Line" label="Product Line" options={selfServiceCatalogs.productLine} value={value.productLineId} onAddOption={(label) => onAddCatalogOption("productLine", label)} onChange={(nextValue) => updateForm("productLineId", nextValue)} />
@@ -1092,6 +1130,7 @@ export function ProjectWorkspace({
                 <div className="font-semibold">Project Classification</div>
                 <div className="mt-2 grid gap-1">
                   <div>Year: {row.year}</div>
+                  <div>Project Type: {row.projectType === "-" ? "\u2014" : row.projectType}</div>
                   <div>Customer: {row.customer}</div>
                   <div>Product Line: {row.productLine}</div>
                 </div>

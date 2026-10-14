@@ -2,18 +2,25 @@ import type { CurrentPublishedScheduleRead } from "./application/selectors/sched
 
 export interface OfficialScheduleViewProps {
   readonly read: CurrentPublishedScheduleRead;
+  readonly historical?: boolean;
+  readonly controls?: React.ReactNode;
 }
 
 export function OfficialScheduleView({
   read,
+  historical = false,
+  controls,
 }: OfficialScheduleViewProps): React.ReactElement {
+  const heading = historical ? "Historical Schedule" : "Current Schedule";
+  const timestamp = read.kind === "published" && /^\d{4}-\d{2}-\d{2}T/.test(read.version.publishedAt) ? new Date(read.version.publishedAt) : null;
   return (
     <section
-      aria-label="Current Schedule"
+      aria-label={heading}
       className="overflow-hidden rounded-md border border-slate-200 bg-white"
     >
       <div className="p-4">
-        <h2 className="text-lg font-semibold">Current Schedule</h2>
+        {controls}
+        <h2 className="text-lg font-semibold">{heading}</h2>
         {read.kind === "unavailable" && (
           <p className="mt-3 text-sm text-slate-600">
             Schedule data unavailable
@@ -27,6 +34,9 @@ export function OfficialScheduleView({
         {read.kind === "published" && (
           <div className="mt-2 text-sm text-slate-600">
             {read.versionLabel}
+            <p>Read-only</p>
+            <p>Publish Note: <span>{read.version.versionNote?.trim() || "No note"}</span></p>
+            <p>Published: <time dateTime={timestamp && !Number.isNaN(timestamp.getTime()) ? read.version.publishedAt : undefined} title={read.version.publishedAt}>{timestamp && !Number.isNaN(timestamp.getTime()) ? timestamp.toLocaleString() : read.version.publishedAt || "Unavailable"}</time></p>
           </div>
         )}
       </div>

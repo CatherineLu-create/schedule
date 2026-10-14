@@ -6,9 +6,14 @@ import type { EffectiveMilestoneGovernanceContext } from "./application/governan
 import type { UpdateScheduleWorkingDraftMilestoneInput } from "./application/commands/canonicalScheduleCommands";
 import type {
   CurrentPublishedScheduleRead,
+  PublishedScheduleHistoryRead,
+  SelectedPublishedScheduleRead,
   ScheduleWorkingDraftRead,
 } from "./application/selectors/scheduleSelectors";
 import type { MilestoneDefinition } from "./domain/schedule/milestoneCatalog";
+import { createEmptyCanonicalProjectSchedule } from "./domain/schedule/officialSchedule";
+import { HistoricalDraftWarning, SchedulePublishConfirmation, scheduleVersionLabel } from "./schedulePublishConfirmation";
+import type { ScheduleVersionNumber } from "./domain/schedule/schedule";
 import type { MilestoneApplicability } from "./domain/schedule/schedule";
 import { parseDateOnly, type DateOnly } from "./domain/shared/dateOnly";
 import {
@@ -30,9 +35,11 @@ export interface ScheduleWorkspaceProps {
   readonly officialRead: CurrentPublishedScheduleRead;
   readonly onAddMilestone: (milestoneDefinitionId: MilestoneDefinitionId) => void;
   readonly onCancelDraft: () => void;
-  readonly onPublishDraft: () => void;
+  readonly onPublishDraft: (versionNote: string) => void;
   readonly onRemoveMilestone: (milestoneId: MilestoneId) => void;
-  readonly onStartDraft: (() => void) | null;
+  readonly onStartDraft: ((basePublishedVersionNumber?: ScheduleVersionNumber) => void) | null;
+  readonly history?: PublishedScheduleHistoryRead;
+  readonly readPublishedVersion?: (versionNumber: ScheduleVersionNumber) => SelectedPublishedScheduleRead;
   readonly onUpdateMilestone: (input: UpdateScheduleWorkingDraftMilestoneInput) => void;
   readonly projectId: ProjectId;
   readonly review?: ScheduleReviewBindings;
@@ -148,6 +155,8 @@ function DateOnlyEditor({
 
 function ScheduleWorkspaceContent({
   governance,
+  history,
+  readPublishedVersion,
   draftRead,
   feedback,
   milestoneDefinitions,
@@ -162,6 +171,7 @@ function ScheduleWorkspaceContent({
   projectId,
   review,
 }: ScheduleWorkspaceProps): React.ReactElement {
+  const [selection, setSelection] = React.useState<"draft" | "current" | ScheduleVersionNumber>(draftRead.kind === "workingDraft" || (draftRead.kind === "unavailable" && draftRead.workingDraftExists) ? "draft" : "current");
   const [definitionId, setDefinitionId] = React.useState("");
   const [localEditor, setLocalEditor] = React.useState(false);
   const representedDefinitionIds = draftRead.kind === "workingDraft"
@@ -185,7 +195,27 @@ function ScheduleWorkspaceContent({
       return next;
     });
   }, []);
-  const publishBlocked = unappliedEditors.size > 0 || (review !== undefined && (review.schedule.workingDraft?.importCandidates.length ?? 0) > 0 && collectSchedulePublishBlockingFindings(review.schedule, review.context).length > 0);
+  const findings = review ? collectSchedulePublishBlockingFindings(review.schedule, review.context) : [];
+  const publishBlocked = unappliedEditors.size > 0 || findings.length > 0;
+  const publicationSchedule = review?.schedule ?? {
+    ...createEmptyCanonicalProjectSchedule(projectId),
+    publishedVersions: officialRead.kind === "published" ? [officialRead.version] : [],
+    workingDraft: draftRead.kind === "workingDraft" ? draftRead.draft : null,
+  };
+  const hasDraft = draftRead.kind === "workingDraft" || (draftRead.kind === "unavailable" && draftRead.workingDraftExists);
+  const selectedRead = typeof selection === "number" ? readPublishedVersion?.(selection) : officialRead;
+  const historyControl = history?.kind === "history" && <div className="mb-3 space-y-2">
+    <label className="flex items-center gap-2">Schedule version
+      <select aria-label="Schedule version" className="rounded border p-2" disabled={unappliedEditors.size > 0}
+        value={selection === "current" ? (officialRead.kind === "published" ? officialRead.version.versionNumber : "current") : selection}
+        onChange={event => setSelection(event.target.value === "draft" ? "draft" : event.target.value === "current" ? "current" : Number(event.target.value) as ScheduleVersionNumber)}>
+        {hasDraft && <option value="draft">Working Draft · Unpublished</option>}
+        {history.versions.length === 0 && <option value="current">No Published version</option>}
+        {history.versions.map(version => <option key={version.versionNumber} value={version.versionNumber}>{scheduleVersionLabel(version.versionNumber)}{version.isCurrent ? " · Current" : ""} — {version.versionNote?.trim() || "No note"}</option>)}
+      </select>
+    </label>
+    {unappliedEditors.size > 0 && <p>Apply or cancel unapplied dates before switching versions.</p>}
+  </div>;
   const localDefinitionEditor = review && localEditor && <ProjectLocalDefinitionEditor governance={governance} onCancel={() => setLocalEditor(false)} onCreate={input => {
     const id = review.onCreateLocal(input);
     if (id !== null) { setDefinitionId(id); setLocalEditor(false); }
@@ -194,22 +224,10 @@ function ScheduleWorkspaceContent({
     <p key={`${index}:${message}`}>{message}</p>
   ));
 
-  const publishDialog = confirmation === "publish" ? (
-    <div aria-label="Publish Working Draft" className="mt-4 rounded border border-slate-300 bg-slate-50 p-4" role="dialog">
-      <h3 className="font-semibold">Publish Working Draft?</h3>
-      <p>This will create a new official Schedule version.</p>
-      <p>Published versions cannot be edited.</p>
-      {nextVersionLabel !== null && <p>{nextVersionLabel}</p>}
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm" onClick={() => setConfirmation(null)} type="button">Keep Editing</button>
-        <button className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:cursor-not-allowed disabled:bg-slate-400" disabled={publishBlocked} onClick={() => {
-          if (publishBlocked) return;
-          setConfirmation(null);
-          onPublishDraft();
-        }} type="button">Publish</button>
-      </div>
-    </div>
-  ) : null;
+  const publishDialog = confirmation === "publish" ? <SchedulePublishConfirmation
+    schedule={publicationSchedule} blockers={findings} onCancel={() => setConfirmation(null)}
+    onPublish={onPublishDraft} additionalBlocker={unappliedEditors.size > 0 ? "Correct or clear unapplied dates before publishing." : undefined}
+  /> : null;
   const discardDialog = confirmation === "discard" ? (
     <div aria-label="Discard Working Draft" className="mt-4 rounded border border-slate-300 bg-slate-50 p-4" role="dialog">
       <h3 className="font-semibold">Discard Working Draft?</h3>
@@ -225,8 +243,9 @@ function ScheduleWorkspaceContent({
     </div>
   ) : null;
 
-  if (draftRead.kind === "unavailable" && draftRead.workingDraftExists) {
+  if (selection === "draft" && draftRead.kind === "unavailable" && draftRead.workingDraftExists) {
     return <section aria-label="Schedule" className="rounded-md border border-slate-200 bg-white p-4">
+      {historyControl}
       <h2 className="text-lg font-semibold">Working Draft</h2>
       <p>Working Draft data unavailable</p>
       <button className="mt-3 rounded border border-rose-300 px-3 py-1.5 text-sm text-rose-700" onClick={() => setConfirmation("discard")} type="button">Discard Draft</button>
@@ -234,19 +253,25 @@ function ScheduleWorkspaceContent({
       {messages}
     </section>;
   }
-  if (draftRead.kind !== "workingDraft") {
+  if (selection !== "draft" || draftRead.kind !== "workingDraft") {
+    const published = selectedRead?.kind === "published" ? selectedRead : null;
+    const historical = published !== null && officialRead.kind === "published" && published.version.versionNumber !== officialRead.version.versionNumber;
     return <>
-      <OfficialScheduleView read={officialRead} />
-      {onStartDraft !== null && (
-        <button className="self-end rounded border border-slate-300 bg-white px-4 py-2 text-sm" onClick={onStartDraft} type="button">Edit</button>
-      )}
+      {selectedRead?.kind === "versionNotFound" || !selectedRead ? <div>{historyControl}<p>Published version unavailable.</p></div> : <OfficialScheduleView read={selectedRead} historical={historical} controls={historyControl} />}
+      {published && onStartDraft !== null && <button className="self-end rounded border px-4 py-2 disabled:opacity-40" disabled={hasDraft} onClick={() => onStartDraft(published.version.versionNumber)} type="button">Create Draft from {scheduleVersionLabel(published.version.versionNumber)}</button>}
+      {hasDraft && <div><p>Resolve the existing Working Draft first.</p><button type="button" className="rounded border px-3 py-2" onClick={() => setSelection("draft")}>Return to Working Draft</button></div>}
+      {!hasDraft && !historical && onStartDraft !== null && <button className="self-end rounded border px-4 py-2" onClick={() => onStartDraft()} type="button">Edit</button>}
       {messages}
       {localDefinitionEditor}
     </>;
   }
 
   return <section aria-label="Schedule" className="rounded-md border border-slate-200 bg-white p-4">
+    {historyControl}
     <h2 className="text-lg font-semibold">Working Draft</h2>
+    <p>Unpublished</p>
+    <HistoricalDraftWarning schedule={publicationSchedule} />
+    {nextVersionLabel && <p>{nextVersionLabel}</p>}
     {draftRead.milestoneRows.length === 0 && <p>No milestones</p>}
     <div className="overflow-x-auto">
       <table className="w-full min-w-[720px] text-left text-sm">
@@ -258,6 +283,7 @@ function ScheduleWorkspaceContent({
           <td className="px-4 py-3">
             <div className="flex flex-wrap items-center gap-2">
               <span>{row.milestone}</span>
+              {findings.some(issue => issue.code === "schedule.import.retired-definition-not-retained" && issue.target.entityId === row.milestoneId) && <p className="text-rose-700">This milestone is no longer available under the current public governance. Remove it before publishing.</p>}
               {review?.schedule.localDefinitions.some(definition => definition.id === draftRead.draft.milestones.find(occurrence => occurrence.milestoneId === row.milestoneId)?.milestoneDefinitionId) && <span className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-800">Project-specific</span>}
               <select
                 aria-label={`Applicability for ${row.milestone}`}

@@ -21,6 +21,7 @@ import {
 import {
   ProjectCatalogSelect,
   ProjectFieldInput,
+  ProjectTypeSelect,
   ProjectReferencePicker,
   ProjectSelfServiceCatalogSelect,
   type ProjectSelfServiceCatalogAddResult,
@@ -163,6 +164,7 @@ function BasicInformationRead({ row }: { readonly row: DashboardProjectRow }): R
         <h3 className="font-semibold">Project Classification</h3>
         <div className="mt-2 grid gap-1">
           <div>Year: {row.year}</div>
+                  <div>Project Type: {row.projectType === "-" ? "\u2014" : row.projectType}</div>
           <div>Customer: {row.customer}</div>
           <div>Product Line: {row.productLine}</div>
         </div>
@@ -226,6 +228,7 @@ function BasicInformationEdit({
       </fieldset>
       <fieldset className="grid min-w-0 gap-3 rounded-md border border-slate-200 p-4">
         <legend className="px-1 text-sm font-semibold">Project Classification</legend>
+        <ProjectTypeSelect error={fieldErrors.projectType} value={form.projectType} onChange={(value) => update("projectType", value)} />
         <ProjectFieldInput error={fieldErrors.year} label="Year" value={form.year} onChange={(value) => update("year", value)} />
         <ProjectCatalogSelect emptyLabel="Select Customer" label="Customer" options={customerReferenceFixtures} value={form.customerId} onChange={(value) => update("customerId", value)} />
         <ProjectSelfServiceCatalogSelect error={fieldErrors.productLineId} emptyLabel="Select Product Line" label="Product Line" options={selfServiceCatalogs.productLine} value={form.productLineId} onAddOption={(label) => onAddCatalogOption("productLine", label)} onChange={(value) => update("productLineId", value)} />

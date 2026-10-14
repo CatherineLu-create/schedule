@@ -89,6 +89,12 @@ const publishedFutureActualVersion: PublishedScheduleVersion = {
 };
 
 describe("Schedule Working Draft validation", () => {
+  it("reports future Actual on N/A independently of the applicability issue", () => {
+    const draft = { ...notApplicableWithDateDraftCandidate, milestones: [{ ...notApplicableWithDateDraftCandidate.milestones[0]!, actual: dateOnly("2026-10-15") }] };
+    expect(validateScheduleWorkingDraft(draft, { referenceDate: dateOnly("2026-10-14") })).toContainEqual(expect.objectContaining({
+      code: "schedule.data.future-actual", severity: "blocking", message: "Actual date cannot be later than today.",
+    }));
+  });
 	it("classifies an unmapped milestone as Blocking Import", () => {
 		expect(issueSummary(unmappedMilestoneDraftCandidate)).toContainEqual({
 			code: "schedule.import.unmapped-milestone",
@@ -174,12 +180,12 @@ describe("Schedule Working Draft validation", () => {
 		});
 	});
 
-	it("classifies Actual after the reference date as Advisory Data", () => {
+	it("classifies Actual after the reference date as Blocking Data", () => {
 		expect(issueSummary(futureActualDraftCandidate)).toEqual([
 			{
 				code: "schedule.data.future-actual",
 				source: "data",
-				severity: "advisory",
+				severity: "blocking",
 			},
 		]);
 	});
@@ -228,7 +234,7 @@ describe("Schedule Working Draft validation", () => {
 		});
 
 		expect(issues.filter((issue) => issue.severity === "blocking").length).toBe(
-			4,
+			5,
 		);
 		expect(new Set(issues.map((issue) => issue.code))).toEqual(
 			new Set([
@@ -244,7 +250,7 @@ describe("Schedule Working Draft validation", () => {
 });
 
 describe("Published Schedule inspection", () => {
-	it("derives future Actual as Advisory without changing the Published snapshot", () => {
+	it("derives future Actual as Blocking without changing the Published snapshot", () => {
 		const originalMilestones = publishedFutureActualVersion.milestones;
 		const issues = validatePublishedScheduleVersion(publishedFutureActualVersion, {
 			referenceDate: devScenarioToday,
@@ -255,7 +261,7 @@ describe("Published Schedule inspection", () => {
 				code: "schedule.data.future-actual",
 				domain: "schedule",
 				source: "data",
-				severity: "advisory",
+				severity: "blocking",
 			}),
 		);
 		expect(publishedFutureActualVersion.milestones).toBe(originalMilestones);

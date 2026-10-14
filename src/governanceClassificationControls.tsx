@@ -1,3 +1,4 @@
+import { milestoneClassificationDisplayName } from "./application/milestoneDefinitionPresentation";
 import React from "react";
 import type { GovernanceDraftUpdate, MilestoneGovernanceDraft } from "./domain/governance/milestoneGovernance";
 import { toMilestoneTypeId, toStageGroupId } from "./domain/shared/ids";
@@ -19,9 +20,9 @@ export function GovernanceClassificationControls({ candidate, onUpdate }: {
         setStageName("");
       }}>新增階段</button>
       <ul className="space-y-2">{candidate.stageGroups.map(stage => <li key={stage.id} className="flex items-center justify-between gap-2 text-sm">
-        <span>{stage.displayName}</span>
+        <span>{milestoneClassificationDisplayName(stage)}</span>
         {candidate.selectableStageGroupIds.includes(stage.id)
-          ? <button type="button" className={button} aria-label={`停用階段 ${stage.displayName}`} onClick={() => onUpdate({ kind: "retire-stage", id: stage.id })}>停用階段</button>
+          ? <button type="button" className={button} aria-label={`停用階段 ${milestoneClassificationDisplayName(stage)}`} onClick={() => onUpdate({ kind: "retire-stage", id: stage.id })}>停用階段</button>
           : <span className="text-slate-500">已停用</span>}
       </li>)}</ul>
     </section>
@@ -36,15 +37,15 @@ export function GovernanceClassificationControls({ candidate, onUpdate }: {
       <ul className="space-y-2">{candidate.selectableMilestoneTypeIds.map(id => {
         const type = candidate.milestoneTypes.find(item => item.id === id)!;
         return <li key={id} className="flex items-center justify-between gap-2 text-sm">
-          <span>{type.displayName}</span>
+          <span>{milestoneClassificationDisplayName(type)}</span>
           {candidate.automaticAttentionTypeIds.includes(id)
             ? <span className="text-slate-600">系統自動提醒</span>
-            : <button type="button" className={button} aria-label={`停用類型 ${type.displayName}`} onClick={() => onUpdate({ kind: "retire-type", id })}>停用類型</button>}
+            : <button type="button" className={button} aria-label={`停用類型 ${milestoneClassificationDisplayName(type)}`} onClick={() => onUpdate({ kind: "retire-type", id })}>停用類型</button>}
         </li>;
       })}</ul>
       <h4 className="font-medium">歷史類型</h4>
       <p className="text-sm text-slate-500">僅供既有里程碑引用，無法選用於新定義。</p>
-      <ul className="flex flex-wrap gap-2 text-sm">{candidate.milestoneTypes.filter(type => !candidate.selectableMilestoneTypeIds.includes(type.id)).map(type => <li key={type.id}>{type.displayName}</li>)}</ul>
+      <ul className="flex flex-wrap gap-2 text-sm">{candidate.milestoneTypes.filter(type => !candidate.selectableMilestoneTypeIds.includes(type.id)).map(type => <li key={type.id}>{milestoneClassificationDisplayName(type)}</li>)}</ul>
     </section>
   </div>;
 }

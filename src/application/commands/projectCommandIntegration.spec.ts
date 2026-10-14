@@ -32,6 +32,7 @@ function createInput(projectId: string, stnProjectName: string) {
       ...devProject001.master,
       basicInformation: {
         ...devProject001.master.basicInformation,
+        projectType: "new" as const,
         year: 2028,
         productLine: productLineReferenceFixtures[1]!.id,
         stnProjectName,
@@ -92,6 +93,7 @@ describe("canonical Project command integration", () => {
           ...devProject001.master,
           basicInformation: {
             ...devProject001.master.basicInformation,
+            projectType: "new" as const,
             year: null,
             productLine: null,
             stnProjectName: "",
@@ -114,6 +116,7 @@ describe("canonical Project command integration", () => {
           ...devProject002.master,
           basicInformation: {
             ...devProject002.master.basicInformation,
+            projectType: "new" as const,
           },
         },
       },
@@ -136,7 +139,7 @@ describe("canonical Project command integration", () => {
     const updated = updateProjectMaster(devProject001, {
       master,
       completenessFields: [],
-    });
+    }, { existingProjects: [] });
 
     const next = prototypeReducer(canonicalState, {
       type: "projectReplaced",

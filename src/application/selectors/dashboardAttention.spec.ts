@@ -1,3 +1,4 @@
+import { parseDateOnly as testReferenceDate } from "../../domain/shared/dateOnly";
 import { initialScheduleCommandContext } from "../../test/governanceTestUtils";
 import { confirmProjectLocalMilestoneDefinition } from "../commands/scheduleReviewCommands";
 import { describe, expect, it } from "vitest";
@@ -194,7 +195,7 @@ describe("SSL/GL exact system Attention", () => {
     const originalSnapshot = structuredClone(original);
     const before = { ...createEmptyCanonicalProjectSchedule(devProject001.id), workingDraft: { ...draftIdentity, milestones: [draftMilestone("ssl-gl", sslGlId, "2026-09-23")] } };
     expect(selectScheduleWorkingDraft(state([devProject001], [before]), devProject001.id, governance)).toMatchObject({ kind: "workingDraft", milestoneRows: [{ milestone: "SSL/GL" }] });
-    const result = publishScheduleWorkingDraft(before, { publishedAt: "2026-09-23T00:00:00Z" }, { governance, localDefinitions: [], retiredDraftOccurrenceGrants: [] });
+    const result = publishScheduleWorkingDraft(before, { versionNote: "Schedule update", publishedAt: "2026-09-23T00:00:00Z" }, { referenceDate: testReferenceDate("2026-10-14")!, governance, localDefinitions: [], retiredDraftOccurrenceGrants: [] });
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(JSON.stringify(result));
     expect(selectCurrentPublishedSchedule(state([devProject001], [result.schedule]), devProject001.id, governance)).toMatchObject({ kind: "published", milestoneRows: [{ milestone: "SSL/GL" }] });
@@ -218,7 +219,7 @@ describe("SSL/GL exact system Attention", () => {
     const current = { ...local, publishedVersions: [version(1, [milestone("local", local.localDefinitions[0].id, "2026-09-23")])] };
     expect(expectAvailable(selectDashboardAttention(state([owner], [current]), REFERENCE_DATE, initial)).due.matches).toEqual([]);
     const typed = { ...current, localDefinitions: [{ ...current.localDefinitions[0], milestoneTypeId: toMilestoneTypeId("type-smt") }] };
-    expect(expectAvailable(selectDashboardAttention(state([owner], [typed]), REFERENCE_DATE, initial)).due.matches).toMatchObject([{ milestoneDefinitionId: "local-ssl-gl", milestoneName: name }]);
+    expect(expectAvailable(selectDashboardAttention(state([owner], [typed]), REFERENCE_DATE, initial)).due.matches).toMatchObject([{ milestoneDefinitionId: "local-ssl-gl", milestoneName: "SSL/GL" }]);
   });
 
   it("does not grant system Attention to a local ID absent from current released public definitions", () => {
@@ -306,7 +307,7 @@ describe("Attention from real local confirmation and Publish", () => {
   function published(item: CanonicalProjectSchedule, milestones: readonly CanonicalScheduleWorkingDraftMilestone[]) {
     // Canonical test setup supplies occurrences; public-only Normal Add is deliberately unchanged.
     const result = publishScheduleWorkingDraft({ ...item, workingDraft: { ...draftIdentity, milestones } },
-      { publishedAt: "2026-09-23T00:00:00Z" }, { governance, localDefinitions: item.localDefinitions, retiredDraftOccurrenceGrants: [] });
+      { versionNote: "Schedule update", publishedAt: "2026-09-23T00:00:00Z" }, { referenceDate: testReferenceDate("2026-10-14")!, governance, localDefinitions: item.localDefinitions, retiredDraftOccurrenceGrants: [] });
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(JSON.stringify(result));
     return result.schedule;
@@ -586,7 +587,7 @@ describe("selectDashboardAttention", () => {
 
     const published = publishScheduleWorkingDraft(
       before,
-      { publishedAt: "2026-09-23T00:00:00Z" },
+      { versionNote: "Schedule update", publishedAt: "2026-09-23T00:00:00Z" },
       initialScheduleCommandContext(),
     );
     expect(published.ok).toBe(true);

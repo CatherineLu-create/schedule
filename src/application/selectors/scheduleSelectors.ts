@@ -8,13 +8,13 @@ import {
   type CanonicalProjectSchedule,
   type CanonicalPublishedScheduleVersion,
 } from "../../domain/schedule/officialSchedule";
-import type { MilestoneApplicability } from "../../domain/schedule/schedule";
+import type { MilestoneApplicability, ScheduleVersionNumber } from "../../domain/schedule/schedule";
 import { formatDateOnly, type DateOnly } from "../../domain/shared/dateOnly";
 import type { MilestoneId, ProjectId } from "../../domain/shared/ids";
 import type { ValidationIssue } from "../../domain/validation/validationIssue";
 import type { PrototypeState } from "../state/prototypeState";
 import type { EffectiveMilestoneGovernanceContext } from "../governance/effectiveMilestoneGovernanceContext";
-import { milestoneDefinitionDisplayName } from "../milestoneDefinitionPresentation";
+import { milestoneDefinitionDisplayName, milestoneClassificationDisplayName } from "../milestoneDefinitionPresentation";
 import { resolveScheduleDefinitions } from "../governance/scheduleDefinitionResolution";
 import { orderMilestoneOccurrences } from "../milestoneDefinitionOrdering";
 
@@ -214,37 +214,65 @@ export function validateCanonicalScheduleState(
   return issues;
 }
 
-export function selectCurrentPublishedSchedule(
-  state: PrototypeState,
-  projectId: ProjectId,
+export type SelectedPublishedScheduleRead =
+  | (Extract<CurrentPublishedScheduleRead, { kind: "published" }> & { readonly isCurrent: boolean })
+  | Extract<CurrentPublishedScheduleRead, { kind: "unavailable" }>
+  | { readonly kind: "versionNotFound" };
+
+export type PublishedScheduleHistoryRead =
+  | Extract<CurrentPublishedScheduleRead, { kind: "unavailable" }>
+  | { readonly kind: "history"; readonly versions: readonly {
+      readonly versionNumber: ScheduleVersionNumber;
+      readonly versionNote: string | null;
+      readonly publishedAt: string;
+      readonly isCurrent: boolean;
+    }[] };
+
+export function selectPublishedScheduleHistory(
+  state: PrototypeState, projectId: ProjectId, context: EffectiveMilestoneGovernanceContext,
+): PublishedScheduleHistoryRead {
+  const owner = resolveCanonicalScheduleOwner(state, projectId);
+  if (owner.kind === "unavailable") return owner;
+  const issues = validateCanonicalProjectSchedule(owner.schedule, resolveScheduleDefinitions(context, owner.schedule.localDefinitions));
+  if (issues.length) return { kind: "unavailable", issues };
+  const current = getCurrentPublishedVersion(owner.schedule);
+  return { kind: "history", versions: [...owner.schedule.publishedVersions]
+    .sort((a, b) => b.versionNumber - a.versionNumber)
+    .map(version => ({ versionNumber: version.versionNumber, versionNote: version.versionNote ?? null,
+      publishedAt: version.publishedAt, isCurrent: version === current })) };
+}
+
+export function selectPublishedScheduleVersion(
+  state: PrototypeState, projectId: ProjectId, versionNumber: ScheduleVersionNumber,
   context: EffectiveMilestoneGovernanceContext,
+): SelectedPublishedScheduleRead {
+  const owner = resolveCanonicalScheduleOwner(state, projectId);
+  if (owner.kind === "unavailable") return owner;
+  const milestoneDefinitions = resolveScheduleDefinitions(context, owner.schedule.localDefinitions);
+  const issues = validateCanonicalProjectSchedule(owner.schedule, milestoneDefinitions);
+  if (issues.length) return { kind: "unavailable", issues };
+  const version = owner.schedule.publishedVersions.find(item => item.versionNumber === versionNumber);
+  if (!version) return { kind: "versionNotFound" };
+  return { ...projectPublishedVersion(version, milestoneDefinitions, context), isCurrent: version === getCurrentPublishedVersion(owner.schedule) };
+}
+
+export function selectCurrentPublishedSchedule(
+  state: PrototypeState, projectId: ProjectId, context: EffectiveMilestoneGovernanceContext,
 ): CurrentPublishedScheduleRead {
   const owner = resolveCanonicalScheduleOwner(state, projectId);
   if (owner.kind === "unavailable") return owner;
-  const selectedSchedule = owner.schedule;
-  const milestoneDefinitions = resolveScheduleDefinitions(context, selectedSchedule.localDefinitions);
-  const localIssues = validateCanonicalProjectSchedule(
-    selectedSchedule,
-    milestoneDefinitions,
-  );
+  const milestoneDefinitions = resolveScheduleDefinitions(context, owner.schedule.localDefinitions);
+  const issues = validateCanonicalProjectSchedule(owner.schedule, milestoneDefinitions);
+  if (issues.length) return { kind: "unavailable", issues };
+  const version = getCurrentPublishedVersion(owner.schedule);
+  return version ? projectPublishedVersion(version, milestoneDefinitions, context) : { kind: "noPublishedSchedule" };
+}
 
-  if (localIssues.length > 0) {
-    return {
-      kind: "unavailable",
-      issues: localIssues,
-    };
-  }
-
-  if (selectedSchedule.publishedVersions.length === 0) {
-    return { kind: "noPublishedSchedule" };
-  }
-
-  const version = getCurrentPublishedVersion(selectedSchedule);
-
-  if (version === null) {
-    throw new Error("Validated non-empty Schedule has no Published version");
-  }
-
+function projectPublishedVersion(
+  version: CanonicalPublishedScheduleVersion,
+  milestoneDefinitions: ReturnType<typeof resolveScheduleDefinitions>,
+  context: EffectiveMilestoneGovernanceContext,
+): Extract<CurrentPublishedScheduleRead, { kind: "published" }> {
   const milestoneRows = orderMilestoneOccurrences(
     version.milestones,
     milestoneDefinitions,
@@ -268,7 +296,7 @@ export function selectCurrentPublishedSchedule(
     return {
       milestoneId: publishedMilestone.milestoneId,
       phase: "-",
-      stage: stage?.displayName ?? "-",
+      stage: milestoneClassificationDisplayName(stage) ?? "-",
       milestone: milestoneDefinitionDisplayName(definition),
       applicability: publishedMilestone.applicability,
       plan: displayDate(publishedMilestone.plan),
@@ -317,7 +345,7 @@ export function selectScheduleWorkingDraft(
     return {
       milestoneId: draftMilestone.milestoneId,
       phase: "-",
-      stage: stage?.displayName ?? "-",
+      stage: milestoneClassificationDisplayName(stage) ?? "-",
       milestone: milestoneDefinitionDisplayName(definition),
       applicability: draftMilestone.applicability,
       plan: draftMilestone.plan,

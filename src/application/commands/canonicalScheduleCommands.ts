@@ -26,8 +26,10 @@ import type {
 } from "../../domain/shared/ids";
 import type { ValidationIssue } from "../../domain/validation/validationIssue";
 import { collectSchedulePublishBlockingFindings } from "./scheduleReviewCommands";
+import { validateSchedulePublishNote } from "../../domain/schedule/scheduleValidation";
 
 export interface CanonicalScheduleCommandContext {
+  readonly referenceDate: DateOnly;
   readonly governance: EffectiveMilestoneGovernanceContext;
   readonly localDefinitions: readonly ProjectLocalMilestoneDefinition[];
   readonly retiredDraftOccurrenceGrants: readonly RetiredDraftOccurrenceGrant[];
@@ -60,6 +62,8 @@ function retainedDraftIssues(schedule: CanonicalProjectSchedule, context: Canoni
 }
 
 export type CanonicalScheduleLifecycleFailureReason =
+  | "published-version-not-found"
+  | "working-draft-exists"
   | "no-working-draft"
   | "milestone-not-found"
   | "validation-failed"
@@ -80,7 +84,7 @@ export type StartScheduleWorkingDraftResult =
       readonly schedule: CanonicalProjectSchedule;
       readonly draft: CanonicalScheduleWorkingDraft;
     }
-  | CanonicalScheduleCommandFailure<"validation-failed">;
+  | CanonicalScheduleCommandFailure<"validation-failed" | "published-version-not-found" | "working-draft-exists">;
 
 export type UpdateScheduleWorkingDraftMilestoneInput =
   | {
@@ -143,6 +147,7 @@ export type CancelScheduleWorkingDraftResult =
 
 export interface PublishScheduleWorkingDraftInput {
   readonly publishedAt: string;
+  readonly versionNote: string;
 }
 
 export type NextPublishedScheduleVersionNumberResult =
@@ -169,10 +174,13 @@ export type PublishScheduleWorkingDraftResult =
 
 export function startScheduleWorkingDraft(
   schedule: CanonicalProjectSchedule,
-  input: { readonly workingDraftId: CanonicalScheduleWorkingDraftId },
+  input: { readonly workingDraftId: CanonicalScheduleWorkingDraftId; readonly basePublishedVersionNumber?: ScheduleVersionNumber },
   context: CanonicalScheduleCommandContext,
 ): StartScheduleWorkingDraftResult {
   if (schedule.workingDraft !== null) {
+    if (input.basePublishedVersionNumber !== undefined) {
+      return { ok: false, reason: "working-draft-exists", issues: [] };
+    }
     return {
       ok: true,
       status: "existing",
@@ -187,9 +195,15 @@ export function startScheduleWorkingDraft(
   if (issues.length > 0) {
     return { ok: false, reason: "validation-failed", issues };
   }
-  const current = getCurrentPublishedVersion(schedule);
+  const current = input.basePublishedVersionNumber === undefined
+    ? getCurrentPublishedVersion(schedule)
+    : schedule.publishedVersions.find(version => version.versionNumber === input.basePublishedVersionNumber);
+  if (input.basePublishedVersionNumber !== undefined && current === undefined) {
+    return { ok: false, reason: "published-version-not-found", issues: [] };
+  }
   const draft: CanonicalScheduleWorkingDraft = {
     workingDraftId: input.workingDraftId,
+    basePublishedVersionNumber: current?.versionNumber ?? null,
     milestones: current?.milestones.map((milestone) => ({ ...milestone })) ?? [],
     reviewSessionIds: [],
     importCandidates: [],
@@ -296,8 +310,12 @@ export function removeScheduleWorkingDraftMilestone(
   input: RemoveScheduleWorkingDraftMilestoneInput,
   context: CanonicalScheduleCommandContext,
 ): RemoveScheduleWorkingDraftMilestoneResult {
-  const current = resolveEditableDraft(schedule, context);
-  if (!current.ok) return current;
+  // Removal is cleanup, not authorization to continue using a retired occurrence.
+  // Keep structural checks, but do not require current retained lineage to delete.
+  if (schedule.workingDraft === null) return { ok: false, reason: "no-working-draft", issues: [] };
+  const issues = validateScheduleWorkingDraft(schedule.workingDraft, definitionsFor(schedule, context));
+  if (issues.length > 0) return { ok: false, reason: "validation-failed", issues };
+  const current = { draft: schedule.workingDraft };
   const index = current.draft.milestones.findIndex(
     ({ milestoneId }) => milestoneId === input.milestoneId,
   );
@@ -380,6 +398,7 @@ export function publishScheduleWorkingDraft(
   }
   const draft = schedule.workingDraft;
   const issues = [
+    ...validateSchedulePublishNote(input.versionNote),
     ...validateCanonicalProjectSchedule(schedule, definitionsFor(schedule, context)),
     ...collectSchedulePublishBlockingFindings(schedule, context),
     ...reviewClosureIssues(schedule),
@@ -393,7 +412,7 @@ export function publishScheduleWorkingDraft(
   }
   const version: CanonicalPublishedScheduleVersion = Object.freeze({
     versionNumber: next.versionNumber,
-    versionNote: null,
+    versionNote: input.versionNote.trim(),
     publishedAt: input.publishedAt,
     milestones: Object.freeze(draft.milestones.map((milestone) => Object.freeze({ ...milestone }))),
   });

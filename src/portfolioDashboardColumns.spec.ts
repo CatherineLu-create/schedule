@@ -114,9 +114,9 @@ describe("Portfolio visual schema", () => {
   });
 
   // Mutation: flattening domains, wrong colspans or adding a diagnostic leaf.
-  it("keeps the fixed 11/30/7 schema and subgroup hierarchy without diagnostics", () => {
+  it("keeps the fixed 12/30/7 schema and subgroup hierarchy without diagnostics", () => {
     expect(portfolioProjectInfoColumns.map(({ key, label }) => [key, label])).toEqual([
-      ["projectStatus", "Status"], ["year", "Year"], ["name", "STN Project Name"], ["qciProjectName", "QCI Model Name"],
+      ["projectStatus", "Status"], ["year", "Year"], ["name", "STN Project Name"], ["qciProjectName", "QCI Model Name"], ["projectType", "Project Type"],
       ["customer", "Customer"], ["category", "Category"], ["productLine", "Product Line"], ["size", "Panel Size"], ["cpu", "CPU"], ["gpu", "GPU"], ["pcbNumber", "PCB#"],
     ]);
     expect(portfolioScheduleColumnGroups.flatMap((group) => group.columns.map((column) => column.key))).toEqual(portfolioScheduleColumnMappings.map((entry) => entry.key));
@@ -124,15 +124,15 @@ describe("Portfolio visual schema", () => {
       ["team:qciPm", "QCI PM"], ["team:qciPjm", "QCI PjM"], ["team:acerPm", "Acer PM"],
       ["team:meOwner", "ME Owner"], ["team:eeOwner", "EE Owner"], ["team:thermalOwner", "Thermal Owner"], ["team:biosOwner", "BIOS Owner"],
     ]);
-    expect(portfolioColumns).toHaveLength(48);
-    expect(new Set(portfolioColumns.map((column) => column.key)).size).toBe(48);
+    expect(portfolioColumns).toHaveLength(49);
+    expect(new Set(portfolioColumns.map((column) => column.key)).size).toBe(49);
     expect(portfolioDomainGroups).toEqual([
-      { key: "project", label: "PROJECT INFORMATION", colSpan: 11 },
+      { key: "project", label: "PROJECT INFORMATION", colSpan: 12 },
       { key: "schedule", label: "SCHEDULE", colSpan: 30 },
       { key: "team", label: "TEAM MEMBER", colSpan: 7 },
     ]);
     expect(portfolioSubgroups.map(({ label, colSpan }) => [label, colSpan])).toEqual([
-      ["Core fields", 11], ["Design", 2], ["ME Portion", 4], ["Thermal", 1], ["A1", 4], ["C1-stage", 6], ["C2-stage", 6], ["RAMP-stage", 6], ["MDRR", 1], ["Project Roles", 3], ["Standard Function Owners", 4],
+      ["Core fields", 12], ["Design", 2], ["ME Portion", 4], ["Thermal", 1], ["A1", 4], ["C1-stage", 6], ["C2-stage", 6], ["RAMP-stage", 6], ["MDRR", 1], ["Project Roles", 3], ["Standard Function Owners", 4],
     ]);
     expect(portfolioColumns.some(({ key, label }) => /Current Published|Official|Schedule Status|Diagnostic/i.test(`${key} ${label}`))).toBe(false);
   });
@@ -141,7 +141,7 @@ describe("Portfolio visual schema", () => {
   it("preserves four Project context columns and enforces column minimum widths", () => {
     expect(portfolioStickyColumnKeys).toEqual(["projectStatus", "year", "name", "qciProjectName"]);
     expect(portfolioProjectInfoColumns.map(({ defaultWidth, minWidth }) => [defaultWidth, minWidth])).toEqual([
-      [100, 92], [76, 68], [215, 190], [170, 150], [118, 105], [125, 110], [145, 130], [90, 82], [200, 175], [135, 120], [92, 82],
+      [100, 92], [76, 68], [215, 190], [170, 150], [118, 105], [118, 105], [125, 110], [145, 130], [90, 82], [200, 175], [135, 120], [92, 82],
     ]);
     for (const column of portfolioColumns) {
       expect(column.defaultWidth).toBeGreaterThanOrEqual(column.minWidth);

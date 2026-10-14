@@ -11,6 +11,7 @@ import {
 } from "./projectMasterForm";
 
 const populatedForm: ProjectMasterForm = {
+  projectType: "new",
   stnProjectName: "Runtime Project",
   qciModelName: "RUNTIME-QCI",
   acerModelName: "Runtime Acer Model",
@@ -48,6 +49,7 @@ describe("Project Master form mappings", () => {
     const input = toCreateProjectMasterInput(populatedForm);
 
     expect(input.basicInformation).toEqual({
+      projectType: "new",
       year: 2030,
       customer: populatedForm.customerId,
       category: null,
@@ -279,4 +281,18 @@ describe("Mechanical form validation", () => {
       }),
     ).toMatchObject({ grossWeightG: "Enter a valid number." });
   });
+});
+
+it("preserves missing legacy Type and maps explicit Type through the form", () => {
+ const master = devProject003.master;
+ expect(toProjectMasterForm(master).projectType).toBe("");
+ expect(overwriteProjectMasterFromForm(master, toProjectMasterForm(master)).basicInformation).not.toHaveProperty("projectType");
+ expect(toCreateProjectMasterInput({ ...emptyProjectMasterForm, projectType: "new" }).basicInformation.projectType).toBe("new");
+});
+
+it("round-trips an explicit legacy null Type without assigning New", () => {
+ const master = { ...devProject003.master, basicInformation: { ...devProject003.master.basicInformation, projectType: null } };
+ const form = toProjectMasterForm(master);
+ expect(form.projectType).toBe("");
+ expect(overwriteProjectMasterFromForm(master, form).basicInformation.projectType).toBeNull();
 });

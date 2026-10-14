@@ -29,7 +29,7 @@ export interface CanonicalPublishedScheduleMilestone {
 
 export interface CanonicalPublishedScheduleVersion {
   readonly versionNumber: ScheduleVersionNumber;
-  readonly versionNote: string | null;
+  readonly versionNote?: string | null;
   readonly publishedAt: string;
   readonly milestones: readonly CanonicalPublishedScheduleMilestone[];
 }

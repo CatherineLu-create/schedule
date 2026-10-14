@@ -41,6 +41,7 @@ function followUp() { return screen.getByRole("region", { name: "Milestone Follo
 function openManta() { fireEvent.click(within(followUp()).getByRole("button", { name: "Open Project Manta" })); }
 function publish() {
   fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+  fireEvent.change(screen.getByLabelText("Publish Note"), { target: { value: "Milestone adoption" } });
   fireEvent.click(within(screen.getByRole("dialog", { name: "Publish Working Draft" })).getByRole("button", { name: "Publish" }));
 }
 

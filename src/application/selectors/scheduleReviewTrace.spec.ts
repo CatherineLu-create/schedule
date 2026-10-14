@@ -1,3 +1,4 @@
+import { parseDateOnly as testReferenceDate } from "../../domain/shared/dateOnly";
 import { describe, expect, it } from "vitest";
 import { createEmptyCanonicalProjectSchedule, type CanonicalProjectSchedule } from "../../domain/schedule/officialSchedule";
 import type { CommandResult } from "../../domain/governance/milestoneGovernance";
@@ -22,7 +23,7 @@ function successful<T extends { readonly ok: boolean }>(result: T): Extract<T, {
   return result as Extract<T, { readonly ok: true }>;
 }
 function context(schedule: CanonicalProjectSchedule): CanonicalScheduleCommandContext {
-  return { governance: initialGovernanceContext(), localDefinitions: schedule.localDefinitions, retiredDraftOccurrenceGrants: [] };
+  return { referenceDate: testReferenceDate("2026-10-14")!, governance: initialGovernanceContext(), localDefinitions: schedule.localDefinitions, retiredDraftOccurrenceGrants: [] };
 }
 const sessionId = toScheduleReviewSessionId("trace-import-session");
 const manualId = toScheduleReviewSessionId("trace-manual-session");
@@ -50,7 +51,7 @@ function reviewed(local = false) {
   return schedule;
 }
 function publish(schedule: CanonicalProjectSchedule) {
-  return successful(publishScheduleWorkingDraft(schedule, { publishedAt: "2026-10-01T04:00:00Z" }, context(schedule))).schedule;
+  return successful(publishScheduleWorkingDraft(schedule, { versionNote: "Schedule update", publishedAt: "2026-10-01T04:00:00Z" }, context(schedule))).schedule;
 }
 function edited(schedule: CanonicalProjectSchedule, date: string) {
   return successful(updateScheduleWorkingDraftMilestone(schedule, { milestoneId: toMilestoneId("trace-row-0"), field: "plan", value: parseDateOnly(date) }, context(schedule))).schedule;

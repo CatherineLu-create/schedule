@@ -86,6 +86,7 @@ const workingDraftProps: ScheduleWorkspaceProps = {
   ...baseProps,
   draftRead: { kind: "workingDraft", draft, milestoneRows: [workingDraftRow] },
   nextVersionLabel: "Publish as v04",
+  officialRead: { kind: "published", version: { versionNumber: toScheduleVersionNumber(3), versionNote: null, publishedAt: "legacy", milestones: [] }, versionLabel: "Published v03", milestoneRows: [] },
 };
 
 beforeEach(() => vi.clearAllMocks());
@@ -315,6 +316,7 @@ describe("Schedule Workspace presentation", () => {
   it("keeps a second pending field guarded when field Cancel closes only the first edit", () => {
     render(<ScheduleWorkspace {...workingDraftProps} />);
     fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    fireEvent.change(screen.getByLabelText("Publish Note"), { target: { value: "Schedule update" } });
     fireEvent.change(screen.getByLabelText(/^Plan for Kickoff occurrence/), {
       target: { value: "2027-03-19" },
     });
@@ -645,6 +647,7 @@ describe("Schedule Workspace presentation", () => {
     expect(onPublishDraft).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Publish" }));
     dialog = screen.getByRole("dialog", { name: "Publish Working Draft" });
+    fireEvent.change(within(dialog).getByLabelText("Publish Note"), { target: { value: "Schedule update" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Publish" }));
     expect(onPublishDraft).toHaveBeenCalledTimes(1);
     expect(screen.queryByLabelText("Version note")).not.toBeInTheDocument();
@@ -689,18 +692,20 @@ describe("Schedule Workspace presentation", () => {
     expect(onPublishDraft).not.toHaveBeenCalled();
   });
 
-  it("resets confirmation on Project change and after a failed void lifecycle callback", () => {
+  it("resets confirmation on Project change and retains the note after a rejected Publish", () => {
     const { rerender } = render(<ScheduleWorkspace {...workingDraftProps} />);
     fireEvent.click(screen.getByRole("button", { name: "Publish" }));
     rerender(<ScheduleWorkspace {...workingDraftProps} projectId={toProjectId("other-project")} />);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    fireEvent.change(screen.getByLabelText("Publish Note"), { target: { value: "Retry this note" } });
     fireEvent.click(within(screen.getByRole("dialog", { name: "Publish Working Draft" }))
       .getByRole("button", { name: "Publish" }));
     expect(onPublishDraft).toHaveBeenCalledTimes(1);
     rerender(<ScheduleWorkspace {...workingDraftProps} projectId={toProjectId("other-project")}
       feedback={["The next Published version is unavailable."]} />);
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByLabelText("Publish Note")).toHaveValue("Retry this note");
     expect(screen.getByText("The next Published version is unavailable.")).toBeInTheDocument();
   });
 
@@ -719,4 +724,20 @@ describe("Schedule Workspace presentation", () => {
       .getByRole("button", { name: "Discard Draft" }));
     expect(onCancelDraft).toHaveBeenCalledTimes(1);
   });
+});
+
+it("uses SSL/GL for canonical custom Stage metadata in Schedule and Portfolio", () => {
+ const initial = initialGovernanceContext();
+ const stage = { ...initial.stageGroupsForHistoricalResolution[0]!, id: toStageGroupId("custom-stage-fcs"), displayName: "FCS" };
+ const definition = { ...initial.addablePublicDefinitions[0]!, id: toMilestoneDefinitionId("custom-stage-milestone"), stageGroupId: stage.id };
+ const context = { ...initial, stageGroupsForHistoricalResolution: [...initial.stageGroupsForHistoricalResolution, stage],
+  definitionsForHistoricalResolution: [...initial.definitionsForHistoricalResolution, definition],
+  addablePublicDefinitions: [...initial.addablePublicDefinitions, definition], portfolioColumnDefinitions: [definition] };
+ const state = { projects: [devProject001], schedules: [{ ...createEmptyCanonicalProjectSchedule(devProject001.id), workingDraft: {
+  ...draft, milestones: [{ ...draft.milestones[0]!, milestoneDefinitionId: definition.id }] } }] };
+ const read = selectScheduleWorkingDraft(state, devProject001.id, context);
+ expect(read.kind).toBe("workingDraft");
+ if (read.kind === "workingDraft") expect(read.milestoneRows[0]!.stage).toBe("SSL/GL");
+ expect(createPortfolioVisibleSchema(context).scheduleMappings[0]!.groupLabel).toBe("SSL/GL");
+ expect(stage.displayName).toBe("FCS");
 });

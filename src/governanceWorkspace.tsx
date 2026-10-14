@@ -2,7 +2,7 @@ import React from "react";
 import type { EffectiveMilestoneGovernanceContext } from "./application/governance/effectiveMilestoneGovernanceContext";
 import { selectEffectiveProjectMilestoneRequirements } from "./application/governance/projectMilestoneRequirements";
 import { insertionDisplayOrder, orderMilestoneDefinitions } from "./application/milestoneDefinitionOrdering";
-import { milestoneDefinitionDisplayName } from "./application/milestoneDefinitionPresentation";
+import { milestoneDefinitionDisplayName, milestoneClassificationDisplayName } from "./application/milestoneDefinitionPresentation";
 import { statusCatalog } from "./config/v2/referenceData";
 import { GovernanceClassificationControls } from "./governanceClassificationControls";
 import { GovernanceAdvancedTools, type GovernanceAdvancedToolsProps } from "./governanceAdvancedTools";
@@ -54,8 +54,8 @@ function DefinitionName({ release, id }: { readonly release: Candidate; readonly
 }
 function definitionDescription(release: Candidate, id: string): string {
   const definition = release.definitions.find(item => item.id === id);
-  return [definitionName(release, id), release.stageGroups.find(item => item.id === definition?.stageGroupId)?.displayName ?? "未設定階段",
-    definition?.milestoneTypeId === null ? "無類型" : release.milestoneTypes.find(item => item.id === definition?.milestoneTypeId)?.displayName ?? "未設定類型"].join("｜");
+  return [definitionName(release, id), milestoneClassificationDisplayName(release.stageGroups.find(item => item.id === definition?.stageGroupId)) ?? "未設定階段",
+    definition?.milestoneTypeId === null ? "無類型" : milestoneClassificationDisplayName(release.milestoneTypes.find(item => item.id === definition?.milestoneTypeId)) ?? "未設定類型"].join("｜");
 }
 function DefinitionList({ release, ids, action, describe = false }: { readonly release: Candidate; readonly ids: readonly string[]; readonly action?: string; readonly describe?: boolean }) {
   return ids.length === 0 ? <p className="text-slate-500">無</p> : <ul className="space-y-1 break-words text-sm">
@@ -117,7 +117,7 @@ function PublishChanges({ current, preview }: { readonly current: MilestoneGover
     <div className="grid gap-4 md:grid-cols-2">
       {classificationChanges.filter(([, ids]) => ids.length > 0).map(([heading, ids, catalog]) => <div key={heading}>
         <h3 className="font-medium">{heading}</h3>
-        <ul className="text-sm">{ids.map(id => <li key={id}>{catalog.find(item => item.id === id)?.displayName}</li>)}</ul>
+        <ul className="text-sm">{ids.map(id => <li key={id}>{milestoneClassificationDisplayName(catalog.find(item => item.id === id))}</li>)}</ul>
       </div>)}
       {([["新增公版", preview.diff.addedDefinitionIds], ["停用公版", preview.diff.retiredDefinitionIds], ["里程碑資料變更", preview.diff.changedDefinitionIds]] as const).filter(([, ids]) => ids.length > 0).map(([heading, ids]) =>
         <div key={heading}><h3 className="font-medium">{heading}</h3><DefinitionList release={candidate} ids={ids} describe /></div>)}
@@ -221,7 +221,7 @@ export function GovernanceWorkspace({ state, context, projects, schedules, previ
     <section aria-label="自動提醒類型" className={panel}>
       <h2 className="font-semibold">自動提醒類型</h2>
       <p className="text-sm text-slate-600">以下類型固定自動提醒</p>
-      <ul className="mt-2 flex flex-wrap gap-3">{context.milestoneTypesForHistoricalResolution.filter(item => context.automaticAttentionTypeIds.has(item.id)).map(item => <li className="rounded-full bg-slate-100 px-3 py-1 text-sm" key={item.id}>{item.displayName}</li>)}</ul>
+      <ul className="mt-2 flex flex-wrap gap-3">{context.milestoneTypesForHistoricalResolution.filter(item => context.automaticAttentionTypeIds.has(item.id)).map(item => <li className="rounded-full bg-slate-100 px-3 py-1 text-sm" key={item.id}>{milestoneClassificationDisplayName(item)}</li>)}</ul>
     </section>
     {issues.length > 0 && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900"><Issues issues={issues} release={candidate ?? current} /></div>}
     {draft && candidate && <section aria-label="公版草稿" className={`${panel} space-y-5 border-sky-300`}>
@@ -233,10 +233,10 @@ export function GovernanceWorkspace({ state, context, projects, schedules, previ
         <legend className="px-1 font-medium">新增公版里程碑</legend>
         <label className="text-sm">公版里程碑名稱<input className={control} value={name} onChange={event => setName(event.target.value)} /></label>
         <label className="text-sm">階段<select className={control} value={stage} onChange={event => { setStage(event.target.value); setInsertionError(""); }}>
-          <option value="">選擇階段</option>{legalStages.map(item => <option key={item.id} value={item.id}>{item.displayName}</option>)}
+          <option value="">選擇階段</option>{legalStages.map(item => <option key={item.id} value={item.id}>{milestoneClassificationDisplayName(item)}</option>)}
         </select></label>
         <label className="text-sm">類型<select className={control} value={type} onChange={event => setType(event.target.value)}>
-          <option value="">無類型</option>{legalTypes.map(item => <option key={item.id} value={item.id}>{item.displayName}</option>)}
+          <option value="">無類型</option>{legalTypes.map(item => <option key={item.id} value={item.id}>{milestoneClassificationDisplayName(item)}</option>)}
         </select></label>
         <label className="text-sm">插入位置<select className={control} value={insertionPosition} onChange={event => { setInsertionPosition(event.target.value); setInsertionError(""); }}>
           <option value="end">放在此階段最後</option><option value="start">放在此階段最前面</option>
@@ -254,8 +254,8 @@ export function GovernanceWorkspace({ state, context, projects, schedules, previ
           <thead><tr>{["里程碑", "階段", "類型", "狀態", ...settings.map(([, label]) => label), "停用"].map((label, index) => <th className={`sticky top-0 bg-slate-50 px-3 py-2 ${index === 0 ? "left-0 z-30 min-w-[240px]" : "z-20"}`} key={label} scope="col">{label}</th>)}</tr></thead>
           <tbody>{orderedCandidateDefinitions.map(definition => <tr className="border-t border-slate-200 align-top" key={definition.id}>
             <th scope="row" className="sticky left-0 z-10 min-w-[240px] bg-white px-3 py-3 font-medium"><DefinitionName release={candidate} id={definition.id} /></th>
-            <td className="px-3 py-3">{candidate.stageGroups.find(item => item.id === definition.stageGroupId)?.displayName ?? "未設定階段"}</td>
-            <td className="px-3 py-3">{definition.milestoneTypeId === null ? "無類型" : candidate.milestoneTypes.find(item => item.id === definition.milestoneTypeId)?.displayName ?? "未設定類型"}</td>
+            <td className="px-3 py-3">{milestoneClassificationDisplayName(candidate.stageGroups.find(item => item.id === definition.stageGroupId)) ?? "未設定階段"}</td>
+            <td className="px-3 py-3">{definition.milestoneTypeId === null ? "無類型" : milestoneClassificationDisplayName(candidate.milestoneTypes.find(item => item.id === definition.milestoneTypeId)) ?? "未設定類型"}</td>
             <td className="px-3 py-3">{current.definitions.some(item => item.id === definition.id) ? "已發布" : "僅草稿"}<br />{definition.active ? "啟用" : "未啟用"} · {definition.reviewStatus === "reviewed" ? "已確認" : "待確認"}<br />{candidate.addableDefinitionIds.includes(definition.id) ? "可新增" : "不可新增"}</td>
             {settings.map(([field, label]) => {
               if (field === "additionalAttentionDefinitionIds" && (context.systemAutomaticAttentionDefinitionIds.has(definition.id)
@@ -352,7 +352,7 @@ export function GovernanceWorkspace({ state, context, projects, schedules, previ
         <SettingsSummary release={release} />
         <details><summary className="cursor-pointer text-sm">已發布里程碑 · {release.definitions.length}</summary>
           <ul className="space-y-1 text-sm">{definitions.map(definition => <li className="break-words" key={definition.id}>
-            <DefinitionName release={release} id={definition.id} /> · {release.stageGroups.find(stage => stage.id === definition.stageGroupId)?.displayName ?? "未設定階段"} · {definition.milestoneTypeId === null ? "無類型" : release.milestoneTypes.find(type => type.id === definition.milestoneTypeId)?.displayName ?? "未設定類型"} · {definition.active ? "啟用" : "未啟用"} · {definition.reviewStatus === "reviewed" ? "已確認" : "待確認"} · {release.addableDefinitionIds.includes(definition.id) ? "可新增" : "不可新增"}
+            <DefinitionName release={release} id={definition.id} /> · {milestoneClassificationDisplayName(release.stageGroups.find(stage => stage.id === definition.stageGroupId)) ?? "未設定階段"} · {definition.milestoneTypeId === null ? "無類型" : milestoneClassificationDisplayName(release.milestoneTypes.find(type => type.id === definition.milestoneTypeId)) ?? "未設定類型"} · {definition.active ? "啟用" : "未啟用"} · {definition.reviewStatus === "reviewed" ? "已確認" : "待確認"} · {release.addableDefinitionIds.includes(definition.id) ? "可新增" : "不可新增"}
           </li>)}</ul>
         </details>
       </article>)}

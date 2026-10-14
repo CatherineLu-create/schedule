@@ -1,5 +1,5 @@
 import { compareDateOnly, type DateOnly } from "../shared/dateOnly";
-import type { ValidationIssue } from "../validation/validationIssue";
+import type { ValidationIssue, ValidationTarget } from "../validation/validationIssue";
 import type {
 	PublishedScheduleMilestone,
 	PublishedScheduleVersion,
@@ -9,6 +9,18 @@ import type {
 
 export interface ScheduleValidationContext {
 	readonly referenceDate: DateOnly;
+}
+
+/** New publication input only: legacy Published metadata remains readable. */
+export function validateSchedulePublishNote(value: unknown): readonly ValidationIssue[] {
+	const note = typeof value === "string" ? value.trim() : "";
+	if (note.length > 0 && note.length <= 200) return [];
+	return [{
+		code: note.length > 200 ? "schedule.publish.note-too-long" : "schedule.publish.note-required",
+		domain: "schedule", source: "data", severity: "blocking",
+		message: note.length > 200 ? "Publish Note must be 200 characters or fewer." : "Publish Note is required.",
+		target: { section: "schedule.workingDraft", field: "versionNote" },
+	}];
 }
 
 type ScheduleMilestoneDates = Pick<
@@ -40,11 +52,8 @@ function validateScheduleMilestoneData(
 	row: ScheduleMilestoneDates,
 	context: ScheduleValidationContext,
 ): ValidationIssue[] {
-	if (row.applicability === "notApplicable") {
-		return [];
-	}
-
-	const issues: ValidationIssue[] = [];
+	const issues = [...validateFutureActualDate(row.actual, context, { section: "schedule", entityId: row.rowId, field: "actual" })];
+	if (row.applicability === "notApplicable") return issues;
 
 	if (row.plan === null && row.actual === null) {
 		issues.push(
@@ -64,21 +73,6 @@ function validateScheduleMilestoneData(
 				severity: "blocking",
 				message: "Actual date requires a Plan date.",
 				field: "plan",
-			}),
-		);
-	}
-
-	if (
-		row.actual !== null &&
-		compareDateOnly(row.actual, context.referenceDate) > 0
-	) {
-		issues.push(
-			scheduleIssue(row, {
-				code: "schedule.data.future-actual",
-				source: "data",
-				severity: "advisory",
-				message: "Actual date is later than the validation reference date.",
-				field: "actual",
 			}),
 		);
 	}
@@ -172,4 +166,16 @@ export function validatePublishedScheduleVersion(
 	return version.milestones.flatMap((row) =>
 		validateScheduleMilestoneData(row, context),
 	);
+}
+
+/** Shared publication rule; the action boundary owns the local calendar clock. */
+export function validateFutureActualDate(
+  actual: DateOnly | null,
+  context: ScheduleValidationContext,
+  target: ValidationTarget,
+): readonly ValidationIssue[] {
+  return actual !== null && compareDateOnly(actual, context.referenceDate) > 0
+    ? [{ code: "schedule.data.future-actual", domain: "schedule", source: "data", severity: "blocking",
+        message: "Actual date cannot be later than today.", target: { ...target, field: "actual" } }]
+    : [];
 }

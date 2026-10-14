@@ -60,6 +60,7 @@ const createInput: CreateProjectInput = {
 		...devProject001.master,
 		basicInformation: {
 			...devProject001.master.basicInformation,
+        projectType: "new" as const,
 			year: 2028,
 			productLine: productLineReferenceFixtures[0]!.id,
 			stnProjectName: "DEV Workflow Project",
@@ -304,6 +305,7 @@ describe("ActionDisposition", () => {
 					...devProject002.master,
 					basicInformation: {
 						...devProject002.master.basicInformation,
+        projectType: "new" as const,
 						year: devProject003.master.basicInformation.year,
 						productLine: devProject003.master.basicInformation.productLine,
 						stnProjectName:

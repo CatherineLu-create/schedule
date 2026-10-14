@@ -56,7 +56,7 @@ function readConfiguredField(
 ): ProjectMasterLeafValue {
 	switch (descriptor.section) {
 		case "basicInformation":
-			return master.basicInformation[descriptor.field];
+			return master.basicInformation[descriptor.field] ?? null;
 		case "platformHardware":
 			return master.platformHardware[descriptor.field];
 		case "leverage":
