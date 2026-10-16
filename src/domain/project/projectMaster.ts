@@ -3,6 +3,8 @@ import type { CatalogItemId, ProjectId } from "../shared/ids";
 export type ProjectType = "new" | "regression";
 
 export interface ProjectMasterBasicInformation {
+	/** Formal PM-facing Project Remark. Never fall back to other.remark. */
+	readonly remark?: string | null;
   /** Missing/null is reserved for Projects created before this classification. */
   readonly projectType?: ProjectType | null;
   readonly status: CatalogItemId | null;
@@ -64,6 +66,8 @@ export interface ProjectMasterMechanical {
 }
 
 export interface ProjectMasterOther {
+  /** Legacy/internal compatibility metadata: preserve values for existing objects and callers.
+   * Never expose in PM UI, exports or search, or migrate into the formal Project Remark. */
   readonly remark: string | null;
 }
 
@@ -75,4 +79,8 @@ export interface ProjectMaster {
   readonly modelRegulatory: ProjectMasterModelRegulatory;
   readonly mechanical: ProjectMasterMechanical;
   readonly other: ProjectMasterOther;
+}
+
+export function normalizeProjectRemark(value: string | null | undefined): string | null {
+	return value?.trim() || null;
 }

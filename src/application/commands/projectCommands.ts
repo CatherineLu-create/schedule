@@ -1,8 +1,9 @@
 import { findSameNameProjects } from "../identity/projectNameMatches";
 import type { Project } from "../../domain/project/project";
-import type { ProjectMaster } from "../../domain/project/projectMaster";
+import { normalizeProjectRemark, type ProjectMaster } from "../../domain/project/projectMaster";
 import {
 	validateProjectMasterCompleteness,
+	validateProjectRemark,
 	type ProjectMasterCompletenessField,
 } from "../../domain/project/projectMasterValidation";
 import type {
@@ -64,6 +65,7 @@ export interface CreateProjectContext {
 }
 
 export type CreateProjectResult =
+	| { readonly status: "rejected"; readonly reason: "fieldValidation"; readonly fieldErrors: { readonly remark: string } }
   | { readonly status: "rejected"; readonly reason: "projectTypeValidation"; readonly issues: readonly ValidationIssue[] }
 	| {
 			readonly status: "rejected";
@@ -109,6 +111,7 @@ function createInitialProjectMaster(
 	return {
 		basicInformation: {
 			...input.basicInformation,
+			...(input.basicInformation.remark === undefined ? {} : { remark: normalizeProjectRemark(input.basicInformation.remark) }),
 			status: input.basicInformation.status ?? defaults.statusId,
 			customer: input.basicInformation.customer ?? defaults.customerId,
 		},
@@ -174,6 +177,8 @@ export function createProject(
 	input: CreateProjectInput,
 	context: CreateProjectContext,
 ): CreateProjectResult {
+	const remarkError = validateProjectRemark(input.master.basicInformation.remark);
+	if (remarkError !== undefined) return { status: "rejected", reason: "fieldValidation", fieldErrors: { remark: remarkError } };
 	const missingFields = missingCreateFields(input);
 	if (missingFields.length > 0) {
 		return { status: "rejected", reason: "requiredFields", missingFields };
@@ -223,6 +228,7 @@ export interface UpdateProjectMasterInput {
 }
 
 export interface UpdateProjectMasterResult {
+	readonly fieldErrors?: { readonly remark?: string };
 	readonly project: Project;
 	readonly issues: readonly ValidationIssue[];
 }
@@ -232,6 +238,8 @@ export function updateProjectMaster(
 	input: UpdateProjectMasterInput,
   context: { readonly existingProjects: readonly Project[] },
 ): UpdateProjectMasterResult {
+	const remarkError = validateProjectRemark(input.master.basicInformation.remark);
+	if (remarkError !== undefined) return { project, issues: [], fieldErrors: { remark: remarkError } };
 	const previousBasic = project.master.basicInformation;
 	const nextBasic = input.master.basicInformation;
   const relevantChange = (previousBasic.projectType ?? null) !== (nextBasic.projectType ?? null)
@@ -264,7 +272,10 @@ export function updateProjectMaster(
 		issues,
 		project: {
 			...project,
-			master: input.master,
+			master: nextBasic.remark === undefined ? input.master : {
+				...input.master,
+				basicInformation: { ...nextBasic, remark: normalizeProjectRemark(nextBasic.remark) },
+			},
 			identityAliases: aliases,
 		},
 	};

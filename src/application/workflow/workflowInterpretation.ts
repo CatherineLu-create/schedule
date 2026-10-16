@@ -128,7 +128,7 @@ export type UpdateProjectMasterDisposition = ActionDisposition<
 export function interpretUpdateProjectMasterResult(
 	result: UpdateProjectMasterResult,
 ): UpdateProjectMasterDisposition {
-	return countBlocking(result.issues) > 0
+	return countBlocking(result.issues) > 0 || Object.keys(result.fieldErrors ?? {}).length > 0
 		? { kind: "blocked", result }
 		: { kind: "completed", result };
 }

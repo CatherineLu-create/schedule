@@ -64,7 +64,9 @@ export function ProjectMasterReportView({ state, rows, onBack, onExport }: Proje
             {filteredRows.map(row => {
               const values = projectMasterReportCells(state, row, columns);
               return <tr key={row.projectId} data-project-id={row.projectId} className="group border-t border-slate-100 text-slate-700">
-                {columns.map((column, index) => <td key={column.key} data-column-key={column.key} data-group={column.group} style={{ left: offsets[index] }} className={`break-words bg-white px-2 py-3.5 align-middle sm:px-4 group-hover:bg-slate-50 ${offsets[index] === undefined ? "" : "sticky z-10"} ${boundary(index)}`}>{values[index]}</td>)}
+                {columns.map((column, index) => <td key={column.key} data-column-key={column.key} data-group={column.group} style={{ left: offsets[index] }} className={`break-words bg-white px-2 py-3.5 align-middle sm:px-4 group-hover:bg-slate-50 ${column.key === "projectRemark" ? "whitespace-pre-wrap" : ""} ${offsets[index] === undefined ? "" : "sticky z-10"} ${boundary(index)}`}>
+                  {(column.key === "projectRemark" || column.key === "projectType") && values[index] === "" ? "\u2014" : values[index]}
+                </td>)}
               </tr>;
             })}
             {filteredRows.length === 0 && <tr><td colSpan={columns.length} className="px-4 py-10 text-slate-500">No projects found</td></tr>}

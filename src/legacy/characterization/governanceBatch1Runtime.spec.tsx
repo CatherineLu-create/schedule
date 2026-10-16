@@ -35,7 +35,7 @@ const kickoff = "milestone-design-kickoff";
 const idFix = "milestone-design-id-fix";
 const mdrr = "milestone-mdrr";
 const initialTypeLabels = ["No Type", "G/O", "SMT", "Pre-Build", "Close", "Test", "Certification", "Preparation"];
-const projectHeaders = ["Status", "Year", "STN Project Name", "QCI Model Name", "Project Type", "Customer", "Category", "Product Line", "Panel Size", "CPU", "GPU", "PCB#"];
+const projectHeaders = ["Status", "Year", "STN Project Name", "QCI Model Name", "Project Type", "Project Remark", "Customer", "Category", "Product Line", "Panel Size", "CPU", "GPU", "PCB#"];
 const scheduleHeaders = ["Kickoff", "ID fix", "ME drawing", "Mockup & DFM", "Tooling start + T1", "ME material for C", "Thermal module for C", "A1 G/O", "A1 SMT", "A1 Test", "A1 Close", "C1 G/O", "C1 SMT", "C1 Pre-Build", "C1 System Build", "C1 Test", "C1 Close", "C2 G/O", "C2 SMT", "C2 Pre-Build", "C2 System Build", "C2 Test", "C2 Close", "RAMP G/O", "ME signoff", "RAMP SMT", "RAMP Pre-build", "RAMP Main build", "SSL/GL", "MDRR"];
 const teamHeaders = ["QCI PM", "QCI PjM", "Acer PM", "ME Owner", "EE Owner", "Thermal Owner", "BIOS Owner"];
 
@@ -438,7 +438,7 @@ describe("Batch 1 integrated governance runtime", () => {
     load("fixable-validation");
     expect(schedule()).toEqual(beforeBlocked); expect(schedule().workingDraft!.workingDraftId).toBe(draftId);
     dashboard();
-    expect(exportGrid()[1][12]).toBe("");
+    expect(exportGrid()[1][13]).toBe("");
     expect(attention().due.matches).toEqual([]);
     advanced();
     change("計畫處理方式", "set", candidate(3)); change("計畫日期", "2026-10-17", candidate(3)); confirm(3);
@@ -449,7 +449,7 @@ describe("Batch 1 integrated governance runtime", () => {
     expect(getCurrentPublishedVersion(schedule())!.milestones.slice(published ? 1 : 0).map(row => [row.milestoneDefinitionId, row.plan, row.actual])).toEqual([
       [kickoff, "2026-10-15", null], [idFix, "2026-10-16", null], ["milestone-me-portion-me-drawing", "2026-10-17", null],
     ]);
-    dashboard(); expect(exportGrid()[1][12]).toBe("Applicable\nP: 2026/10/15\nA: —");
+    dashboard(); expect(exportGrid()[1][13]).toBe("Applicable\nP: 2026/10/15\nA: —");
     openProject();
     expect(screen.queryByRole("region", { name: "匯入審核" })).not.toBeInTheDocument();
     expect(document.querySelector('input[type="file"], textarea')).toBeNull();
@@ -480,7 +480,7 @@ describe("Batch 1 integrated governance runtime", () => {
     expect(history).toHaveTextContent("Kickoff | 適用 | 計畫 2026-10-20");
     expect(history).toHaveTextContent("最終發布版本未保留此列");
     expect(history.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/i);
-    dashboard(); expect(exportGrid()[1][12]).toBe("Applicable\nP: 2026/10/20\nA: —");
+    dashboard(); expect(exportGrid()[1][13]).toBe("Applicable\nP: 2026/10/20\nA: —");
     advanced(); load("basic-success", true); confirm(1);
     const discardedSession = schedule().reviewSessions.at(-1)!.id;
     click("捨棄此專案草稿"); click("確認捨棄");
@@ -596,7 +596,7 @@ describe("Batch 1 integrated governance runtime", () => {
     const savedTeamCells = screen.getByRole("button", { name: "Open Project Nautilus" }).closest("tr")!.querySelectorAll('[data-column-key^="team:"]');
     expect([...savedTeamCells].map(cell => cell.textContent === "—" ? "" : cell.textContent)).toEqual(savedTeamValues);
     openProject(); click("Edit"); applyDate("Kickoff", "2026-10-20"); dashboard();
-    expect(exportGrid()[1][12]).toBe("Applicable\nP: 2026/09/18\nA: 2026/09/19");
+    expect(exportGrid()[1][13]).toBe("Applicable\nP: 2026/09/18\nA: 2026/09/19");
     governance(true); const definitionId = publicDefinition("Export gate"); setting("Export gate", "顯示於總表");
     click("檢查並預覽發布"); dashboard(); expect(exportGrid()[0]).toEqual(headers);
     governance(); release(); dashboard();
@@ -605,7 +605,7 @@ describe("Batch 1 integrated governance runtime", () => {
     expect(live().context.addablePublicDefinitions.map(item => item.id)).not.toContain(definitionId);
     expect(exportGrid()[2].slice(-7)).toEqual(savedTeamValues);
     openProject(); publishSchedule(); dashboard();
-    expect(exportGrid()[1][12]).toBe("Applicable\nP: 2026/10/20\nA: 2026/09/19");
+    expect(exportGrid()[1][13]).toBe("Applicable\nP: 2026/10/20\nA: 2026/09/19");
   }, 30000);
 
   // Catches catalog cancellation losing session choices, case/ID collisions mutating catalogs,
@@ -646,7 +646,7 @@ describe("Batch 1 integrated governance runtime", () => {
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Session Panel Size" } }); expect(exportGrid()).toHaveLength(1);
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "" } }); change("Panel Size", "Session Panel Size");
     const output = exportGrid(); expect(output).toHaveLength(2);
-    expect(output[1].slice(7, 11)).toEqual(["Session Product Line", "Session Panel Size", "Session CPU", "Session GPU"]);
+    expect(output[1].slice(8, 12)).toEqual(["Session Product Line", "Session Panel Size", "Session CPU", "Session GPU"]);
   }, 30000);
 
   // Catches remount retaining any governance, review, prototype or catalog session state.

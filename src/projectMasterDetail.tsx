@@ -21,6 +21,7 @@ import {
 import {
   ProjectCatalogSelect,
   ProjectFieldInput,
+  ProjectRemarkInput,
   ProjectTypeSelect,
   ProjectReferencePicker,
   ProjectSelfServiceCatalogSelect,
@@ -148,7 +149,7 @@ function StatusBadge({ status }: { readonly status: string }): React.ReactElemen
   );
 }
 
-function BasicInformationRead({ row }: { readonly row: DashboardProjectRow }): React.ReactElement {
+function BasicInformationRead({ row, remark }: { readonly row: DashboardProjectRow; readonly remark?: string | null }): React.ReactElement {
   return (
     <div className="grid gap-5 text-sm md:grid-cols-2 xl:grid-cols-3">
       <div>
@@ -187,6 +188,10 @@ function BasicInformationRead({ row }: { readonly row: DashboardProjectRow }): R
       <div>
         <h3 className="font-semibold">Project Management</h3>
         <div className="mt-2"><StatusBadge status={row.projectStatus} /></div>
+      </div>
+      <div className="min-w-0 md:col-span-2 xl:col-span-3">
+        <h3 className="font-semibold">Project Remark</h3>
+        <p aria-label="Project Remark" className="mt-2 whitespace-pre-wrap break-words">{remark ?? "\u2014"}</p>
       </div>
     </div>
   );
@@ -247,6 +252,7 @@ function BasicInformationEdit({
       <fieldset className="grid min-w-0 gap-3 rounded-md border border-slate-200 p-4 xl:col-span-2">
         <legend className="px-1 text-sm font-semibold">Project Management</legend>
         <ProjectCatalogSelect emptyLabel="Select Project Status" label="Project Status" options={statusCatalog} value={form.statusId} onChange={(value) => update("statusId", value)} />
+        <ProjectRemarkInput error={fieldErrors.remark} value={form.remark} onChange={(value) => update("remark", value)} />
       </fieldset>
     </div>
   );
@@ -436,6 +442,10 @@ function CoverLeverageEdit({
 
 export function ProjectMasterDetail(props: ProjectMasterDetailProps): React.ReactElement {
   const [expanded, setExpanded] = React.useState(defaultExpanded);
+  const hasRemarkError = props.mode === "edit" && props.fieldErrors.remark !== undefined;
+  React.useEffect(() => {
+    if (hasRemarkError) setExpanded(current => ({ ...current, basic: true }));
+  }, [hasRemarkError]);
   const hasMechanicalErrors = props.mode === "edit" && mechanicalKeys.some(
     (key) => props.fieldErrors[key] !== undefined,
   );
@@ -480,7 +490,7 @@ export function ProjectMasterDetail(props: ProjectMasterDetailProps): React.Reac
       {sections.map((section) => (
         <CollapsibleSection expanded={expanded[section]} id={section} key={section} onToggle={() => toggle(section)}>
           {section === "basic" && (props.mode === "read"
-            ? <BasicInformationRead row={props.row} />
+            ? <BasicInformationRead row={props.row} remark={props.project.master.basicInformation.remark} />
             : <BasicInformationEdit fieldErrors={props.fieldErrors} form={props.form} onAddCatalogOption={props.onAddCatalogOption} onChange={props.onChange} selfServiceCatalogs={props.selfServiceCatalogs} />)}
           {section === "mechanical" && (props.mode === "read"
             ? <MechanicalRead project={props.project} />

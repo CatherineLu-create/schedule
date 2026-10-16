@@ -142,3 +142,21 @@ describe("ProjectMasterDetail", () => {
     expect(screen.queryByRole("button", { name: "Open Team Member" })).not.toBeInTheDocument();
   });
 });
+
+
+it.each([undefined, null])("shows the normal empty value for missing Basic Information Remark %s", remark => {
+  const legacy = { ...project, master: { ...project.master, basicInformation: { ...project.master.basicInformation, remark }, other: { remark: "User Trial demo seed: DEMO - G/O Due Soon" } } };
+  render(<ProjectMasterDetail {...readProps} project={legacy} />);
+  const value = screen.getByLabelText("Project Remark");
+  expect(value).toHaveTextContent("\u2014");
+  expect(screen.queryByText("User Trial demo seed: DEMO - G/O Due Soon")).not.toBeInTheDocument();
+});
+
+it("displays the complete 500-character multiline saved Remark with wrapping", () => {
+  const remark = "First line\n" + "x".repeat(489);
+  const saved = { ...project, master: { ...project.master, basicInformation: { ...project.master.basicInformation, remark } } };
+  render(<ProjectMasterDetail {...readProps} project={saved} />);
+  const value = screen.getByLabelText("Project Remark");
+  expect(value.textContent).toBe(remark);
+  expect(value).toHaveClass("whitespace-pre-wrap", "break-words");
+});

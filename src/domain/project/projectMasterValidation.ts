@@ -23,7 +23,7 @@ type ProjectMasterCompletenessFieldDescriptor<
 export type ProjectMasterCompletenessField =
 	| ProjectMasterCompletenessFieldDescriptor<
 			"basicInformation",
-			ProjectMasterBasicInformation
+			Omit<ProjectMasterBasicInformation, "remark">
 	  >
 	| ProjectMasterCompletenessFieldDescriptor<
 			"platformHardware",
@@ -101,4 +101,10 @@ export function validateProjectMasterCompleteness(
 			},
 		];
 	});
+}
+
+export function validateProjectRemark(value: string | null | undefined): string | undefined {
+	return (value?.trim().length ?? 0) > 500
+		? "Project Remark must be 500 characters or fewer."
+		: undefined;
 }

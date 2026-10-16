@@ -41,6 +41,7 @@ export interface PortfolioDashboardRow {
   readonly qciPm: PortfolioQciPmPresentation | null;
   readonly projectRoles?: ProjectRoles | null;
   readonly pcbNumber: string;
+  readonly projectRemark?: string | null;
   readonly schedule: PortfolioCurrentPublishedRead;
 }
 
@@ -115,6 +116,7 @@ export function selectPortfolioDashboardRows(
       qciPm: resolveQciPm(project),
       projectRoles: project.team?.projectRoles ?? null,
       pcbNumber: displayText(project.master.platformHardware.pcbNumber),
+      projectRemark: project.master.basicInformation.remark ?? null,
       schedule,
     };
   });

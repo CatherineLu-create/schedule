@@ -19,9 +19,16 @@ export function createPortfolioDashboardWorkbook(
   rows: readonly PortfolioDashboardRow[],
   schema: PortfolioVisibleSchema,
 ): XLSX.WorkBook {
+  // Remark is intentionally export-only; visible table columns and search stay unchanged.
+  type ExportColumn = PortfolioColumn | { readonly key: "projectRemark"; readonly label: string };
+  const columns = schema.columns.flatMap<ExportColumn>(column => column.key === "projectType"
+    ? [column, { key: "projectRemark", label: "Project Remark" }]
+    : [column]);
   const worksheet = XLSX.utils.aoa_to_sheet([
-    schema.columns.map(column => column.label),
-    ...rows.map(row => schema.columns.map(column => exportCell(row, column, schema))),
+    columns.map(column => column.label),
+    ...rows.map(row => columns.map(column => column.key === "projectRemark"
+      ? row.projectRemark ?? ""
+      : exportCell(row, column, schema))),
   ]);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "All Projects");

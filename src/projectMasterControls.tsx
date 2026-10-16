@@ -44,6 +44,31 @@ export function ProjectFieldInput({
   );
 }
 
+export function ProjectRemarkInput({
+  error, onChange, value,
+}: Pick<ProjectFieldInputProps, "error" | "onChange" | "value">): React.ReactElement {
+  const id = React.useId();
+  return (
+    <label className="grid gap-1 text-sm md:grid-cols-[180px_minmax(0,1fr)] md:items-start">
+      <span>Project Remark</span>
+      <span className="grid min-w-0 gap-1">
+        <textarea
+          aria-label="Project Remark"
+          aria-describedby={id}
+          aria-invalid={error !== undefined}
+          className="min-w-0 resize-y rounded-md border border-slate-300 px-3 py-2"
+          rows={3}
+          value={value}
+          onChange={event => onChange(event.target.value)}
+        />
+        <span id={id} className={error === undefined ? "text-xs text-slate-500" : "text-xs text-rose-700"}>
+          {error ?? "Optional. Maximum 500 characters after trimming."}
+        </span>
+      </span>
+    </label>
+  );
+}
+
 export interface ProjectCatalogSelectProps {
   readonly compact?: boolean;
   readonly emptyLabel: string;

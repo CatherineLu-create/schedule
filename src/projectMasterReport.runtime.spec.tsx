@@ -3,12 +3,13 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as XLSX from "xlsx";
 import { App } from "./main";
+import { canonicalProjectFixtures } from "./fixtures/v2/canonicalProjectFixtures";
 
 vi.mock("xlsx", async importOriginal => ({ ...await importOriginal<typeof import("xlsx")>(), writeFile: vi.fn() }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 const identity = ["Year", "STN Project Name", "QCI Model Name"];
-const master = ["Acer Model Name", "Acer Marketing Name", "Customer", "Category", "Product Line", "Panel Size", "CPU", "GPU", "PCB#", "SSID", "RMN", "Project Status"];
+const master = ["Acer Model Name", "Acer Marketing Name", "Customer", "Category", "Product Line", "Panel Size", "CPU", "GPU", "PCB#", "SSID", "RMN", "Project Status", "Project Type", "Project Remark"];
 const mechanical = ["Product Length (mm)", "Product Width (mm)", "Product Height (mm)", "Product Weight (g)", "Package Length (mm)", "Package Width (mm)", "Package Height (mm)", "Gross Weight (g)"];
 const cover = ["PCB Leverage Project", "A Cover Material", "A Cover Leverage Project", "B Cover Material", "B Cover Leverage Project", "C Cover Material", "C Cover Leverage Project", "D Cover Material", "D Cover Leverage Project"];
 const headers = [...identity, ...master, ...mechanical, ...cover];
@@ -101,4 +102,53 @@ describe("RPT-01 Reports runtime", () => {
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "no matching project" } });
     expect(screen.getByRole("button", { name: "Export to Excel" })).toBeDisabled();
   });
+});
+
+
+it("preserves full multiline Project Remark in preview and serialized Excel while excluding legacy metadata", () => {
+  const fullRemark = "Customer requested BIOS update\n" + "x".repeat(469);
+  expect(fullRemark).toHaveLength(500);
+  const remarks = [fullRemark, null, undefined, "Customer requested BIOS update", ""];
+  const projects = canonicalProjectFixtures.map((project, index) => ({ ...project, master: { ...project.master,
+    basicInformation: { ...project.master.basicInformation, remark: remarks[index] },
+    other: { remark: index === 3 ? "DEV fixture annotation" : "User Trial demo seed: Example" } } }));
+  render(<App initialState={{ projects, schedules: [] }} />);
+  enter();
+  expect(tableHeaders()).toEqual(headers);
+  const cells = [...reportTable().querySelectorAll('tbody td[data-column-key="projectRemark"]')];
+  expect(cells.map(cell => cell.textContent)).toEqual([fullRemark, "\u2014", "\u2014", "Customer requested BIOS update", "\u2014"]);
+  cells.forEach(cell => expect(cell).toHaveClass("whitespace-pre-wrap", "break-words"));
+  expect(reportTable().textContent).not.toMatch(/User Trial demo seed:|DEV fixture annotation/);
+  const output = exportedGrid();
+  expect(output[0]).toEqual(headers);
+  expect(output).toHaveLength(6);
+  output.forEach(row => expect(row).toHaveLength(34));
+  const remarkIndex = output[0].indexOf("Project Remark");
+  expect(output.slice(1).map(row => row[remarkIndex])).toEqual([fullRemark, "", "", "Customer requested BIOS update", ""]);
+  expect(JSON.stringify(output)).not.toMatch(/User Trial demo seed:|DEV fixture annotation/);
+  fireEvent.click(screen.getByRole("checkbox", { name: "Project Master" }));
+  expect(tableHeaders()).toEqual([...identity, ...mechanical, ...cover]);
+  const withoutMaster = exportedGrid();
+  expect(withoutMaster[0]).toEqual([...identity, ...mechanical, ...cover]);
+  expect(JSON.stringify(withoutMaster)).not.toContain("Customer requested BIOS update");
+});
+
+
+it("exports user-facing Project Types from the report with blank legacy values and the required column order", () => {
+  const types = ["new", "regression", null, undefined, undefined] as const;
+  const projects = canonicalProjectFixtures.map((project, index) => ({ ...project, master: { ...project.master,
+    basicInformation: { ...project.master.basicInformation, ...(types[index] === undefined ? {} : { projectType: types[index] }) },
+  } }));
+  render(<App initialState={{ projects, schedules: [] }} />);
+  enter();
+  expect(tableHeaders()).toEqual(headers);
+  expect([...reportTable().querySelectorAll('tbody td[data-column-key="projectType"]')].map(cell => cell.textContent))
+    .toEqual(["New", "Regression", "\u2014", "\u2014", "\u2014"]);
+  const output = exportedGrid();
+  const typeIndex = output[0].indexOf("Project Type");
+  expect(output[0].slice(typeIndex - 1, typeIndex + 2)).toEqual(["Project Status", "Project Type", "Project Remark"]);
+  expect(output.slice(1).map(row => row[typeIndex])).toEqual(["New", "Regression", "", "", ""]);
+  fireEvent.click(screen.getByRole("checkbox", { name: "Project Master" }));
+  expect(tableHeaders()).toEqual([...identity, ...mechanical, ...cover]);
+  expect(exportedGrid()[0]).toEqual([...identity, ...mechanical, ...cover]);
 });

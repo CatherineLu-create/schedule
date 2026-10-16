@@ -4,7 +4,7 @@ import { selectProjectLeverageDisplay, type ProjectLeverageDisplay } from "./app
 import type { PrototypeState } from "./application/state/prototypeState";
 import type { Project } from "./domain/project/project";
 import { displayPortfolioText } from "./portfolioDashboardCells";
-import { projectMasterCoverDisplay, projectMasterMeasurement } from "./projectMasterDisplay";
+import { projectMasterCoverDisplay, projectMasterMeasurement, projectTypeLabel } from "./projectMasterDisplay";
 
 interface ReportCellContext {
   readonly project: Project;
@@ -38,6 +38,8 @@ export const projectMasterReportGroups = [
     { key: "ssid", label: "SSID", value: ({ row }) => row.project.ssid },
     { key: "rmn", label: "RMN", value: ({ row }) => row.project.rmn },
     { key: "projectStatus", label: "Project Status", value: ({ row }) => row.project.projectStatus },
+    { key: "projectType", label: "Project Type", value: ({ project }) => projectTypeLabel(project.master.basicInformation.projectType) ?? "" },
+    { key: "projectRemark", label: "Project Remark", width: 300, value: ({ project }) => project.master.basicInformation.remark ?? "" },
   ] },
   { key: "mechanical", label: "Mechanical", columns: [
     { key: "productLengthMm", label: "Product Length (mm)", value: ({ project }) => projectMasterMeasurement(project.master.mechanical.product.productLengthMm, "mm") },

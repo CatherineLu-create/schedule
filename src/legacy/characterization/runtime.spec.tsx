@@ -1741,10 +1741,10 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
     );
     expect(exportedRows.every((row) => row.MDRR === "")).toBe(true);
     const headers = exportedDashboardGrid()[0]!;
-    expect(headers).toHaveLength(49);
-    expect(headers.slice(0, 12)).toEqual(["Status", "Year", "STN Project Name", "QCI Model Name", "Project Type", "Customer", "Category", "Product Line", "Panel Size", "CPU", "GPU", "PCB#"]);
+    expect(headers).toHaveLength(50);
+    expect(headers.slice(0, 13)).toEqual(["Status", "Year", "STN Project Name", "QCI Model Name", "Project Type", "Project Remark", "Customer", "Category", "Product Line", "Panel Size", "CPU", "GPU", "PCB#"]);
     expect(headers.slice(-9)).toEqual(["SSL/GL", "MDRR", "QCI PM", "QCI PjM", "Acer PM", "ME Owner", "EE Owner", "Thermal Owner", "BIOS Owner"]);
-    expect(headers).toEqual([...dashboardTable().querySelectorAll('th[scope="col"] span')].map(leaf => leaf.textContent));
+    expect(headers.filter((_, index) => index !== 5)).toEqual([...dashboardTable().querySelectorAll('th[scope="col"] span')].map(leaf => leaf.textContent));
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Manta" } });
     fireEvent.click(screen.getByRole("button", { name: "Export to Excel" }));
     expect(exportedDashboardRows()).toEqual([exportedRows[0]]);

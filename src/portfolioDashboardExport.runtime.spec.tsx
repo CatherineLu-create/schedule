@@ -19,7 +19,7 @@ vi.mock("./application/governance/milestoneGovernanceInitializer", async importO
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
-const projectHeaders = ["Status", "Year", "STN Project Name", "QCI Model Name", "Project Type", "Customer", "Category", "Product Line", "Panel Size", "CPU", "GPU", "PCB#"];
+const projectHeaders = ["Status", "Year", "STN Project Name", "QCI Model Name", "Project Type", "Project Remark", "Customer", "Category", "Product Line", "Panel Size", "CPU", "GPU", "PCB#"];
 const scheduleHeaders = ["Kickoff", "ID fix", "ME drawing", "Mockup & DFM", "Tooling start + T1", "ME material for C", "Thermal module for C", "A1 G/O", "A1 SMT", "A1 Test", "A1 Close", "C1 G/O", "C1 SMT", "C1 Pre-Build", "C1 System Build", "C1 Test", "C1 Close", "C2 G/O", "C2 SMT", "C2 Pre-Build", "C2 System Build", "C2 Test", "C2 Close", "RAMP G/O", "ME signoff", "RAMP SMT", "RAMP Pre-build", "RAMP Main build", "SSL/GL", "MDRR"];
 const teamHeaders = ["QCI PM", "QCI PjM", "Acer PM", "ME Owner", "EE Owner", "Thermal Owner", "BIOS Owner"];
 const allHeaders = [...projectHeaders, ...scheduleHeaders, ...teamHeaders];
@@ -57,20 +57,20 @@ describe("All Projects workbook output from App", () => {
     render(<App />);
     const grid = exportGrid();
     expect(grid[0]).toEqual(allHeaders);
-    expect(grid[0]).toEqual([...screen.getByRole("table", { name: "Projects" }).querySelectorAll('th[scope="col"] span')].map(leaf => leaf.textContent));
+    expect(grid[0]!.filter((_, index) => index !== 5)).toEqual([...screen.getByRole("table", { name: "Projects" }).querySelectorAll('th[scope="col"] span')].map(leaf => leaf.textContent));
     expect(grid).toHaveLength(6);
     expect(grid.slice(1).map(row => row[2])).toEqual(["Manta", "Nautilus", "Orca", "Beluga", "Marlin"]);
-    expect(grid[1]![42]).toBe("");
-    expect(grid[2]![42]).toBe("DEV QCI PM");
-    expect(grid[1]!.slice(42)).toEqual(["", "", "", "", "", "", ""]);
-    expect(grid[2]!.slice(42)).toEqual(["DEV QCI PM", "DEV QCI PjM", "DEV Acer PM", "", "", "", ""]);
+    expect(grid[1]![43]).toBe("");
+    expect(grid[2]![43]).toBe("DEV QCI PM");
+    expect(grid[1]!.slice(43)).toEqual(["", "", "", "", "", "", ""]);
+    expect(grid[2]!.slice(43)).toEqual(["DEV QCI PM", "DEV QCI PjM", "DEV Acer PM", "", "", "", ""]);
     const tableRows = screen.getByRole("table", { name: "Projects" }).querySelectorAll("tbody tr");
     grid.slice(1).forEach((row, index) => {
       const displayed = [...tableRows[index]!.querySelectorAll('[data-column-key^="team:"]')].map(cell => cell.textContent === "—" ? "" : cell.textContent);
-      expect(row.slice(42)).toEqual(displayed);
+      expect(row.slice(43)).toEqual(displayed);
     });
-    expect(grid[1]![19]).toContain("P: 2026/10/15");
-    expect(grid[1]![19]).toContain("A: —");
+    expect(grid[1]![20]).toContain("P: 2026/10/15");
+    expect(grid[1]![20]).toContain("A: —");
   });
 
   it("exports the exact Search AND filters result and retains headers with zero matches", () => {
@@ -87,10 +87,14 @@ describe("All Projects workbook output from App", () => {
   });
 
   it("keeps workbook output identical after both table and bottom proxy scroll events and resizing", () => {
-    render(<App initialState={{ projects: [{ ...canonicalProjectFixtures[0]!, team: savedTeamWithoutRoster }], schedules: canonicalScheduleFixtures }} />);
+    const source = canonicalProjectFixtures[0]!;
+    const remark = "First line\n" + "x".repeat(489);
+    render(<App initialState={{ projects: [{ ...source, master: { ...source.master, basicInformation: { ...source.master.basicInformation, remark } }, team: savedTeamWithoutRoster }], schedules: canonicalScheduleFixtures }} />);
     const before = exportGrid();
     expect(before[0]).toEqual(allHeaders);
-    expect(before[1]!.slice(42)).toEqual(savedRoleNames);
+    expect(before[1]![5]).toBe(remark);
+    expect(screen.queryByRole("columnheader", { name: "Project Remark" })).toBeNull();
+    expect(before[1]!.slice(43)).toEqual(savedRoleNames);
     const tableScroll = screen.getByTestId("portfolio-table-scroll");
     const proxy = screen.getByTestId("portfolio-bottom-scroll");
     tableScroll.scrollLeft = 1234;
@@ -101,6 +105,8 @@ describe("All Projects workbook output from App", () => {
     expect(tableScroll.scrollLeft).toBe(2345);
     fireEvent.keyDown(screen.getByRole("button", { name: "Resize BIOS Owner column" }), { key: "ArrowRight" });
     expect(exportGrid()).toEqual(before);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "First line" } });
+    expect(exportGrid()).toEqual([allHeaders]);
   });
 
   it("uses the released membership after real Governance publish and excludes Draft-only columns", () => {
@@ -150,10 +156,10 @@ describe("All Projects workbook output from App", () => {
     const displayedRoles = [...table.querySelectorAll('tbody [data-column-key^="team:"]')].map(cell => cell.textContent);
     expect(displayedRoles).toEqual(savedRoleNames);
     const output = exportGrid();
-    expect(output[1]![12]).toBe("Applicable\nP: 2026/11/01\nA: —");
+    expect(output[1]![13]).toBe("Applicable\nP: 2026/11/01\nA: —");
     expect(output[1]![4]).toBe("Regression");
-    expect(output[1]!.slice(42)).toEqual(savedRoleNames);
-    expect(output[1]!.slice(42)).toEqual(displayedRoles);
+    expect(output[1]!.slice(43)).toEqual(savedRoleNames);
+    expect(output[1]!.slice(43)).toEqual(displayedRoles);
     expect(JSON.stringify(output)).not.toContain("2099/12/31");
     expect(JSON.stringify(output)).not.toContain("2026/09/18");
   });

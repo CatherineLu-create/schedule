@@ -26,13 +26,15 @@ const grid = (book: XLSX.WorkBook) => XLSX.utils.sheet_to_json<string[]>(book.Sh
 
 describe("Project Master Report canonical values and workbook", () => {
   it("includes the complete approved inventory exactly once for every group combination", () => {
-    expect(columns).toHaveLength(32);
-    expect(new Set(columns.map(column => column.key)).size).toBe(32);
+    expect(columns).toHaveLength(34);
+    expect(new Set(columns.map(column => column.key)).size).toBe(34);
+    expect(columns.filter(column => column.group === "projectMaster").slice(-3).map(column => column.label)).toEqual(["Project Status", "Project Type", "Project Remark"]);
     expect(columns.map(column => column.label)).not.toContain("Housing Number");
     expect(columns.map(column => column.label)).not.toContain("Remark");
     for (let mask = 0; mask < 8; mask++) {
       const selected = allGroups.filter((_, index) => mask & (1 << index));
       const schema = projectMasterReportColumns(selected);
+      expect(schema.some(column => column.key === "projectType")).toBe(selected.includes("projectMaster"));
       expect(schema.slice(0, 3).map(column => column.label)).toEqual(["Year", "STN Project Name", "QCI Model Name"]);
       expect(schema.slice(3).every(column => selected.includes(column.group as typeof selected[number]))).toBe(true);
       expect(grid(createProjectMasterReportWorkbook(state, rows, schema))).toEqual([
@@ -92,7 +94,7 @@ describe("Project Master Report canonical values and workbook", () => {
     const parsed = XLSX.read(bytes, { type: "array", bookFiles: true });
     expect(parsed.SheetNames).toEqual(["Project Master Report"]);
     const sheet = parsed.Sheets["Project Master Report"];
-    expect(sheet["!autofilter"]).toEqual({ ref: `A1:AF${rows.length + 1}` });
+    expect(sheet["!autofilter"]).toEqual({ ref: `A1:AH${rows.length + 1}` });
     expect(sheet["!merges"]).toBeUndefined();
     const archive = parsed as XLSX.WorkBook & { files: Record<string, { content: Uint8Array }> };
     const xml = new TextDecoder().decode(archive.files["xl/worksheets/sheet1.xml"].content);
@@ -129,4 +131,87 @@ describe("Reports selection parity", () => {
       expect(screen.getByRole("searchbox")).toHaveValue("m");
     }
   });
+});
+
+
+it("adds only the formal Remark to Project Master for all group combinations without expanding search", () => {
+  const withRemark = { ...state, projects: state.projects.map(project => ({ ...project, master: { ...project.master,
+    basicInformation: { ...project.master.basicInformation, remark: "Customer requested BIOS update" },
+    other: { remark: "DEV fixture annotation" } } })) };
+  const notedRows = selectPortfolioDashboardRows(withRemark, catalogs, context);
+  expect(filterPortfolioDashboardRows(notedRows, "DEV fixture annotation", emptyPortfolioDashboardFilters)).toEqual([]);
+  expect(filterPortfolioDashboardRows(notedRows, "Customer requested BIOS update", emptyPortfolioDashboardFilters)).toEqual([]);
+  for (let mask = 0; mask < 8; mask++) {
+    const selected = allGroups.filter((_, index) => mask & (1 << index));
+    const schema = projectMasterReportColumns(selected);
+    const remarkIndex = schema.findIndex(column => column.key === "projectRemark");
+    expect(remarkIndex >= 0).toBe(selected.includes("projectMaster"));
+    const book = createProjectMasterReportWorkbook(withRemark, notedRows, schema);
+    expect(book.SheetNames).toEqual(["Project Master Report"]);
+    const output = grid(book);
+    if (remarkIndex >= 0) {
+      expect(output[0][remarkIndex]).toBe("Project Remark");
+      expect(output.slice(1).map(row => row[remarkIndex])).toEqual(Array(rows.length).fill("Customer requested BIOS update"));
+    }
+    // Every pre-existing column and value remains unchanged.
+    const existingColumns = schema.filter(column => column.key !== "projectRemark");
+    expect(output.map(row => row.filter((_, index) => index !== remarkIndex))).toEqual(
+      grid(createProjectMasterReportWorkbook(state, rows, existingColumns)));
+    expect(JSON.stringify(output)).not.toContain("DEV fixture annotation");
+  }
+});
+
+it.each([
+  { name: "missing", remark: undefined, preview: "\u2014", exported: "" },
+  { name: "null", remark: null, preview: "\u2014", exported: "" },
+  { name: "empty", remark: "", preview: "\u2014", exported: "" },
+  { name: "formal text", remark: "Customer requested BIOS update", preview: "Customer requested BIOS update", exported: "Customer requested BIOS update" },
+  { name: "literal dash text", remark: "-", preview: "-", exported: "-" },
+])("uses only the formal $name Remark in preview and Excel", ({ remark, preview, exported }) => {
+  const source = state.projects[0]!;
+  const current = { ...state, projects: [{ ...source, master: { ...source.master,
+    basicInformation: { ...source.master.basicInformation, remark },
+    other: { remark: "User Trial demo seed: Example" } } }] };
+  const currentRows = selectPortfolioDashboardRows(current, catalogs, context);
+  const before = JSON.stringify(current);
+  render(<ProjectMasterReportView state={current} rows={currentRows} onBack={vi.fn()} onExport={vi.fn()} />);
+  expect(screen.getByRole("columnheader", { name: "Project Remark" })).toHaveAttribute("data-group", "projectMaster");
+  const cell = screen.getByRole("table").querySelector('tbody td[data-column-key="projectRemark"]');
+  expect(cell?.textContent).toBe(preview);
+  expect(cell).toHaveClass("whitespace-pre-wrap", "break-words");
+  expect(screen.queryByText(/User Trial demo seed:/)).not.toBeInTheDocument();
+  const output = grid(createProjectMasterReportWorkbook(current, currentRows, columns));
+  expect(output[1][output[0].indexOf("Project Remark")]).toBe(exported);
+  expect(JSON.stringify(output)).not.toContain("User Trial demo seed:");
+  fireEvent.click(screen.getByRole("checkbox", { name: "Project Master" }));
+  expect(screen.queryByRole("columnheader", { name: "Project Remark" })).not.toBeInTheDocument();
+  expect(screen.getByRole("table").querySelector('[data-column-key="projectRemark"]')).toBeNull();
+  expect(JSON.stringify(current)).toBe(before);
+});
+
+
+it.each([
+  { projectType: "new" as const, preview: "New", exported: "New" },
+  { projectType: "regression" as const, preview: "Regression", exported: "Regression" },
+  { projectType: null, preview: "\u2014", exported: "" },
+  { projectType: undefined, preview: "\u2014", exported: "" },
+])("presents saved canonical Project Type $projectType without inference or backfill", ({ projectType, preview, exported }) => {
+  const source = state.projects[0]!;
+  const current = { ...state, projects: [{ ...source, master: { ...source.master,
+    basicInformation: { ...source.master.basicInformation, ...(projectType === undefined ? {} : { projectType }) },
+  } }] };
+  if (projectType === undefined) expect(current.projects[0].master.basicInformation).not.toHaveProperty("projectType");
+  const before = JSON.stringify(current);
+  // Keep the old row projection: the saved canonical Project remains the report authority.
+  const sourceRows = rows.filter(row => row.projectId === source.id);
+  render(<ProjectMasterReportView state={current} rows={sourceRows} onBack={vi.fn()} onExport={vi.fn()} />);
+  expect(screen.getByRole("columnheader", { name: "Project Type" })).toHaveAttribute("data-group", "projectMaster");
+  expect(screen.getByRole("table").querySelector('tbody td[data-column-key="projectType"]')?.textContent).toBe(preview);
+  expect(screen.queryByRole("combobox", { name: "Project Type" })).not.toBeInTheDocument();
+  const output = grid(createProjectMasterReportWorkbook(current, sourceRows, columns));
+  expect(output[1][output[0].indexOf("Project Type")]).toBe(exported);
+  fireEvent.click(screen.getByRole("checkbox", { name: "Project Master" }));
+  expect(screen.queryByRole("columnheader", { name: "Project Type" })).not.toBeInTheDocument();
+  expect(screen.getByRole("table").querySelector('[data-column-key="projectType"]')).toBeNull();
+  expect(JSON.stringify(current)).toBe(before);
 });

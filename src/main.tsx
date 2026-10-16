@@ -120,6 +120,7 @@ import {
 import {
   ProjectCatalogSelect,
   ProjectFieldInput,
+  ProjectRemarkInput,
   ProjectTypeSelect,
   ProjectSelfServiceCatalogSelect,
   type ProjectSelfServiceCatalogAddResult,
@@ -147,7 +148,7 @@ interface PendingDuplicateCreate {
   readonly decision: DuplicateProjectDecisionRequest;
 }
 
-type CreateFieldErrors = Partial<Record<CreateProjectRequiredField, string>>;
+type CreateFieldErrors = Partial<Record<CreateProjectRequiredField | "remark", string>>;
 
 const initialPrototypeState: PrototypeState = {
   projects: canonicalProjectFixtures,
@@ -714,6 +715,10 @@ export function App({
         result.missingFields.map((field) => [field, messages[field]]),
       ));
       setCreateFeedback(null);
+    } else if (result.reason === "fieldValidation") {
+      setCreateFieldErrors(result.fieldErrors);
+      setCreateIssues([]);
+      setCreateFeedback(null);
     } else if (result.reason === "projectTypeValidation") {
       setCreateFieldErrors({});
       setCreateIssues(result.issues);
@@ -774,6 +779,7 @@ export function App({
     const interpretation = interpretUpdateProjectMasterResult(
       updateProjectMaster(selectedCanonicalProject, { master: candidateMaster }, { existingProjects: stateRef.current.projects }),
     );
+    setEditFieldErrors(interpretation.result.fieldErrors ?? {});
     setEditIssues(interpretation.result.issues);
     if (interpretation.kind === "blocked") return;
 
@@ -1024,6 +1030,7 @@ function CreateProjectDialog(props: CreateProjectDialogProps) {
           <fieldset className="grid gap-3 rounded-md border border-slate-200 p-4">
             <legend className="px-1 text-sm font-semibold">Project Management</legend>
             <ProjectCatalogSelect emptyLabel="Select Project Status" label="Project Status" options={statusCatalog} value={value.statusId} onChange={(nextValue) => updateForm("statusId", nextValue)} />
+            <ProjectRemarkInput error={fieldErrors.remark} value={value.remark} onChange={(nextValue) => updateForm("remark", nextValue)} />
           </fieldset>
 
           {feedback !== null && <div className="text-sm text-rose-700">{feedback}</div>}

@@ -12,6 +12,7 @@ import {
 
 const populatedForm: ProjectMasterForm = {
   projectType: "new",
+  remark: "  Runtime remark\nSecond line  ",
   stnProjectName: "Runtime Project",
   qciModelName: "RUNTIME-QCI",
   acerModelName: "Runtime Acer Model",
@@ -50,6 +51,7 @@ describe("Project Master form mappings", () => {
 
     expect(input.basicInformation).toEqual({
       projectType: "new",
+      remark: "Runtime remark\nSecond line",
       year: 2030,
       customer: populatedForm.customerId,
       category: null,
@@ -210,7 +212,7 @@ describe("Project Master form mappings", () => {
           grossWeightG: 8,
         },
       },
-      other: { remark: "Hidden remark" },
+      other: { remark: "User Trial demo seed: DEMO - SMT Overdue" },
     };
 
     const richForm = toProjectMasterForm(richMaster);
@@ -295,4 +297,32 @@ it("round-trips an explicit legacy null Type without assigning New", () => {
  const form = toProjectMasterForm(master);
  expect(form.projectType).toBe("");
  expect(overwriteProjectMasterFromForm(master, form).basicInformation.projectType).toBeNull();
+});
+
+
+it("round-trips Basic Information Remark independently of the existing Other field", () => {
+  const master = { ...devProject003.master, basicInformation: { ...devProject003.master.basicInformation, remark: "Saved\nRemark" }, other: { remark: "User Trial demo seed: DEMO - G/O Due Soon" } };
+  expect(toProjectMasterForm(master).remark).toBe("Saved\nRemark");
+  expect(toProjectMasterForm(devProject003.master).remark).toBe("");
+  expect(toCreateProjectMasterInput(emptyProjectMasterForm).basicInformation.remark).toBeNull();
+  const edited = overwriteProjectMasterFromForm(master, { ...toProjectMasterForm(master), remark: "  Changed\nRemark  " });
+  expect(edited.basicInformation.remark).toBe("Changed\nRemark");
+  expect(edited.other).toEqual(master.other);
+  const cleared = overwriteProjectMasterFromForm(edited, { ...toProjectMasterForm(edited), remark: " \n " });
+  expect(cleared.basicInformation.remark).toBeNull();
+  expect(cleared.other).toEqual(master.other);
+});
+
+
+it.each([undefined, null])("does not use legacy metadata as a form fallback or copy it into a new Project (%s)", remark => {
+  const master = { ...devProject003.master, basicInformation: { ...devProject003.master.basicInformation, remark },
+    other: { remark: "User Trial demo seed: DEMO - G/O Due Soon" } };
+  const form = toProjectMasterForm(master);
+  expect(form.remark).toBe("");
+  const created = toCreateProjectMasterInput(form);
+  expect(created.basicInformation.remark).toBeNull();
+  expect(created.other.remark).toBeNull();
+  const edited = overwriteProjectMasterFromForm(master, { ...form, qciModelName: "Updated model" });
+  expect(edited.basicInformation.qciModelName).toBe("Updated model");
+  expect(edited.other).toEqual(master.other);
 });

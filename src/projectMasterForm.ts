@@ -1,11 +1,12 @@
 import type { CreateProjectMasterInput } from "./application/commands/projectCommands";
-import type { ProjectMaster, ProjectType } from "./domain/project/projectMaster";
+import { normalizeProjectRemark, type ProjectMaster, type ProjectType } from "./domain/project/projectMaster";
 import type { CatalogItemId, ProjectId } from "./domain/shared/ids";
 
 export type CatalogSelection = CatalogItemId | "";
 export type ProjectSelection = ProjectId | "";
 
 export interface ProjectMasterForm {
+  readonly remark: string;
   readonly projectType: ProjectType | "";
   readonly stnProjectName: string;
   readonly qciModelName: string;
@@ -44,6 +45,7 @@ export type ProjectMasterFormErrors = Partial<
 >;
 
 export const emptyProjectMasterForm: ProjectMasterForm = {
+  remark: "",
   projectType: "",
   stnProjectName: "",
   qciModelName: "",
@@ -137,6 +139,7 @@ export function validateProjectMasterMechanicalForm(
 export function toProjectMasterForm(master: ProjectMaster): ProjectMasterForm {
   return {
     projectType: master.basicInformation.projectType ?? "",
+    remark: master.basicInformation.remark ?? "",
     stnProjectName: displayText(master.basicInformation.stnProjectName),
     qciModelName: displayText(master.basicInformation.qciModelName),
     acerModelName: displayText(master.modelRegulatory.acerModelName),
@@ -176,6 +179,7 @@ export function toCreateProjectMasterInput(
   return {
     basicInformation: {
       projectType: form.projectType || null,
+      remark: normalizeProjectRemark(form.remark),
       year: yearOrNull(form.year),
       category: null,
       productLine: catalogOrNull(form.productLineId),
@@ -236,6 +240,8 @@ export function overwriteProjectMasterFromForm(
     ...currentMaster,
     basicInformation: {
       ...currentMaster.basicInformation,
+      ...(form.remark === "" && currentMaster.basicInformation.remark === undefined
+        ? {} : { remark: normalizeProjectRemark(form.remark) }),
       ...(form.projectType === "" && currentMaster.basicInformation.projectType === undefined
         ? {} : { projectType: form.projectType || null }),
       status: catalogOrNull(form.statusId),

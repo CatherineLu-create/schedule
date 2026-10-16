@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { confirmCreateProjectAnyway } from "../workflow/workflowInterpretation";
+import { confirmCreateProjectAnyway, interpretUpdateProjectMasterResult } from "../workflow/workflowInterpretation";
 
 import { coverCatalog, statusCatalog } from "../../config/v2/referenceData";
 import {
@@ -755,5 +755,79 @@ describe("Feedback Batch 2 Project Type", () => {
     expect(updateProjectMaster(orphan, { master }, { existingProjects: [orphan] }).issues).toEqual([]);
     const renamed = { ...master, basicInformation: { ...master.basicInformation, stnProjectName: "New unmatched name" } };
     expect(updateProjectMaster(orphan, { master: renamed }, { existingProjects: [orphan] }).project).toBe(orphan);
+  });
+});
+
+
+describe("Project Remark command persistence", () => {
+  const withRemark = (remark: string | null | undefined, projectType: "new" | "regression" = "new", name = "Remark project") =>
+    validInput({ master: { ...fullMasterInput, basicInformation: { ...fullMasterInput.basicInformation, projectType, stnProjectName: name, remark } } });
+
+  it.each([
+    [undefined, undefined], [null, null], ["", null], [" \n\t ", null],
+    ["  Customer BIOS\nEVT sample only  ", "Customer BIOS\nEVT sample only"],
+    ["  " + "x".repeat(500) + "\n", "x".repeat(500)],
+  ])("creates with optional/trimmed Remark %j", (input, expected) => {
+    const result = createProject(withRemark(input), context);
+    expect(result.status).toBe("created");
+    if (result.status !== "created") throw new Error(result.status);
+    expect(result.project.master.basicInformation.remark).toBe(expected);
+    expect(result.issues).toEqual([]);
+    expect(result.project.master.other).toEqual(fullMasterInput.other);
+  });
+
+  it("rejects 501 characters as a field error, including through duplicate confirmation", () => {
+    const input = withRemark("x".repeat(501));
+    const before = structuredClone(input);
+    expect(createProject(input, context)).toEqual({
+      status: "rejected", reason: "fieldValidation",
+      fieldErrors: { remark: "Project Remark must be 500 characters or fewer." },
+    });
+    expect(confirmCreateProjectAnyway(input, context).kind).toBe("rejected");
+    expect(input).toEqual(before);
+  });
+
+  it("keeps duplicate and Regression decisions independent of Remark", () => {
+    const existingProjects = [devProject003];
+    const sameName = devProject003.master.basicInformation.stnProjectName!;
+    const ctx = { ...context, existingProjects };
+    const plain = createProject(withRemark(null, "new", sameName), ctx);
+    const noted = createProject(withRemark("Internal evaluation project", "new", sameName), ctx);
+    expect(plain.status).toBe("reviewRequired");
+    expect(noted).toMatchObject({ status: "reviewRequired", issues: "issues" in plain ? plain.issues : [] });
+    expect(createProject(withRemark("Extends another platform", "regression", "unmatched"), ctx))
+      .toMatchObject({ status: "rejected", reason: "projectTypeValidation" });
+    const eligible = createProject(withRemark(" Customer BIOS ", "regression", "  " + sameName.toUpperCase() + "  "), ctx);
+    expect(eligible).toMatchObject({ status: "created", project: { master: { basicInformation: { remark: "Customer BIOS" } } } });
+  });
+
+  it("updates and clears an orphan Regression Remark without revalidating Type or changing other authority", () => {
+    const project = { ...devProject003, master: { ...devProject003.master,
+      basicInformation: { ...devProject003.master.basicInformation, projectType: "regression" as const, remark: "Before" },
+      other: { remark: "User Trial demo seed: DEMO - G/O Due Soon" } } };
+    const before = structuredClone(project);
+    const edited = updateProjectMaster(project, { master: { ...project.master,
+      basicInformation: { ...project.master.basicInformation, remark: "  After\nSecond line  " } } }, { existingProjects: [project] });
+    expect(edited.issues).toEqual([]);
+    expect(interpretUpdateProjectMasterResult(edited).kind).toBe("completed");
+    expect(edited.project).toEqual({ ...project, master: { ...project.master,
+      basicInformation: { ...project.master.basicInformation, remark: "After\nSecond line" } } });
+    expect(project).toEqual(before);
+    const cleared = updateProjectMaster(edited.project, { master: { ...edited.project.master,
+      basicInformation: { ...edited.project.master.basicInformation, remark: " \n " } } }, { existingProjects: [edited.project] });
+    expect(cleared.project.master.basicInformation.remark).toBeNull();
+    expect(cleared.project.master.other).toEqual(project.master.other);
+    expect(cleared.issues).toEqual([]);
+  });
+
+  it("rejects an oversized edit without mutating the saved Project or creating a domain issue", () => {
+    const before = structuredClone(devProject003);
+    const result = updateProjectMaster(devProject003, { master: { ...devProject003.master,
+      basicInformation: { ...devProject003.master.basicInformation, remark: "x".repeat(501) } } }, { existingProjects: [devProject003] });
+    expect(result.project).toBe(devProject003);
+    expect(result.issues).toEqual([]);
+    expect(result.fieldErrors).toEqual({ remark: "Project Remark must be 500 characters or fewer." });
+    expect(interpretUpdateProjectMasterResult(result).kind).toBe("blocked");
+    expect(devProject003).toEqual(before);
   });
 });
