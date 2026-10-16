@@ -8,6 +8,8 @@ import type {
 } from "./team";
 import {
 	classifyTeamLabel,
+	formalTeamRoles,
+	standaloneProjectRoleAssignments,
 	isInvalidApplicabilityFunctionLabel,
 	isInvalidNotApplicableMemberName,
 	type RestrictedTeamRole,
@@ -26,15 +28,7 @@ export interface RestrictedCountRow {
 	readonly sourceRows: readonly TeamSourceRow[];
 }
 
-const restrictedTeamRoles: readonly RestrictedTeamRole[] = [
-	"qciPm",
-	"qciPjm",
-	"acerPm",
-	"qciMeOwner",
-	"qciEeOwner",
-	"qciThermalOwner",
-	"qciBiosOwner",
-];
+const restrictedTeamRoles = formalTeamRoles.map(({ key }) => key);
 
 export type TeamImportProblem =
 	| {
@@ -237,7 +231,8 @@ export function validateRestrictedRoleRows(
 		));
 
 	for (const key of restrictedTeamRoles) {
-		const keyedRows = rows.filter((row) => row.key === key);
+		const keyedRows = rows.filter((row) => row.key === key &&
+			((row.name?.trim() ?? "") !== "" || (row.normalizedEmail?.trim() ?? "") !== ""));
 		const distinctRows: RestrictedCountRow[] = [];
 		for (const row of keyedRows) {
 			if (!distinctRows.some((existing) => sameCountIdentity(row, existing))) {
@@ -450,12 +445,9 @@ export function validateProjectTeam(
 	context: TeamValidationContext = {},
 ): readonly ValidationIssue[] {
 	const definitions = definitionsById(standardFunctionDefinitions);
-	const projectRoleIssues = Object.values(team.projectRoles).flatMap(
-		(assignment) => {
-			if (assignment === null) {
-				return [];
-			}
-
+	const standaloneRoles = standaloneProjectRoleAssignments(team);
+	const projectRoleIssues = standaloneRoles.flatMap(
+		({ assignment }) => {
 			const issue = missingEmailIssue(
 				{ ...assignment, rowId: assignment.assignmentId },
 				"team.projectRoles",
@@ -463,28 +455,18 @@ export function validateProjectTeam(
 			return issue === null ? [] : [issue];
 		},
 	);
-	const projectRoleRows: RestrictedCountRow[] = (
-		[
-			["qciPm", team.projectRoles.qciPm, "QCI-PM-Owner"],
-			["qciPjm", team.projectRoles.qciPjm, "QCI-PJM-Owner"],
-			["acerPm", team.projectRoles.acerPm, "Acer PM"],
-		] as const
-	).flatMap(([key, assignment, defaultLabel]) =>
-		assignment === null
-			? []
-			: [
-					{
-						rowId: assignment.assignmentId,
-						functionText: assignment.functionText ?? defaultLabel,
-						roleText: defaultLabel,
-						key,
-						possibleRestricted: false,
-						name: assignment.name,
-						normalizedEmail: assignment.email?.trim().toLowerCase() || null,
-						extraCells: assignment.extraCells ?? [],
-						sourceRows: assignment.sourceRows ?? [],
-					},
-				],
+	const projectRoleRows: RestrictedCountRow[] = standaloneRoles.map(
+		({ definition: { key, functionText: defaultLabel }, assignment }) => ({
+			rowId: assignment.assignmentId,
+			functionText: assignment.functionText ?? defaultLabel,
+			roleText: defaultLabel,
+			key,
+			possibleRestricted: false,
+			name: assignment.name,
+			normalizedEmail: assignment.email?.trim().toLowerCase() || null,
+			extraCells: assignment.extraCells ?? [],
+			sourceRows: assignment.sourceRows ?? [],
+		}),
 	);
 	const functionRows: RestrictedCountRow[] = team.functions.flatMap(
 		(functionTeam) =>

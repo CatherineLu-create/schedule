@@ -46,12 +46,19 @@ export interface ProjectRoleAssignment {
   readonly functionText?: string;
   readonly extraCells?: readonly TeamSourceCell[];
   readonly sourceRows?: readonly TeamSourceRow[];
+  /** Links an engineering role projection to its retained roster Function. */
+  readonly sourceFunctionId?: TeamFunctionId;
 }
 
 export interface ProjectRoles {
   readonly qciPm: ProjectRoleAssignment | null;
   readonly qciPjm: ProjectRoleAssignment | null;
   readonly acerPm: ProjectRoleAssignment | null;
+  // Older saved Teams predate these projections. Team Save always supplies them.
+  readonly qciMeOwner?: ProjectRoleAssignment | null;
+  readonly qciEeOwner?: ProjectRoleAssignment | null;
+  readonly qciThermalOwner?: ProjectRoleAssignment | null;
+  readonly qciBiosOwner?: ProjectRoleAssignment | null;
 }
 
 export interface FunctionPersonAssignment {

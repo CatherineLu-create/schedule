@@ -42,6 +42,7 @@ import type {
 import type { TeamFunctionDefinition } from "./domain/team/teamTemplate";
 import {
   classifyTeamLabel,
+  formalTeamRoles,
   isInvalidApplicabilityFunctionLabel,
 } from "./domain/team/teamRoleMapping";
 import { validateProjectTeam } from "./domain/team/teamValidation";
@@ -229,9 +230,7 @@ function readFunctionText(
   standardNames: ReadonlyMap<TeamFunctionId, string>,
 ): string {
   if (row.kind === "projectRole") {
-    const currentText = row.roleText.startsWith("QCI ")
-      ? `${row.roleText.toUpperCase().replaceAll(" ", "-")}-Owner`
-      : row.roleText;
+    const currentText = formalTeamRoles.find(({ key }) => key === row.projectRole)!.functionText;
     const sourceText = row.functionText?.trim() ?? "";
     return sourceText !== "" && matchesCurrentFunctionText(sourceText, currentText)
       ? sourceText
@@ -398,7 +397,7 @@ function ReadTeam({
   const groups = (["QCI", "QCMC", "OTHER"] as const).map((name) => {
     const siteRows = presentedRows.filter(({ row, functionText }) => {
       if (row.kind === "projectRole") {
-        if (row.projectRole === "qciPm" || row.projectRole === "qciPjm") {
+        if (row.projectRole !== "acerPm") {
           return name === "QCI";
         }
         return name === "OTHER";
@@ -501,6 +500,9 @@ function IssueSummary({
   }, new Map<string, { issue: ValidationIssue; count: number }>()).values()];
   const blockingGroups = groupIssues(blocking);
   const advisoryGroups = groupIssues(advisories);
+  const missingRoleLabels = formalTeamRoles
+    .filter(({ key }) => advisories.some((issue) => issue.code === "team.data.restricted-role-missing" && issue.target.entityId === key))
+    .map(({ label }) => label);
   return (
     <div className="grid gap-3">
       {blockingGroups.length > 0 && (
@@ -523,7 +525,11 @@ function IssueSummary({
           <h2 className="font-semibold">Advisories</h2>
           <ul className="mt-2 list-disc pl-5 text-sm">
             {advisoryGroups.map(({ issue, count }) => (
-              <li key={issue.code}>{issue.message}{count > 1 ? ` (${count})` : ""}</li>
+              <li key={issue.code}>
+                {issue.message}{count > 1 ? ` (${count})` : ""}
+                {issue.code === "team.data.restricted-role-missing" && missingRoleLabels.length > 0
+                  ? ` ${missingRoleLabels.join(", ")}` : ""}
+              </li>
             ))}
           </ul>
         </section>

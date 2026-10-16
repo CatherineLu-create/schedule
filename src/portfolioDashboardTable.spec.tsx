@@ -10,6 +10,9 @@ import { createEmptyCanonicalProjectSchedule } from "./domain/schedule/officialS
 import { toScheduleVersionNumber } from "./domain/schedule/schedule";
 import { parseDateOnly } from "./domain/shared/dateOnly";
 import { devProject001 } from "./fixtures/v2/canonicalProjectFixtures";
+import { createImportCandidate } from "./application/teamImport/teamCandidate";
+import { saveProjectTeam } from "./application/commands/teamCommands";
+import { toPersonAssignmentId, toTeamFunctionId } from "./domain/shared/ids";
 
 afterEach(cleanup);
 const baseRow: PortfolioDashboardRow = {
@@ -39,6 +42,54 @@ function scheduleCells() { return [...renderedRow().querySelectorAll<HTMLTableCe
 function leaf(key: string) { return renderedRow().querySelector<HTMLTableCellElement>(`td[data-column-key="${key}"]`)!; }
 
 describe("PortfolioDashboardTable", () => {
+  it("renders every assigned formal role directly from the saved projectRoles", () => {
+    const assignment = (name: string) => ({ assignmentId: toPersonAssignmentId(name), name, email: `${name}@example.test` });
+    const project = { ...devProject001, team: {
+      projectRoles: { qciPm: assignment("PM"), qciPjm: assignment("PjM"), acerPm: assignment("Acer"),
+        qciMeOwner: assignment("ME"), qciEeOwner: assignment("EE"), qciThermalOwner: assignment("Thermal"), qciBiosOwner: assignment("BIOS") },
+      functions: [], appliedTemplate: null,
+    } };
+    const context = initialGovernanceContext();
+    const rows = selectPortfolioDashboardRows({ projects: [project], schedules: [] }, createInitialSelfServiceReferenceCatalogs(), context);
+    render(<PortfolioDashboardTable rows={rows} schema={createPortfolioVisibleSchema(context)} onOpenProject={() => {}} />);
+    expect([...renderedRow().querySelectorAll('td[data-domain="team"]')].map(cell => cell.textContent)).toEqual([
+      "PM", "PjM", "Acer", "ME", "EE", "Thermal", "BIOS",
+    ]);
+  });
+  it("renders saved formal PM/ME/EE roles after Team import without parsing roster labels", () => {
+    let id = 0;
+    const entries = [
+      ["QCI-PM-Owner", "Synthetic Project Lead"],
+      ["QCI-ME-Owner", "Synthetic Mechanical Owner"],
+      ["QCI-EE-Owner", "Synthetic Electrical Owner"],
+    ];
+    const candidate = createImportCandidate(devProject001.id, null, {
+      fileName: "acceptance.csv", sheetName: "Team", headerRowNumber: 1,
+      rows: entries.map(([label, name], index) => ({
+        fileName: "acceptance.csv", sheetName: "Team", rowNumber: index + 2,
+        cells: [label, name, `owner${index}@example.test`].map((value, column) => ({
+          columnIndex: column + 1, headerText: ["Function", "Member", "email"][column]!,
+          rawType: "s", rawValue: value!, formattedText: value!, hidden: false,
+        })),
+      })),
+    }, "acceptance", [], () => toTeamFunctionId(`function-${id++}`), () => toPersonAssignmentId(`person-${id++}`));
+    const saved = saveProjectTeam(devProject001, { candidate, standardFunctionDefinitions: [] });
+    expect(saved.ok).toBe(true);
+    if (!saved.ok) return;
+    expect(saved.project.team?.projectRoles).toMatchObject({
+      qciPm: { name: entries[0]![1] }, qciMeOwner: { name: entries[1]![1] }, qciEeOwner: { name: entries[2]![1] },
+    });
+    const context = initialGovernanceContext();
+    const project = { ...saved.project, team: { ...saved.project.team!, functions: [] } };
+    const rows = selectPortfolioDashboardRows({ projects: [project], schedules: [] }, createInitialSelfServiceReferenceCatalogs(), context);
+    render(<PortfolioDashboardTable rows={rows} schema={createPortfolioVisibleSchema(context)} onOpenProject={() => {}} />);
+    expect(leaf("team:qciPm")).toHaveTextContent("Synthetic Project Lead");
+    expect(leaf("team:meOwner")).toHaveTextContent("Synthetic Mechanical Owner");
+    expect(leaf("team:eeOwner")).toHaveTextContent("Synthetic Electrical Owner");
+    expect(leaf("team:meOwner")).not.toHaveAttribute("title", "Migration pending");
+    expect(leaf("team:eeOwner")).not.toHaveAttribute("title", "Migration pending");
+    for (const key of ["qciPjm", "acerPm", "thermalOwner", "biosOwner"]) expect(leaf(`team:${key}`)).toHaveTextContent("—");
+  });
   it("renders separately published legacy/prefix-collision dates and resizes each definition independently", () => {
     const legacy = initialGovernanceContext().definitionsForHistoricalResolution.find(definition => definition.id === "milestone-design-kickoff")!;
     const additions = ["design:kickoff", "definition:design:kickoff", "definition:definition:design:kickoff"].map((id, index) => ({ ...legacy, id: toMilestoneDefinitionId(id), name: `Separate kickoff ${index + 1}`, milestoneTypeId: null }));
@@ -457,7 +508,7 @@ describe("PortfolioDashboardTable", () => {
   });
 
   // Mutation: hiding the saved QCI PM behind the old Team placeholder or fabricating another Team owner.
-  it("renders saved QCI PM and keeps the other six Team columns pending", () => {
+  it("renders saved QCI PM and uses dashes for the six unassigned Team roles", () => {
     render(<PortfolioDashboardTable schema={createPortfolioVisibleSchema(initialGovernanceContext())} rows={[baseRow]} onOpenProject={() => {}} />);
     const teamCells = [...renderedRow().querySelectorAll('td[data-domain="team"]')];
     expect(teamCells).toHaveLength(7);
@@ -465,10 +516,10 @@ describe("PortfolioDashboardTable", () => {
     expect(leaf("team:qciPm")).not.toHaveAttribute("title", "Migration pending");
     for (const cell of teamCells.slice(1)) {
       expect(cell).toHaveTextContent(/^—$/);
-      expect(cell).toHaveAttribute("title", "Migration pending");
+      expect(cell).not.toHaveAttribute("title", "Migration pending");
     }
     expect(screen.getByRole("columnheader", { name: "TEAM MEMBER" }))
-      .toHaveAccessibleDescription("QCI PM active; other Team columns migration pending");
+      .toHaveAccessibleDescription("Saved Team role assignments");
     expect(screen.queryByRole("button", { name: /Import Team Member/ })).not.toBeInTheDocument();
   });
 

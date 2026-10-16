@@ -6,7 +6,7 @@ import { App } from "./main";
 import { createInitialMilestoneGovernanceRuntimeState } from "./application/governance/milestoneGovernanceInitializer";
 import { publishGovernanceDraft, startGovernanceDraft, updateGovernanceDraft } from "./application/governance/milestoneGovernanceCommands";
 import type { CommandResult } from "./domain/governance/milestoneGovernance";
-import { toCanonicalScheduleWorkingDraftId, toGovernanceDraftId, toGovernanceReleaseId, toMilestoneDefinitionId, toRequirementEnrollmentId, toRequirementWithdrawalId } from "./domain/shared/ids";
+import { toCanonicalScheduleWorkingDraftId, toGovernanceDraftId, toGovernanceReleaseId, toMilestoneDefinitionId, toPersonAssignmentId, toRequirementEnrollmentId, toRequirementWithdrawalId } from "./domain/shared/ids";
 import { parseDateOnly } from "./domain/shared/dateOnly";
 import { toScheduleVersionNumber } from "./domain/schedule/schedule";
 import { canonicalProjectFixtures } from "./fixtures/v2/canonicalProjectFixtures";
@@ -23,6 +23,19 @@ const projectHeaders = ["Status", "Year", "STN Project Name", "QCI Model Name", 
 const scheduleHeaders = ["Kickoff", "ID fix", "ME drawing", "Mockup & DFM", "Tooling start + T1", "ME material for C", "Thermal module for C", "A1 G/O", "A1 SMT", "A1 Test", "A1 Close", "C1 G/O", "C1 SMT", "C1 Pre-Build", "C1 System Build", "C1 Test", "C1 Close", "C2 G/O", "C2 SMT", "C2 Pre-Build", "C2 System Build", "C2 Test", "C2 Close", "RAMP G/O", "ME signoff", "RAMP SMT", "RAMP Pre-build", "RAMP Main build", "SSL/GL", "MDRR"];
 const teamHeaders = ["QCI PM", "QCI PjM", "Acer PM", "ME Owner", "EE Owner", "Thermal Owner", "BIOS Owner"];
 const allHeaders = [...projectHeaders, ...scheduleHeaders, ...teamHeaders];
+const savedRoleNames = ["Synthetic Project Lead", "Synthetic Project Manager", "Synthetic Acer PM", "Synthetic Mechanical Owner", "Synthetic Electrical Owner", "Synthetic Thermal Owner", "Synthetic BIOS Owner"];
+function savedAssignment(name: string) {
+  return { assignmentId: toPersonAssignmentId(`export-${name}`), name, email: null };
+}
+const savedTeamWithoutRoster = {
+  functions: [], appliedTemplate: null,
+  projectRoles: {
+    qciPm: savedAssignment("Synthetic Project Lead"), qciPjm: savedAssignment("Synthetic Project Manager"),
+    acerPm: savedAssignment("Synthetic Acer PM"), qciMeOwner: savedAssignment("Synthetic Mechanical Owner"),
+    qciEeOwner: savedAssignment("Synthetic Electrical Owner"), qciThermalOwner: savedAssignment("Synthetic Thermal Owner"),
+    qciBiosOwner: savedAssignment("Synthetic BIOS Owner"),
+  },
+};
 
 function exportGrid() {
   fireEvent.click(screen.getByRole("button", { name: "Export to Excel" }));
@@ -40,7 +53,7 @@ function value<T>(result: CommandResult<T, string>): T {
 }
 
 describe("All Projects workbook output from App", () => {
-  it("exports every leaf in table order, including far-right blank Team fields, without scrolling", () => {
+  it("exports every leaf in table order with the same saved Team values, without scrolling", () => {
     render(<App />);
     const grid = exportGrid();
     expect(grid[0]).toEqual(allHeaders);
@@ -49,7 +62,13 @@ describe("All Projects workbook output from App", () => {
     expect(grid.slice(1).map(row => row[2])).toEqual(["Manta", "Nautilus", "Orca", "Beluga", "Marlin"]);
     expect(grid[1]![42]).toBe("");
     expect(grid[2]![42]).toBe("DEV QCI PM");
-    for (const row of grid.slice(1)) expect(row.slice(43)).toEqual(["", "", "", "", "", ""]);
+    expect(grid[1]!.slice(42)).toEqual(["", "", "", "", "", "", ""]);
+    expect(grid[2]!.slice(42)).toEqual(["DEV QCI PM", "DEV QCI PjM", "DEV Acer PM", "", "", "", ""]);
+    const tableRows = screen.getByRole("table", { name: "Projects" }).querySelectorAll("tbody tr");
+    grid.slice(1).forEach((row, index) => {
+      const displayed = [...tableRows[index]!.querySelectorAll('[data-column-key^="team:"]')].map(cell => cell.textContent === "—" ? "" : cell.textContent);
+      expect(row.slice(42)).toEqual(displayed);
+    });
     expect(grid[1]![19]).toContain("P: 2026/10/15");
     expect(grid[1]![19]).toContain("A: —");
   });
@@ -68,8 +87,10 @@ describe("All Projects workbook output from App", () => {
   });
 
   it("keeps workbook output identical after both table and bottom proxy scroll events and resizing", () => {
-    render(<App />);
+    render(<App initialState={{ projects: [{ ...canonicalProjectFixtures[0]!, team: savedTeamWithoutRoster }], schedules: canonicalScheduleFixtures }} />);
     const before = exportGrid();
+    expect(before[0]).toEqual(allHeaders);
+    expect(before[1]!.slice(42)).toEqual(savedRoleNames);
     const tableScroll = screen.getByTestId("portfolio-table-scroll");
     const proxy = screen.getByTestId("portfolio-bottom-scroll");
     tableScroll.scrollLeft = 1234;
@@ -107,7 +128,7 @@ describe("All Projects workbook output from App", () => {
     expect(screen.queryByRole("columnheader", { name: "Kickoff" })).not.toBeInTheDocument();
   });
 
-  it("exports the same saved PM and latest Current Published dates as Table while Draft and roster placeholders remain absent", () => {
+  it("exports the same seven saved roles, Project Type and latest Current Published dates as Table without roster rows", () => {
     const source = canonicalScheduleFixtures[0]!;
     const latest = { ...source.publishedVersions[0]!, versionNumber: toScheduleVersionNumber(2),
       milestones: source.publishedVersions[0]!.milestones.map((milestone, index) => index === 0
@@ -116,19 +137,23 @@ describe("All Projects workbook output from App", () => {
       workingDraftId: toCanonicalScheduleWorkingDraftId("export-only-draft"), reviewSessionIds: [], importCandidates: [],
       milestones: latest.milestones.map(milestone => ({ ...milestone, plan: parseDateOnly("2099-12-31") })),
     } };
-    const savedTeam = canonicalProjectFixtures[1]!.team!;
-    const project = { ...canonicalProjectFixtures[0]!, team: { ...savedTeam,
-      projectRoles: { ...savedTeam.projectRoles, qciPm: { ...savedTeam.projectRoles.qciPm!, name: "Saved export PM" } } } };
+    const sourceProject = canonicalProjectFixtures[0]!;
+    const project = { ...sourceProject, team: savedTeamWithoutRoster, master: {
+      ...sourceProject.master, basicInformation: { ...sourceProject.master.basicInformation, projectType: "regression" as const },
+    } };
     render(<App initialState={{ projects: [project], schedules: [schedule] }} />);
     const table = screen.getByRole("table", { name: "Projects" });
     const kickoff = table.querySelector('tbody [data-column-key="schedule:design:kickoff"]');
     expect(kickoff).toHaveTextContent("P: 2026/11/01");
     expect(kickoff).toHaveTextContent("A: —");
-    expect(table.querySelector('tbody [data-column-key="team:qciPm"]')).toHaveTextContent("Saved export PM");
+    expect(table.querySelector('tbody [data-column-key="projectType"]')).toHaveTextContent("Regression");
+    const displayedRoles = [...table.querySelectorAll('tbody [data-column-key^="team:"]')].map(cell => cell.textContent);
+    expect(displayedRoles).toEqual(savedRoleNames);
     const output = exportGrid();
     expect(output[1]![12]).toBe("Applicable\nP: 2026/11/01\nA: —");
-    expect(output[1]![42]).toBe("Saved export PM");
-    expect(output[1]!.slice(43)).toEqual(["", "", "", "", "", ""]);
+    expect(output[1]![4]).toBe("Regression");
+    expect(output[1]!.slice(42)).toEqual(savedRoleNames);
+    expect(output[1]!.slice(42)).toEqual(displayedRoles);
     expect(JSON.stringify(output)).not.toContain("2099/12/31");
     expect(JSON.stringify(output)).not.toContain("2026/09/18");
   });

@@ -378,7 +378,7 @@ describe("canonical Portfolio Dashboard read projection", () => {
     }]);
     expect(row.project.mdrr).toBe("-");
     expect(draftRow).toEqual(row);
-    expect(changedTeamRow).toEqual({ ...row, qciPm: null });
+    expect(changedTeamRow).toEqual({ ...row, qciPm: null, projectRoles: null });
     expect(changedTeamRow.schedule).toEqual(row.schedule);
     expect(changedTeamRow.project).toEqual(row.project);
   });

@@ -1,4 +1,5 @@
 import type { PersonAssignmentId } from "../../domain/shared/ids";
+import { standaloneProjectRoleAssignments } from "../../domain/team/teamRoleMapping";
 import type {
   FunctionAssignmentRole,
   ProjectFunctionRef,
@@ -33,14 +34,6 @@ export type TeamMemberRow =
       readonly function: ProjectFunctionRef;
     });
 
-const projectRoleLabels = {
-  qciPm: "QCI PM",
-  qciPjm: "QCI PjM",
-  acerPm: "Acer PM",
-} as const;
-
-const projectRoleKeys = ["qciPm", "qciPjm", "acerPm"] as const;
-
 export function selectTeamMemberRows(
   team: ProjectTeam | null,
 ): readonly TeamMemberRow[] {
@@ -48,22 +41,17 @@ export function selectTeamMemberRows(
     return [];
   }
 
-  const projectRoles: TeamMemberRow[] = projectRoleKeys.flatMap((key) => {
-    const assignment = team.projectRoles[key];
-    return assignment === null
-      ? []
-      : [{
-          kind: "projectRole",
-          rowId: assignment.assignmentId,
-          projectRole: key,
-          functionText: assignment.functionText ?? null,
-          roleText: projectRoleLabels[key],
-          name: assignment.name,
-          email: assignment.email,
-          extraCells: assignment.extraCells ?? [],
-          sourceRows: assignment.sourceRows ?? [],
-        }];
-  });
+  const projectRoles: TeamMemberRow[] = standaloneProjectRoleAssignments(team).map(({ definition, assignment }) => ({
+    kind: "projectRole",
+    rowId: assignment.assignmentId,
+    projectRole: definition.key,
+    functionText: assignment.functionText ?? null,
+    roleText: definition.label,
+    name: assignment.name,
+    email: assignment.email,
+    extraCells: assignment.extraCells ?? [],
+    sourceRows: assignment.sourceRows ?? [],
+  }));
 
   const functionAssignments: TeamMemberRow[] = team.functions.flatMap(
     (functionTeam) =>

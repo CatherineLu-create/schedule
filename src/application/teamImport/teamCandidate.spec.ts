@@ -518,6 +518,105 @@ describe("Team import candidate creation", () => {
 });
 
 describe("Team candidate materialization", () => {
+	it("keeps ambiguous engineering Function references Blocking instead of treating imports as standalone formal roles", () => {
+		const definitions: readonly TeamFunctionDefinition[] = ["first", "second"].map((id) => ({
+			id: toTeamFunctionId(id), displayName: "QCI-ME", active: true,
+		}));
+		const candidate = importCandidate(emptyTeam(), sheet([
+			sourceRow(2, "QCI-ME-Owner", "Synthetic Owner", "owner@example.test"),
+		]), deterministicFactory(), "ambiguous-functions", definitions);
+		expect(candidate.rows[0]?.functionRef).toBeNull();
+		expect(validateTeamEditCandidate(candidate, definitions)).toContainEqual(expect.objectContaining({
+			code: "team.data.function-unresolved", severity: "blocking",
+		}));
+		expect(materializeProjectTeam(candidate, definitions).ok).toBe(false);
+	});
+	it("projects one owner without merging equivalent people in distinct Function identities", () => {
+		const team: ProjectTeam = { ...emptyTeam(), functions: ["first", "second"].map((id) => ({
+			function: { kind: "custom", functionId: toTeamFunctionId(id), displayName: "QCI-ME" },
+			applicability: "applicable", assignments: [{ assignmentId: toPersonAssignmentId(id), role: "owner",
+				name: "Shared Owner", email: "shared@example.test" }],
+		})) };
+		const candidate = createEditCandidate(projectId, team, []);
+		expect(countBlocking(validateTeamEditCandidate(candidate, []))).toBe(0);
+		const saved = materializeProjectTeam(candidate, []);
+		expect(saved.ok).toBe(true);
+		if (!saved.ok) return;
+		expect(saved.team.projectRoles.qciMeOwner?.name).toBe("Shared Owner");
+		expect(saved.team.functions.map(({ assignments }) => assignments[0]?.assignmentId)).toEqual(["first", "second"]);
+		const reopened = createEditCandidate(projectId, saved.team, []);
+		expect(reopened.rows).toHaveLength(2);
+		expect(materializeProjectTeam(reopened, [])).toEqual(saved);
+	});
+
+	it.each(["QCI-PM-Owner", "QCI-PJM-Owner", "Acer PM"])("preserves partial %s evidence while advising that the owner is missing", (label) => {
+		const telephone: TeamSourceCell = { columnIndex: 4, headerText: "Tel. No.", rawType: "s", rawValue: "1234", formattedText: "1234", hidden: true };
+		const source = sourceRow(2, label, null, null, [telephone]);
+		const candidate = importCandidate(emptyTeam(), sheet([source]), deterministicFactory());
+		const saved = materializeProjectTeam(candidate, standardDefinitions);
+		expect(saved.ok).toBe(true);
+		if (!saved.ok) return;
+		const assignment = Object.values(saved.team.projectRoles).find((value) => value?.functionText === label);
+		expect(assignment).toMatchObject({ name: null, email: null, extraCells: [telephone], sourceRows: [source] });
+		expect(validateProjectTeam(saved.team, standardDefinitions).filter(({ code }) => code === "team.data.restricted-role-missing")).toHaveLength(7);
+		expect(createEditCandidate(projectId, saved.team, standardDefinitions).rows).toHaveLength(1);
+	});
+	it("does not hide a formal engineering owner when an unrelated roster row reuses its assignment ID", () => {
+		const assignmentId = toPersonAssignmentId("shared-assignment-id");
+		const team: ProjectTeam = {
+			...emptyTeam(),
+			projectRoles: { ...emptyTeam().projectRoles, qciMeOwner: { assignmentId, name: "Formal Owner", email: "formal@example.test" } },
+			functions: [{ function: { kind: "custom", functionId: toTeamFunctionId("support"), displayName: "Support" },
+				applicability: "applicable", assignments: [{ assignmentId, role: "member", name: "Support Member", email: "support@example.test" }] }],
+		};
+		const reopened = createEditCandidate(projectId, team, []);
+		expect(reopened.rows).toHaveLength(2);
+		expect(validateProjectTeam(team, []).filter(({ code }) => code === "team.data.restricted-role-missing")).toHaveLength(6);
+		const saved = materializeProjectTeam(reopened, []);
+		expect(saved.ok).toBe(true);
+		if (saved.ok) expect(saved.team.projectRoles.qciMeOwner?.name).toBe("Formal Owner");
+	});
+
+	it("preserves blank-Member row diagnostics independently of owner completeness", () => {
+		const candidate = importCandidate(emptyTeam(), sheet([
+			sourceRow(2, "QCI-ME-Owner", null, "partial@example.test"),
+		]), deterministicFactory());
+		expect(validateTeamEditCandidate(candidate, standardDefinitions)).toContainEqual(expect.objectContaining({
+			code: "team.data.partial-person", severity: "advisory",
+			target: expect.objectContaining({ entityId: candidate.rows[0]!.rowId }),
+		}));
+		expect(candidate.rows[0]?.sourceRows).toHaveLength(1);
+	});
+	it("saves all seven formal roles and reopens engineering owners only once", () => {
+		const labels = ["QCI-PM-Owner", "QCI-PJM-Owner", "Acer PM", "QCI-ME-Owner", "QCI-EE-Owner", "QCI-Thermal-Owner", "QCI-BIOS-Owner"];
+		const keys = ["qciPm", "qciPjm", "acerPm", "qciMeOwner", "qciEeOwner", "qciThermalOwner", "qciBiosOwner"];
+		const candidate = importCandidate(emptyTeam(), sheet(labels.map((label, index) =>
+			sourceRow(index + 2, label, "Synthetic Shared Owner", "shared@example.test"),
+		)), deterministicFactory("ee", "thermal", "bios"));
+		const saved = materializeProjectTeam(candidate, standardDefinitions);
+		expect(saved.ok).toBe(true);
+		if (!saved.ok) return;
+		for (const key of keys) expect(saved.team.projectRoles).toHaveProperty(`${key}.name`, "Synthetic Shared Owner");
+		expect(validateProjectTeam(saved.team, standardDefinitions).filter(({ code }) => code.startsWith("team.data.restricted-role"))).toEqual([]);
+		const reopened = createEditCandidate(projectId, saved.team, standardDefinitions);
+		expect(reopened.rows).toHaveLength(7);
+		expect(materializeProjectTeam(reopened, standardDefinitions)).toEqual(saved);
+	});
+
+	it("clears a previously saved engineering projection when its roster owner is removed", () => {
+		const candidate = importCandidate(emptyTeam(), sheet([
+			sourceRow(2, "QCI-ME-Owner", "Synthetic Mechanical Owner", "me@example.test"),
+		]), deterministicFactory());
+		const saved = materializeProjectTeam(candidate, standardDefinitions);
+		expect(saved.ok).toBe(true);
+		if (!saved.ok) return;
+		expect(saved.team.projectRoles).toHaveProperty("qciMeOwner.name", "Synthetic Mechanical Owner");
+		const reopened = createEditCandidate(projectId, saved.team, standardDefinitions);
+		const cleared = materializeProjectTeam(removeTeamCandidateRow(reopened, reopened.rows[0]!.rowId), standardDefinitions);
+		expect(cleared.ok).toBe(true);
+		if (cleared.ok) expect(cleared.team.projectRoles).toHaveProperty("qciMeOwner", null);
+	});
+
 	it("saves and reopens a lossless confirmed noncritical row without reblocking", () => {
 		const functionId = toTeamFunctionId("preserved-custom-id");
 		const rawSource = sourceRow(8, "Original QCI ME wording", "Synthetic Preserved", null, [{

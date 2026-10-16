@@ -625,6 +625,30 @@ describe("restricted Team role counting", () => {
 		);
 	});
 
+	it.each(restrictedKeys)("does not count an empty assignment as a person for %s", (key) => {
+		const issues = validateRestrictedRoleRows([row("empty", key, { name: "  ", normalizedEmail: null })]);
+		expect(issues).toContainEqual(expect.objectContaining({
+			code: "team.data.restricted-role-missing", severity: "advisory",
+			target: expect.objectContaining({ entityId: key }),
+		}));
+		expect(issues.some(({ severity }) => severity === "blocking")).toBe(false);
+	});
+
+	it.each(["member", "leader"] as const)("allows zero, one, and multiple %s assignments without count issues", (role) => {
+		for (const count of [0, 1, 3]) {
+			const team: ProjectTeam = {
+				projectRoles: { qciPm: null, qciPjm: null, acerPm: null },
+				functions: [{ function: { kind: "custom", functionId: toTeamFunctionId("qci-me"), displayName: "QCI-ME" },
+					applicability: "applicable", assignments: Array.from({ length: count }, (_, index) => ({
+						assignmentId: toPersonAssignmentId(`person-${index}`), role, name: `Person ${index}`, email: `person${index}@example.test`,
+					})) }], appliedTemplate: null,
+			};
+			const issues = validateProjectTeam(team, []);
+			expect(issues).toHaveLength(7);
+			expect(issues.every(({ code, severity }) => code === "team.data.restricted-role-missing" && severity === "advisory")).toBe(true);
+		}
+	});
+
 	it("blocks a possible restricted-role ambiguity at its row", () => {
 		expect(validateRestrictedRoleRows([row("ambiguous-row", null)])).toContainEqual(
 			expect.objectContaining({

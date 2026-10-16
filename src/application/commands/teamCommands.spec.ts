@@ -285,7 +285,8 @@ describe("Team Save command", () => {
 			}),
 		);
 		expect(result.project.team).toEqual(expect.objectContaining({
-			projectRoles: applicableWithoutOwnerTeamCandidate.projectRoles,
+			projectRoles: { ...applicableWithoutOwnerTeamCandidate.projectRoles,
+				qciMeOwner: null, qciEeOwner: null, qciThermalOwner: null, qciBiosOwner: null },
 			appliedTemplate: applicableWithoutOwnerTeamCandidate.appliedTemplate,
 		}));
 		expect(result.project.id).toBe(devProject002.id);

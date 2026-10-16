@@ -24,6 +24,8 @@ import {
 } from "../../domain/team/teamValidation";
 import {
 	classifyTeamLabel,
+	formalTeamRoles,
+	standaloneProjectRoleAssignments,
 	isInvalidApplicabilityFunctionLabel,
 	type RestrictedTeamRole,
 } from "../../domain/team/teamRoleMapping";
@@ -40,6 +42,8 @@ export interface TeamCandidateRow {
 	readonly functionRef: ProjectFunctionRef | null;
 	readonly parsedRole: FunctionAssignmentRole | "unclassified";
 	readonly restrictedKey: RestrictedTeamRole | null;
+	/** Explicit saved slot; an unresolved imported Function is not a standalone role. */
+	readonly projectRoleSlot?: RestrictedTeamRole;
 	readonly possibleRestricted: boolean;
 	readonly restrictedRoleDecision: "unresolved" | "confirmedNoncritical";
 	readonly roleText: string;
@@ -65,13 +69,6 @@ export type TeamCandidateEditablePatch = Partial<Pick<
 >>;
 
 const projectRoleKeys = new Set<RestrictedTeamRole>(["qciPm", "qciPjm", "acerPm"]);
-type ProjectRoleKey = "qciPm" | "qciPjm" | "acerPm";
-
-const projectRoleLabels: Readonly<Record<ProjectRoleKey, string>> = {
-	qciPm: "QCI-PM-Owner",
-	qciPjm: "QCI-PJM-Owner",
-	acerPm: "Acer PM",
-};
 
 function normalizedLabel(value: string): string {
 	return value.trim().replace(/\s+/g, " ").toUpperCase();
@@ -325,19 +322,14 @@ export function createEditCandidate(
 	if (team === null) {
 		return { projectId, origin: "manual", fileName: null, baseTeam: null, rows: [], excludedSourceRowIds: [] };
 	}
-	const projectRows: TeamCandidateRow[] = (
-		[
-			["qciPm", "QCI-PM-Owner", team.projectRoles.qciPm],
-			["qciPjm", "QCI-PJM-Owner", team.projectRoles.qciPjm],
-			["acerPm", "Acer PM", team.projectRoles.acerPm],
-		] as const
-	).flatMap(([key, label, assignment]) =>
-		assignment === null ? [] : [{
+	const projectRows: TeamCandidateRow[] = standaloneProjectRoleAssignments(team).map(
+		({ definition: { key, functionText: label }, assignment }) => ({
 			rowId: `manual::projectRole::${key}`,
+			projectRoleSlot: key,
 			assignmentId: assignment.assignmentId,
 			functionText: label,
 			functionRef: null,
-			parsedRole: "unclassified",
+			parsedRole: restrictedRoleToParsedRole(key),
 			restrictedKey: key,
 			possibleRestricted: false,
 			restrictedRoleDecision: "unresolved",
@@ -347,7 +339,7 @@ export function createEditCandidate(
 			extraCells: assignment.extraCells ?? [],
 			sourceRows: assignment.sourceRows ?? [],
 			applicability: null,
-		}],
+		}),
 	);
 	const functionRows: TeamCandidateRow[] = team.functions.flatMap((functionTeam, functionIndex) => {
 		const effectiveFunctionText = functionTeam.function.kind === "custom"
@@ -678,7 +670,8 @@ function restrictedCountRow(
 }
 
 function isProjectRoleRow(row: TeamCandidateRow): boolean {
-	return row.restrictedKey !== null && projectRoleKeys.has(row.restrictedKey);
+	return row.restrictedKey !== null && (projectRoleKeys.has(row.restrictedKey) ||
+		(row.functionRef === null && row.projectRoleSlot === row.restrictedKey));
 }
 
 function hasPersonData(row: TeamCandidateRow): boolean {
@@ -937,8 +930,9 @@ export function materializeProjectTeam(
 	const preservedUnclassifiedEntries: PreservedUnclassifiedEntry[] = [];
 
 	for (const row of rows) {
-		if (isProjectRoleRow(row)) {
-			if (projectRoleRows.has(row.restrictedKey!)) {
+		if (row.restrictedKey !== null && (isProjectRoleRow(row) || (row.name?.trim() ?? "") !== "" || (row.email?.trim() ?? "") !== "")) {
+			const existing = projectRoleRows.get(row.restrictedKey);
+			if (existing !== undefined && (isProjectRoleRow(row) || isProjectRoleRow(existing))) {
 				return {
 					ok: false,
 					issues: [
@@ -952,9 +946,11 @@ export function materializeProjectTeam(
 					],
 				};
 			}
-			projectRoleRows.set(row.restrictedKey!, row);
-			continue;
+			// Validation has already counted distinct people. Equivalent roster rows
+			// may retain separate Function identities and evidence; project them once.
+			if (existing === undefined) projectRoleRows.set(row.restrictedKey, row);
 		}
+		if (isProjectRoleRow(row)) continue;
 		if (row.functionRef === null) continue;
 		const existingFunction = functions.get(row.functionRef.functionId);
 		const functionTeam = existingFunction ?? {
@@ -999,7 +995,7 @@ export function materializeProjectTeam(
 	}
 
 	const projectRoleAssignment = (
-		key: ProjectRoleKey,
+		key: RestrictedTeamRole,
 	): ProjectRoleAssignment | null => {
 		const row = projectRoleRows.get(key);
 		return row === undefined
@@ -1008,9 +1004,11 @@ export function materializeProjectTeam(
 					assignmentId: row.assignmentId,
 					name: row.name,
 					email: row.email,
-					functionText: projectRoleLabels[key],
+					functionText: formalTeamRoles.find((role) => role.key === key)!.functionText,
 					extraCells: row.extraCells,
 					sourceRows: row.sourceRows,
+					...(!projectRoleKeys.has(key) && row.functionRef !== null
+						? { sourceFunctionId: row.functionRef.functionId } : {}),
 				};
 	};
 	const team: ProjectTeam = {
@@ -1018,6 +1016,10 @@ export function materializeProjectTeam(
 			qciPm: projectRoleAssignment("qciPm"),
 			qciPjm: projectRoleAssignment("qciPjm"),
 			acerPm: projectRoleAssignment("acerPm"),
+			qciMeOwner: projectRoleAssignment("qciMeOwner"),
+			qciEeOwner: projectRoleAssignment("qciEeOwner"),
+			qciThermalOwner: projectRoleAssignment("qciThermalOwner"),
+			qciBiosOwner: projectRoleAssignment("qciBiosOwner"),
 		},
 		functions: [...functions.values()].map((functionTeam): ProjectFunctionTeam => ({
 			function: functionTeam.function,

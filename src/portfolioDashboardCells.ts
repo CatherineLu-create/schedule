@@ -1,5 +1,6 @@
 import type { PortfolioCurrentPublishedRead, PortfolioDashboardRow, PortfolioScheduleMilestoneOccurrence } from "./application/selectors/portfolioDashboardRows";
-import type { PortfolioColumn, PortfolioProjectInfoColumnKey, PortfolioScheduleColumnMapping } from "./portfolioDashboardColumns";
+import type { PortfolioColumn, PortfolioProjectInfoColumnKey, PortfolioScheduleColumnMapping, PortfolioTeamColumnKey } from "./portfolioDashboardColumns";
+import type { ProjectRoles } from "./domain/team/team";
 
 export const displayPortfolioText = (value: string): string => value === "-" ? "—" : value;
 
@@ -25,9 +26,18 @@ type PortfolioScheduleOccurrencePresentation = {
   | { readonly kind: "applicable"; readonly plan: string; readonly actual: string }
 );
 
+const teamRoleKeys: Record<PortfolioTeamColumnKey, keyof ProjectRoles> = {
+  "team:qciPm": "qciPm", "team:qciPjm": "qciPjm", "team:acerPm": "acerPm",
+  "team:meOwner": "qciMeOwner", "team:eeOwner": "qciEeOwner",
+  "team:thermalOwner": "qciThermalOwner", "team:biosOwner": "qciBiosOwner",
+};
+
 export function portfolioDashboardTextValue(row: PortfolioDashboardRow, column: PortfolioColumn): string {
   if (column.domain === "project") return projectValues[column.key as PortfolioProjectInfoColumnKey](row);
-  return column.key === "team:qciPm" ? row.qciPm?.label ?? "-" : "-";
+  if (column.key === "team:qciPm") return row.qciPm?.label ?? "-";
+  const key = teamRoleKeys[column.key as PortfolioTeamColumnKey];
+  const assignment = key === undefined ? null : row.projectRoles?.[key];
+  return assignment?.name?.trim() || assignment?.email?.trim() || "-";
 }
 
 export function portfolioDashboardScheduleOccurrences(

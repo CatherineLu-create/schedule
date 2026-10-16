@@ -7,7 +7,8 @@ import { createInitialSelfServiceReferenceCatalogs } from "./application/referen
 import { canonicalProjectFixtures } from "./fixtures/v2/canonicalProjectFixtures";
 import { canonicalScheduleFixtures } from "./fixtures/v2/canonicalScheduleFixtures";
 import { initialGovernanceContext } from "./test/governanceTestUtils";
-import { toMilestoneDefinitionId, toMilestoneId } from "./domain/shared/ids";
+import { toMilestoneDefinitionId, toMilestoneId, toPersonAssignmentId } from "./domain/shared/ids";
+import type { ProjectRoles } from "./domain/team/team";
 
 const schema = createPortfolioVisibleSchema(initialGovernanceContext());
 const rows = selectPortfolioDashboardRows({ projects: canonicalProjectFixtures, schedules: canonicalScheduleFixtures }, createInitialSelfServiceReferenceCatalogs(), initialGovernanceContext());
@@ -19,8 +20,56 @@ function grid(input: readonly PortfolioDashboardRow[], visibleSchema = schema) {
 function occurrence(id: string, applicability: "applicable" | "notApplicable", plan: string, actual: string) {
   return { milestoneId: toMilestoneId(id), applicability, plan, actual };
 }
+function savedAssignment(name: string) {
+  return { assignmentId: toPersonAssignmentId(`export-${name}`), name, email: null };
+}
+function savedRoleGrid(projectRoles: ProjectRoles) {
+  const project = { ...canonicalProjectFixtures[0]!, team: { projectRoles, functions: [], appliedTemplate: null } };
+  const projected = selectPortfolioDashboardRows({ projects: [project], schedules: canonicalScheduleFixtures }, createInitialSelfServiceReferenceCatalogs(), initialGovernanceContext());
+  return grid(projected);
+}
 
 describe("schema-driven All Projects serialization", () => {
+  it("exports saved PM, ME and EE assignments without roster rows and leaves unassigned roles blank", () => {
+    const output = savedRoleGrid({
+      qciPm: savedAssignment("Synthetic Project Lead"), qciPjm: null, acerPm: null,
+      qciMeOwner: savedAssignment("Synthetic Mechanical Owner"),
+      qciEeOwner: savedAssignment("Synthetic Electrical Owner"),
+    });
+    expect(output[1]!.slice(-7)).toEqual([
+      "Synthetic Project Lead", "", "", "Synthetic Mechanical Owner", "Synthetic Electrical Owner", "", "",
+    ]);
+  });
+
+  it("exports all seven saved formal roles in their approved column positions without roster rows", () => {
+    const output = savedRoleGrid({
+      qciPm: savedAssignment("Synthetic Project Lead"),
+      qciPjm: savedAssignment("Synthetic Project Manager"),
+      acerPm: savedAssignment("Synthetic Acer PM"),
+      qciMeOwner: savedAssignment("Synthetic Mechanical Owner"),
+      qciEeOwner: savedAssignment("Synthetic Electrical Owner"),
+      qciThermalOwner: savedAssignment("Synthetic Thermal Owner"),
+      qciBiosOwner: savedAssignment("Synthetic BIOS Owner"),
+    });
+    expect(output[1]!.slice(-7)).toEqual([
+      "Synthetic Project Lead", "Synthetic Project Manager", "Synthetic Acer PM", "Synthetic Mechanical Owner",
+      "Synthetic Electrical Owner", "Synthetic Thermal Owner", "Synthetic BIOS Owner",
+    ]);
+  });
+
+  it("uses the UI's trimmed name and email fallback while blank saved assignments stay blank", () => {
+    const output = savedRoleGrid({
+      qciPm: null, qciPjm: null, acerPm: null,
+      qciMeOwner: { ...savedAssignment("  Saved Mechanical Owner  "), email: "unused@example.test" },
+      qciEeOwner: { ...savedAssignment("  "), email: "  electrical@example.test  " },
+      qciThermalOwner: savedAssignment("  "), qciBiosOwner: null,
+    });
+    expect(output[1]!.slice(-7)).toEqual(["", "", "", "Saved Mechanical Owner", "electrical@example.test", "", ""]);
+  });
+
+  it("preserves the blank workbook value for the QCI PM display placeholder", () => {
+    expect(grid([{ ...rows[0]!, qciPm: { value: "placeholder", label: "-" } }])[1]![42]).toBe("");
+  });
   it("retains all schema leaves and the caller's Project order without changing either input", () => {
     const input = [rows[4]!, rows[0]!];
     const before = structuredClone({ input, schema });

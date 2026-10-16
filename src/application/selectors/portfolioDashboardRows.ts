@@ -4,6 +4,7 @@ import type { MilestoneApplicability } from "../../domain/schedule/schedule";
 import { formatDateOnly, type DateOnly } from "../../domain/shared/dateOnly";
 import type { CatalogItemId, MilestoneDefinitionId, MilestoneId, ProjectId } from "../../domain/shared/ids";
 import type { ValidationIssue } from "../../domain/validation/validationIssue";
+import type { ProjectRoles } from "../../domain/team/team";
 import { categoryReferenceFixtures } from "../../fixtures/v2/referenceFixtures";
 import type { SelfServiceReferenceCatalogs } from "../reference-data/selfServiceCatalogs";
 import type { PrototypeState } from "../state/prototypeState";
@@ -38,6 +39,7 @@ export interface PortfolioDashboardRow {
   readonly project: DashboardProjectRow;
   readonly category: string;
   readonly qciPm: PortfolioQciPmPresentation | null;
+  readonly projectRoles?: ProjectRoles | null;
   readonly pcbNumber: string;
   readonly schedule: PortfolioCurrentPublishedRead;
 }
@@ -111,6 +113,7 @@ export function selectPortfolioDashboardRows(
       project: projectRow,
       category: resolveCategory(project.master.basicInformation.category),
       qciPm: resolveQciPm(project),
+      projectRoles: project.team?.projectRoles ?? null,
       pcbNumber: displayText(project.master.platformHardware.pcbNumber),
       schedule,
     };

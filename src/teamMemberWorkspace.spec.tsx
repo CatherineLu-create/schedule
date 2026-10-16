@@ -191,6 +191,58 @@ async function waitForImportPreview(): Promise<HTMLElement> {
 }
 
 describe("Team Member workspace", () => {
+  it("disables manual Save for two distinct owners in one formal slot", () => {
+    const team = onePersonTeam();
+    const baseFunction = team.functions[0]!;
+    renderWorkspace({ project: projectWithTeam({ ...team, functions: [{ ...baseFunction,
+      assignments: ["First", "Second"].map((name) => ({ assignmentId: toPersonAssignmentId(name), role: "owner", name, email: `${name}@example.test` })),
+    }] }) });
+    startEditing();
+    expect(screen.getByRole("button", { name: "Save Team" })).toBeDisabled();
+    expect(screen.getByRole("region", { name: "Blocking issues" })).toHaveTextContent(/more than one distinct person/);
+  });
+  it("names the four missing formal owners compactly and allows confirmed import replacement", async () => {
+    const project = projectWithTeam(onePersonTeam());
+    const onSave = vi.fn(successfulSave(project));
+    const view = renderWorkspace({ project, onSave });
+    selectImportFile(csvImportFile("owners.csv", [
+      "Function,Member,email",
+      "QCI-PM-Owner,Synthetic Project Lead,pm@example.test",
+      "QCI-ME-Owner,Synthetic Mechanical Owner,me@example.test",
+      "QCI-EE-Owner,Synthetic Electrical Owner,ee@example.test",
+    ]));
+    await waitForImportPreview();
+    const missingSummary = within(screen.getByRole("region", { name: "Advisories" })).getByText(/QCI PjM.*Acer PM.*Thermal Owner.*BIOS Owner/);
+    expect(missingSummary).toHaveTextContent("(4)");
+    const save = screen.getByRole("button", { name: "Save imported Team" });
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
+    expect(onSave).not.toHaveBeenCalled();
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Confirm whole Team replacement" })).getByRole("button", { name: "Replace & Save" }));
+    expect(onSave).toHaveBeenCalledTimes(1);
+    const result = onSave.mock.results[0]!.value;
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    view.unmount();
+    renderWorkspace({ project: result.project });
+    expect(screen.getAllByTestId("team-read-row")).toHaveLength(3);
+    startEditing();
+    expect(screen.getByRole("button", { name: "Save Team" })).toBeEnabled();
+  });
+
+  it("blocks import replacement for two distinct owners in the same formal slot", async () => {
+    const onSave = vi.fn();
+    renderWorkspace({ onSave });
+    selectImportFile(csvImportFile("ambiguous.csv", [
+      "Function,Member,email",
+      "QCI-ME-Owner,Synthetic First,first@example.test",
+      "QCI-ME-Owner,Synthetic Second,second@example.test",
+    ]));
+    await waitForImportPreview();
+    expect(screen.getByRole("button", { name: "Save imported Team" })).toBeDisabled();
+    expect(screen.getByRole("region", { name: "Blocking issues" })).toHaveTextContent(/more than one distinct person/);
+    expect(onSave).not.toHaveBeenCalled();
+  });
   it("opens the selected Project saved Team read-only from Resources", () => {
     render(<App initialSelectedProjectId={devProject002.id} />);
     const resources = screen.getByRole("region", { name: "Resources" });

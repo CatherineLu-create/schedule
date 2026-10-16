@@ -566,14 +566,14 @@ describe("Batch 1 integrated governance runtime", () => {
   }, 30000);
 
   // Catches DOM/viewport export construction, OR filtering, Draft dates/columns leaking,
-  // omitted blank Team leaves, unsaved roster projection and multiple detail sheets.
+  // omitted Team leaves, unsaved roster projection and multiple detail sheets.
   it("real workbook uses complete released leaves and exact Search AND Filters regardless of scrolling", () => {
     render(<App referenceDate={referenceDate} />);
     const headers = [...projectHeaders, ...scheduleHeaders, ...teamHeaders];
     const before = exportGrid();
     expect(before[0]).toEqual(headers); expect(before).toHaveLength(6);
     expect(before.slice(1).map(row => row[2])).toEqual(["Manta", "Nautilus", "Orca", "Beluga", "Marlin"]);
-    expect(before[2][42]).toBe("DEV QCI PM"); expect(before[2].slice(43)).toEqual(["", "", "", "", "", ""]);
+    expect(before[2].slice(-7)).toEqual(["DEV QCI PM", "DEV QCI PjM", "DEV Acer PM", "", "", "", ""]);
     const table = screen.getByTestId("portfolio-table-scroll"), proxy = screen.getByTestId("portfolio-bottom-scroll");
     table.scrollLeft = 1200; fireEvent.scroll(table); proxy.scrollLeft = 2400; fireEvent.scroll(proxy);
     const projectsTable = screen.getByRole("table", { name: "Projects" });
@@ -591,7 +591,10 @@ describe("Batch 1 integrated governance runtime", () => {
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "" } }); click("Clear all"); expect(exportGrid()).toEqual(before);
     openProject("Nautilus"); click("Open Team Member"); click("Edit Team");
     fireEvent.change(screen.getByDisplayValue("DEV QCI PM"), { target: { value: "Saved Batch PM" } }); click("Save Team"); click("Back"); dashboard();
-    expect(exportGrid()[2][42]).toBe("Saved Batch PM");
+    const savedTeamValues = ["Saved Batch PM", "DEV QCI PjM", "DEV Acer PM", "DEV ME Owner", "DEV EE Owner", "", "DEV BIOS Owner"];
+    expect(exportGrid()[2].slice(-7)).toEqual(savedTeamValues);
+    const savedTeamCells = screen.getByRole("button", { name: "Open Project Nautilus" }).closest("tr")!.querySelectorAll('[data-column-key^="team:"]');
+    expect([...savedTeamCells].map(cell => cell.textContent === "—" ? "" : cell.textContent)).toEqual(savedTeamValues);
     openProject(); click("Edit"); applyDate("Kickoff", "2026-10-20"); dashboard();
     expect(exportGrid()[1][12]).toBe("Applicable\nP: 2026/09/18\nA: 2026/09/19");
     governance(true); const definitionId = publicDefinition("Export gate"); setting("Export gate", "顯示於總表");
@@ -600,7 +603,7 @@ describe("Batch 1 integrated governance runtime", () => {
     const releasedHeaders = [...projectHeaders, "Kickoff", "ID fix", "Export gate", ...scheduleHeaders.slice(2), ...teamHeaders];
     expect(exportGrid()[0]).toEqual(releasedHeaders);
     expect(live().context.addablePublicDefinitions.map(item => item.id)).not.toContain(definitionId);
-    expect(exportGrid()[2].slice(-7)).toEqual(["Saved Batch PM", "", "", "", "", "", ""]);
+    expect(exportGrid()[2].slice(-7)).toEqual(savedTeamValues);
     openProject(); publishSchedule(); dashboard();
     expect(exportGrid()[1][12]).toBe("Applicable\nP: 2026/10/20\nA: 2026/09/19");
   }, 30000);

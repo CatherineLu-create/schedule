@@ -1,4 +1,4 @@
-import type { FunctionAssignmentRole } from "./team";
+import type { FunctionAssignmentRole, ProjectRoleAssignment, ProjectTeam } from "./team";
 
 export type RestrictedTeamRole =
 	| "qciPm"
@@ -9,20 +9,41 @@ export type RestrictedTeamRole =
 	| "qciThermalOwner"
 	| "qciBiosOwner";
 
+export const formalTeamRoles = [
+	{ key: "qciPm", label: "QCI PM", functionText: "QCI-PM-Owner" },
+	{ key: "qciPjm", label: "QCI PjM", functionText: "QCI-PJM-Owner" },
+	{ key: "acerPm", label: "Acer PM", functionText: "Acer PM" },
+	{ key: "qciMeOwner", label: "ME Owner", functionText: "QCI-ME-Owner" },
+	{ key: "qciEeOwner", label: "EE Owner", functionText: "QCI-EE-Owner" },
+	{ key: "qciThermalOwner", label: "Thermal Owner", functionText: "QCI-Thermal-Owner" },
+	{ key: "qciBiosOwner", label: "BIOS Owner", functionText: "QCI-BIOS-Owner" },
+] as const;
+
+// Engineering assignments retain their Function metadata in the roster. Do not
+// reopen/count their saved project-role projection as a second person.
+export function standaloneProjectRoleAssignments(team: ProjectTeam): readonly {
+	readonly definition: (typeof formalTeamRoles)[number];
+	readonly assignment: ProjectRoleAssignment;
+}[] {
+	return formalTeamRoles.flatMap((definition) => {
+		const assignment = team.projectRoles[definition.key];
+		if (assignment == null) return [];
+		const representedInRoster = assignment.sourceFunctionId !== undefined &&
+			team.functions.some(({ function: ref, assignments }) => ref.functionId === assignment.sourceFunctionId &&
+				assignments.some((person) => person.assignmentId === assignment.assignmentId && person.role === "owner" &&
+					person.name === assignment.name && person.email === assignment.email));
+		return representedInRoster ? [] : [{ definition, assignment }];
+	});
+}
+
 export type TeamLabelClassification =
 	| { readonly kind: "restricted"; readonly key: RestrictedTeamRole }
 	| { readonly kind: "functionRole"; readonly role: FunctionAssignmentRole }
 	| { readonly kind: "unclassified"; readonly possibleRestricted: boolean };
 
-const restrictedLabels = new Map<string, RestrictedTeamRole>([
-	["QCI-PM-OWNER", "qciPm"],
-	["QCI-PJM-OWNER", "qciPjm"],
-	["ACER PM", "acerPm"],
-	["QCI-ME-OWNER", "qciMeOwner"],
-	["QCI-EE-OWNER", "qciEeOwner"],
-	["QCI-THERMAL-OWNER", "qciThermalOwner"],
-	["QCI-BIOS-OWNER", "qciBiosOwner"],
-]);
+const restrictedLabels = new Map<string, RestrictedTeamRole>(
+	formalTeamRoles.map(({ key, functionText }) => [normalizeLabel(functionText), key]),
+);
 
 const restrictedOwnerFunctions = new Map<string, RestrictedTeamRole>([
 	["QCI-ME", "qciMeOwner"],

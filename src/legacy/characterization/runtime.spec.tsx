@@ -1350,9 +1350,11 @@ describe("canonical Portfolio, Project/Master and Schedule runtime", () => {
       const expectedQciPm = qciPmByProjectId.get(row.dataset.projectId ?? "");
       expect(qciPm).toHaveTextContent(expectedQciPm ?? /^—$/);
       expect(qciPm).not.toHaveAttribute("title", "Migration pending");
-      for (const cell of Array.from(cells).slice(1)) {
-        expect(cell).toHaveTextContent(/^—$/);
-        expect(cell).toHaveAttribute("title", "Migration pending");
+      const savedRoles = canonicalProjectFixtures.find((project) => project.id === row.dataset.projectId)?.team?.projectRoles;
+      const otherRoleKeys = ["qciPjm", "acerPm", "qciMeOwner", "qciEeOwner", "qciThermalOwner", "qciBiosOwner"] as const;
+      for (const [index, cell] of Array.from(cells).slice(1).entries()) {
+        expect(cell).toHaveTextContent(savedRoles?.[otherRoleKeys[index]!]?.name ?? /^—$/);
+        expect(cell).not.toHaveAttribute("title", "Migration pending");
       }
     }
     expect(within(dashboardRow("dev-project-003")).getByText("DEV Project 003 QCI PM")).toBeInTheDocument();
